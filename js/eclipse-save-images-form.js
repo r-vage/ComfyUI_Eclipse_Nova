@@ -1,0 +1,97 @@
+/** Compact controls using the shared Nova theme, bars and pinned sections. */
+import { element, button, SearchMenu } from './eclipse-panel-controls.js';
+import { SECTIONS } from './eclipse-save-images-state.js';
+
+export class SaveImagesForm {
+    constructor(controller) {
+        this.controller = controller; this.menu = new SearchMenu();
+        this.controls = element('div', 'en-panel-content'); this.controls.style.flex = '0 0 auto';
+    }
+    get state() { return this.controller.state; }
+    edit(fn, render = true) { this.controller.edit(fn, render); }
+    render() {
+        this.menu.close();
+        const root = this.controller.root, focused = root.contains(document.activeElement) ? document.activeElement?.dataset?.field : null;
+        const content = element('div', 'en-panel-content');
+        this.controls.replaceChildren(); this.bar(this.controls);
+        for (const [key, label] of Object.entries(SECTIONS)) {
+            if (key !== 'metadata' && !this.state.config.options.save_to_disk) continue;
+            this.section(this.controls, key, label);
+        }
+        content.append(this.controls);
+        if (this.controller.preview) content.append(this.controller.preview);
+        root.replaceChildren(content);
+        this.controller.syncPreview?.();
+        if (focused) [...root.querySelectorAll('[data-field]')].find(item => item.dataset.field === focused)?.focus({ preventScroll: true });
+        this.controller.measure();
+    }
+    bar(parent) {
+        const collapsed = this.state.editor.barCollapsed === true, bar = element('div', 'en-panel-bar');
+        bar.dataset.collapsed = String(collapsed); bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', 'Mode');
+        const toggle = button('', 'Mode', () => this.edit(state => { state.editor.barCollapsed = !collapsed; }));
+        toggle.className = 'en-panel-disclosure'; toggle.dataset.field = 'mode'; toggle.setAttribute('aria-expanded', String(!collapsed));
+        toggle.append(element('span', '', collapsed ? '▸' : '▾'), element('span', 'en-panel-bar-label', 'Mode:'));
+        const fields = this.state.spec.fields.filter(field => field.section === 'mode');
+        if (collapsed) toggle.append(element('span', 'en-panel-summary', fields.filter(field => this.state.config.options[field.key]).map(field => field.label).join(' · ') || 'Pass through'));
+        bar.append(toggle);
+        if (!collapsed) for (const field of fields) {
+            const control = button(field.label, field.label, () => this.edit(state => { state.config.options[field.key] = !state.config.options[field.key]; }));
+            control.title = field.tooltip; control.dataset.field = field.key;
+            control.setAttribute('aria-pressed', String(this.state.config.options[field.key])); bar.append(control);
+        }
+        parent.append(bar);
+    }
+    section(parent, key, label) {
+        const section = element('section', 'en-panel-section'), open = this.state.sectionOpen(key);
+        section.setAttribute('aria-label', label);
+        const header = element('div', 'en-panel-section-header');
+        const toggle = button('', label, () => this.edit(state => state.toggleSection(key)));
+        toggle.className = 'en-panel-section-toggle'; toggle.dataset.field = `section.${key}`; toggle.setAttribute('aria-expanded', String(open));
+        const summary = element('span', 'en-panel-summary', this.state.summary(key)); summary.dataset.sectionSummary = key; summary.title = summary.textContent;
+        toggle.append(element('span', 'en-panel-section-label', `${open ? '▾' : '▸'} ${label}`), summary);
+        const pin = button('⌖', `Pin ${label}`, () => this.edit(state => state.togglePin(key)));
+        pin.dataset.field = `pin.${key}`; pin.setAttribute('aria-pressed', String(this.state.editor.pins?.[key] === true));
+        header.append(toggle, pin); section.append(header);
+        if (open) {
+            const body = element('div', 'en-panel-section-body'), grid = element('div', 'en-panel-grid');
+            for (const field of this.state.spec.fields) if (field.section === key && this.state.visible(field)) this.field(grid, field);
+            body.append(grid);
+            if (key === 'output') body.append(element('div', 'en-panel-note', 'Pipe output_path (or path) and filename_prefix take priority when present.'));
+            if (key === 'metadata') body.append(element('div', 'en-panel-note', this.state.config.options.save_to_disk
+                ? 'Generation data uses pipe_opt and PNG. Workflow embedding supports PNG/WebP; JSON works with every format.'
+                : 'Preview-only mode writes temporary PNGs; output folders and JSON sidecars are not used.'));
+            section.append(body);
+        }
+        parent.append(section);
+    }
+    field(parent, field) {
+        const current = this.state.config.options[field.key];
+        const set = (value, render = true) => this.edit(state => { state.config.options[field.key] = value; }, render);
+        if (field.options) {
+            const trigger = this.menu.field(parent, field.label, current, field.options, value => set(value));
+            trigger.dataset.field = field.key; return;
+        }
+        const boolean = typeof current === 'boolean', label = element('label', boolean ? 'en-panel-inline' : 'en-panel-field');
+        const input = element('input'); input.dataset.field = field.key; input.setAttribute('aria-label', field.label); input.title = field.tooltip ?? field.label;
+        if (boolean) {
+            input.type = 'checkbox'; input.checked = current; input.onchange = () => set(input.checked);
+            label.append(input, element('span', '', field.label));
+        } else {
+            input.type = typeof current === 'number' ? 'number' : 'text'; input.value = current;
+            if (field.min != null) { input.min = field.min; input.max = field.max; input.step = 1; }
+            if (field.maxLength) input.maxLength = field.maxLength;
+            input.oninput = () => {
+                if (!input.checkValidity() || (input.type === 'number' && !Number.isInteger(input.valueAsNumber))) return;
+                set(input.type === 'number' ? input.valueAsNumber : input.value, false);
+            };
+            input.onchange = () => { input.value = this.state.config.options[field.key]; };
+            label.append(element('span', '', field.label), input);
+            if (['output_path', 'filename_prefix'].includes(field.key)) label.style.gridColumn = '1 / -1';
+        }
+        label.title = field.tooltip ?? ''; parent.append(label);
+    }
+    syncSummaries() {
+        for (const item of this.controller.root.querySelectorAll('[data-section-summary]')) item.textContent = item.title = this.state.summary(item.dataset.sectionSummary);
+    }
+    dispose() { this.menu.close(); }
+}

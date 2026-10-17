@@ -1,0 +1,13 @@
+{
+  "_comments": {
+    "description": "Eclipse ComfyUI Node Configuration",
+    "log_level_options": "error | warning | info | debug",
+    "node_design": "Theme filename (without .json) from this repo’s themes/ or themes/custom/ folder."
+  },
+  "log_level": "info",
+  "use_sliders": false,
+  "theme_regular_nodes": false,
+  "theme_groups": false,
+  "link_nova_themes": false,
+  "node_design": "neutral"
+}

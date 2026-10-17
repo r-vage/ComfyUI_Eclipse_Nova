@@ -1,0 +1,332 @@
+# Character reference and sheet nodes
+
+Eclipse provides prompt preparation, reference routing and panel cropping nodes.
+They do not generate images themselves: connect their outputs to compatible
+image encoders and samplers. Each image input expects a single image rather than
+an image batch.
+
+## Panels and menu
+
+Find these nodes under **🌒 Eclipse Nova → Character**, alongside Character
+Reference Select, Character Shot Planner and Shot Plan Slice. The four panels
+use their final names and the shared Eclipse Nova design in classic canvas and
+Nodes 2.0. Their configuration is stored by field name, independently of section order
+or visibility. Changing modes retains inactive settings and connections.
+
+| Node | Layout | Explicit override inputs |
+| --- | --- | --- |
+| Character Reference Prepare | Collapsible Role and Mode bars; Description and Instructions sections for Extract/Generate. | `description`, `instructions`, `positive_override`, `negative_override` |
+| Character Reference Pack | Canvas, Identity, Body proportions, Outfit, Scene, Extra rules and Report sections. | `width`, `height`, `identity`, `body_description`, `outfit`, `scene`, `extra_rules` |
+| Character Sheet Pack | Stage bar; mannequin Preset/Reference bar; stage-specific Include buttons; Canvas, Mannequin, Details and Report sections. | `width`, `height`, `details`, `positive_override`, `negative_override` |
+| Character Sheet Split | Auto/Manual bar, Crop and Report sections. Manual boundaries appear only in Manual mode; Gutter applies to both. | No additional overrides; dimensions come from the connected `sheet`. |
+
+All original image inputs and output ordering are retained. Prepare's `reference`
+output works with the existing Character Reference Select. Sheet Pack preserves
+lazy image routing: disabled or irrelevant branches are not requested. Mannequin
+Preset skips every connected image; Reference exposes Gender and the front/rear
+body toggles while retaining the inactive body selections.
+
+Connected non-`None` values take priority over local fields. A connected empty
+string deliberately clears text. Prepare's positive override replaces the file
+positive, Description and Instructions together; Sheet Pack still appends its
+Details and resolves reference roles when its base positive is overridden.
+Changing role or stage does not rewrite connected prompt text.
+
+Canvas sizes remain multiples of 32 between 256 and 2048. Set the Qwen encoder's
+resolution to 0. Width, height, Details and both prompt overrides preserve the
+connections used by **Character Dataset Creation V4 - Qwen 2.1 Sheets**. Reference
+Prepare preserves that workflow's source and prompt inputs. No workflow files
+are converted or rewritten automatically.
+
+Section pins keep selected sections open together; text-field heights survive
+queues and workflow reloads. Report shows the last executed image-role mapping
+or crop boundaries without opening itself after a run. Queue again after changing
+settings to refresh it. Mannequin choices remain searchable and file-backed;
+restart ComfyUI and refresh after adding or renaming choice keys.
+
+## Visual tour
+
+### Prepare one reference role
+
+![Character Reference Prepare in Extract mode with Description and Instructions open](assets/nova-character-prepare.png)
+
+Use Prepare and Select together to choose an original, extracted or generated
+reference. The preparation encoder and sampler sit between their prompt/image
+outputs and Select's `generated` input.
+
+```mermaid
+flowchart LR
+    Prepare[Reference Prepare] -->|mode and source| Select[Reference Select]
+    Prepare -->|positive, negative, source| Generate[Encoder and sampler]
+    Generate -->|generated image| Select
+    Select -->|chosen image| Pack[Reference or Sheet Pack]
+```
+
+Select requests the generated branch only in Extract or Generate mode.
+
+### Assemble the character references
+
+![Character Reference Pack with role-separated image inputs and Canvas and Identity sections](assets/nova-character-pack.png)
+
+Reference Pack produces the assembly prompt and, separately, the character lock
+for varied shots. Its report identifies the actual numbered image roles.
+
+Open Report after execution to check the numbered image roles. Use section pins
+to keep identity and wardrobe text visible together while refining them.
+
+### Work through the sheet stages
+
+![Character Sheet Pack with stage-specific Include controls and canvas settings](assets/nova-character-sheet.png)
+
+Mannequin, wardrobe, sheet and dataset each have their own reference requirements.
+Mannequin Preset uses a blank canvas and the searchable body controls in the
+Mannequin section. Reference mode instead exposes the front/rear body toggles.
+
+### Split the approved sheet for dataset shots
+
+![Character Sheet Split with compact fractional boundaries, gutter and separate image outputs](assets/nova-character-split.png)
+
+Connect the three individual crops to the dataset Pack. Inspect them first;
+cropping does not repair a generated sheet's contents.
+
+Use Auto for equal thirds or Manual for adjustable boundaries in Crop. Report
+shows the pixel boundaries and gutter used by the last execution.
+
+## Character Reference Prepare and Select
+
+Prepare supports face, body, clothing and rear roles. Connect its `reference`
+control output to Select and the preparation sampler's image to Select's
+`generated` input.
+
+| Mode | Select output |
+| --- | --- |
+| `reference` | Original source; preparation generation is skipped. |
+| `extract` | Generated isolated reference based on the source. |
+| `generate` | Generated reference from text; the source branch is not requested. |
+| `disabled` | No reference; source and preparation generation are skipped. |
+
+Prepare loads role/mode instructions and role-specific negatives from
+`prompts/character_references.json`. Without an override, description and
+instructions append to the positive. Optional `positive_override` and
+`negative_override` STRING inputs independently replace those defaults. A
+positive override also replaces description/instructions; a connected empty
+negative clears the negative. Use String Multiline nodes for editable text.
+
+Prepare does not crop. Use upstream image nodes and a preview. Generative
+extraction can alter details; review its output before reusing it.
+
+## Character Reference Pack
+
+Reference Pack combines a required face with optional body, clothing, rear and
+assembled anchor references. It assigns consecutive image numbers in this order:
+anchor if present, face, body, clothing, rear. Its report identifies the actual
+slots; pair its prompt with its own image outputs on the same encoder.
+
+- `anchor_prompt` is the complete positive for generating a full-body review
+  character. It is text, not an image.
+- `character_lock` contains identity, physique, wardrobe and reference roles,
+  without imposing the review pose or scene. It can feed
+  [Character Shot Planner](Character_Shot_Planner.md).
+- `anchor` accepts an already approved assembled character image.
+- `negative` is the general assembly/dataset negative from the prompt file,
+  separate from Prepare's per-role negatives.
+
+Face supplies identity; body supplies visible proportions; clothing supplies the
+outfit. Rear supplies compatible rear appearance, not a command to face away.
+These are model instructions, not guaranteed separation of visual features.
+The node does not measure BMI or infer concealed anatomy reliably.
+
+## Character Sheet Pack
+
+Sheet Pack creates stage-specific prompts and up to three image outputs. Connect
+positive, negative and the numbered images to the same compatible encoder.
+
+The wardrobe stage requests garment-only product views. Garment openings and
+gaps show interiors or empty background, including behind mesh or sheer fabric;
+the source wearer and visible mannequin supports are excluded. Source clothing
+prints remain part of the garments. The generated positive uses prose without
+added reference-map or specification headings; the reference map remains in `report`.
+
+| Stage | First image | Second image | Third image |
+| --- | --- | --- | --- |
+| `mannequin` Preset | Blank canvas | — | — |
+| `mannequin` Reference | Blank canvas or supplied layout | Front body if present | Rear body if both present |
+| `wardrobe` | Outfit source | — | — |
+| `sheet` | Required mannequin guide | Required face | Optional wardrobe board |
+| `dataset` | Required front character | Required face | Optional rear character |
+
+Optional body images compact consecutively: with only rear supplied, it is image
+2. Unrelated roles are ignored by each stage. The toggles skip inactive image
+branches through lazy evaluation; another output may still request that branch.
+
+`rear_body` is an original physique photograph used only by the mannequin stage.
+`rear` is an approved character rear view used only by the dataset stage. A rear
+reference does not automatically request rear-facing shots.
+
+### Mannequin and assembly roles
+
+The Stage bar selects the task. Mannequin adds a Preset/Reference Mode bar and a
+Mannequin section containing Gender, Build, Muscularity, Breast size, Chest
+breadth, Hip width and Buttock size. Mode and Gender appear only for this stage.
+Body controls appear only in **Preset** mode; body-reference toggles appear only
+in **Reference** mode. All body attributes are independent of Gender.
+
+**Preset** skips all connected image inputs, including layout, and supplies a
+blank size-setting canvas. Build defaults to average; Gender, muscularity and
+regional attributes default to unspecified. Unspecified adds no instruction.
+The `slim` description asks for a slender silhouette and low soft-tissue fullness.
+`hourglass` asks for a defined waist narrower than the ribcage and pelvis; it
+describes relative contours, without prescribing gender or large regional volumes.
+Selected chest and hip widths still take precedence: hourglass shapes the waist
+within those widths. Chest breadth describes the underlying ribcage, separately
+from breast volume; hip width describes the lateral pelvis, separately from
+buttock volume and rearward projection. Narrow selections explicitly describe
+these spans and their consistency across views. These are qualitative prompt
+instructions; inspect and approve the generated mannequin before dressing it.
+Muscularity descriptions specify visible muscle development and separation,
+from smooth contours to strongly developed muscle groups. Breast and buttock
+volume describes fullness; projection describes extension from the torso or
+pelvis. Size adjectives remain qualitative, rather than calibrated measurements.
+**Reference** ignores all body presets and uses optional physique images.
+Leave `layout` disconnected for a blank canvas, or connect a template for framing. Front physique guides chest/breast proportions,
+overall figure and musculature; rear guides hips, glutes and back. The default
+requests three clay views without source clothing, hair or identity.
+
+The sheet stage requires the approved guide. Its default assigns body geometry
+and portrait framing to that guide, identity and appearance to the face, and
+wearable garments to the wardrobe board. Clothes fit the established physique.
+Raw front/rear body images are not passed through this stage.
+
+Garment fit follows the wardrobe reference per layer. Fitted pieces follow the
+existing body; loose, draped, bulky or structured pieces keep their own silhouette
+and may hide body contours. Physique preservation applies beneath the clothing
+and does not require those contours to remain visible. Coverage also applies to
+the portrait; hoods and collars may naturally obscure the face or hair.
+Opaque outer layers cover the body and inner clothing separately in each view.
+A cloak or coat with a closed back retains that coverage; a front opening does
+not imply a rear opening. Reference openings and transparency remain preserved.
+
+To omit wardrobe, disable `use_wardrobe` and supply a complete written outfit in
+`details`. For dataset generation, use individual approved character images;
+`use_rear` independently enables compatible rear-view conditioning.
+
+Mannequin defaults ask for relative source geometry, including chest-to-ribcage
+scale, shoulder/waist relationships and rear hip/glute proportions. Photographs
+and stylized illustrations both supply shape: changing the material to grey
+must not normalize the build toward an average physique. This applies equally
+to smaller/larger regions and less/more muscular bodies. Clear body-following
+contours can guide shape beneath fitted fabric; loose clothing and armor do not
+reveal hidden anatomy. Cropped sources control only visible regions.
+Explicit written physique details override only the attributes they specify.
+In Reference mode without body images or written details, no body type is
+prescribed. The dedicated Gender widget offers unspecified, female, male and
+androgynous. It supplements both modes and positive overrides without setting
+body measurements or muscularity. Both modes keep the fixed full-body front,
+full-body rear and upper-body portrait layout; pose variation belongs in the
+shot planner.
+The mannequin prompt uses continuous prose with reference assignments; the full
+reference map remains in `report`. A lone reference is called the supplied image,
+while multiple references use `<image1>`, `<image2>`, and so on.
+
+### Prompts, numbering and dimensions
+
+Wardrobe, sheet and dataset prompts preserve lettering and graphics on referenced
+clothing while excluding added page captions and labels. Prints retain their
+garment location and appear only in views where that surface is visible. An exact
+inscription in `details` supplies a transcription for ambiguous source lettering;
+prompt instructions still cannot guarantee correct glyphs in the generated image.
+
+Defaults live in `prompts/character_sheets.json`. Optional positive/negative
+STRING overrides independently replace file text. The Pack still resolves image
+roles and appends `details` to the positive. The complete reference map is in
+`report`; wardrobe and mannequin positives omit its document headings. For mannequins, the fixed layout,
+Gender and active Preset selections also supplement it; explicit details refine
+only named attributes. A connected empty negative clears
+it. File edits do not replace connected base text. Mannequin mode templates,
+fixed layout, detail-refinement instruction and selection descriptions are
+editable in that same file (`mannequin`, `mannequin_preset`, `mannequin_layout`,
+`mannequin_details`, `mannequin_attributes`). Requeue reloads edits, including
+selection descriptions when both base prompts are overridden.
+
+The sheet prompt asks clothing to fit the mannequin's existing waist contours and
+breast fullness. The third panel is a chest-up portrait ending just below the
+ribcage, even when the supplied mannequin guide shows more of the body. The
+mannequin layout requests the same portrait framing. These are generation
+instructions, not a geometric constraint or an automatic crop; review the output
+before using it as a dataset reference. If the workflow connects prompt overrides,
+update those strings as well as the file to use revised sheet instructions.
+
+Dropdown choices come from the keys under each `mannequin_attributes` group.
+Add a name and its description to the relevant group to create a selectable
+option, such as a new build or breast-size preset. Entries appear in JSON order,
+with `unspecified` supplied automatically. Restart ComfyUI and refresh the browser
+after adding, renaming or removing choices; editing a description takes effect
+on the next queue. Keep `build.average` for the existing default. A saved choice
+removed from the file produces a validation error instead of silently substituting
+another preset. Choice names must be 1–80 characters without leading/trailing
+whitespace or control characters; descriptions must be 1–1000 characters.
+
+Eclipse ships the `huge` and `very huge` breast-size selections used by the
+dataset-creation workflow. A saved workflow stores the selected name, while its
+description comes from `prompts/character_sheets.json`. Update Eclipse, restart
+ComfyUI and refresh the browser to load newly shipped choices. Startup updates an
+unmodified older prompt file automatically. If you customized that file, your
+edits are preserved: merge any missing selections from
+`.defaults/prompts/character_sheets.json.example` into the matching
+`mannequin_attributes` group. A `Value not in list` error for a saved selection
+means that selection is missing from the prompt data loaded by that installation.
+
+Older editable files without `hourglass` use its distributed description without
+overwriting other entries. Add `mannequin_attributes.build.hourglass` to that file
+to customize it. New distributed and local example data include the entry.
+
+Keep uppercase role names such as `LAYOUT GUIDE`, `FACE`, `WARDROBE`, `FRONT BODY`
+and `REAR BODY` in custom prompts. Pack resolves them to the actual `<imageN>`
+labels throughout the task, details and negative. Inspect `positive` and `report`
+through Show Any to verify numbering and sizes.
+
+Canvas dimensions must be multiples of 32 from 256 to 2048. Use Qwen encoder
+resolution 0 and its corresponding latent output. In the mannequin and sheet
+stages, only the first image is fitted to the canvas. Supporting body references
+and face/wardrobe images keep their aspect ratios without added canvas padding,
+are never enlarged, and are capped at 1024 pixels on the longest side.
+Other stages pad references without stretching. Connected dimensions take
+precedence over saved widget values.
+
+At sampler CFG 1, the negative prompt has no effect. Prompt instructions do not
+guarantee exact identity, body geometry, garment detail or panel layout.
+
+## Character Sheet Split
+
+Split crops one approved front/back/portrait sheet into three independent IMAGE
+outputs. It does not detect or repair panel contents.
+
+The Mode bar selects Auto or Manual. Crop shows `front_end` and `rear_end` only
+in Manual, while Gutter stays available in both. Auto ignores the manual
+boundaries; switching back restores their saved values.
+
+- `mode=auto`: divide the actual input image width into three equal parts on each
+  execution. No separate width connection is needed. Saved manual boundaries are
+  ignored; widths not divisible by three differ by at most one pixel.
+- `mode=manual`: use the adjustable fractional boundaries. This remains the
+  default so existing saved crops retain their behavior.
+- `front_end`: manual front/rear boundary as a fraction of source width; default 0.333.
+- `rear_end`: manual rear/portrait boundary; default 0.666 and greater than `front_end`.
+- `gutter`: fraction of source width trimmed from both sides of each crop;
+  default 0.004, applied in both modes. Set 0 to retain every pixel of each third.
+
+Preview all outputs; use manual mode to adjust uneven generated panels. A
+shifted divider, cropped garment or fourth figure requires correction before
+using the result as a reference. Outputs are single images rather than lists,
+so splitting alone does not multiply sampler runs.
+
+## Editable files
+
+Eclipse distributes initial sources as
+`.defaults/prompts/character_references.json.example` and
+`.defaults/prompts/character_sheets.json.example`. Edit the runtime copies under
+`prompts/` for personal defaults. File changes are read on the next execution;
+no restart is needed for prompt-only edits. Invalid files report errors instead
+of silently replacing user content. Both connected overrides allow Prepare and
+non-mannequin Sheet Pack stages to execute without reading their default file.
+Mannequin still reads its layout and attribute descriptions.

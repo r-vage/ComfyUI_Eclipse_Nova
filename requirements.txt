@@ -1,0 +1,21 @@
+torch
+numpy
+Pillow
+opencv-python
+pilgram
+safetensors
+torchvision
+PyYAML
+aiohttp
+SoundCard>=0.4.6,<0.5
+color-matcher>=0.6,<0.7
+kornia>=0.7.1
+spandrel>=0.4
+
+# Gemini nodes support
+# google-genai
+
+# Lyric alignment and glyph validation
+stable-ts==2.19.1
+faster-whisper>=1.2.1,<2
+fonttools>=4.0,<5

@@ -1,0 +1,32 @@
+[project]
+name = "ComfyUI_Eclipse_Nova"
+description = "ComfyUI prompt, pipe and media tools redesigned from Eclipse with compact panels and a focus on canvas performance in classic canvas and Nodes 2.0."
+version = "1.0.0"
+license = {file = "LICENSE"}
+dependencies = [
+    "torch",
+    "numpy",
+    "Pillow",
+    "opencv-python",
+    "pilgram",
+    "safetensors>=0.4,<0.9",
+    "torchvision",
+    "PyYAML",
+    "aiohttp",
+    "color-matcher>=0.6,<0.7",
+    "kornia>=0.7.1",
+    "spandrel>=0.4",
+    "SoundCard>=0.4.6,<0.5",
+    "stable-ts==2.19.1",
+    "faster-whisper>=1.2.1,<2",
+    "fonttools>=4.0,<5",
+]
+
+[project.urls]
+Repository = "https://github.com/r-vage/ComfyUI_Eclipse_Nova"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = "rvage"
+DisplayName = "ComfyUI Eclipse Nova"
+Icon = "https://raw.githubusercontent.com/r-vage/ComfyUI_Eclipse_Nova/refs/heads/main/Readme/icon_eclipse.png"

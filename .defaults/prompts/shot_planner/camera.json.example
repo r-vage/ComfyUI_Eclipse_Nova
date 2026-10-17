@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "distances": {
+    "close": "Tight head-and-shoulders photograph from the specified viewpoint; complete head and shoulders fill the frame with small headroom and modest side margins; chest, waist and legs remain outside the crop",
+    "mid": "Medium waist-up photograph, complete head and torso to the waist prominent in the frame, small headroom and room for the requested arm pose",
+    "wide": "Wide full-body head-to-toe photograph, both feet visible, the figure fills the available frame with small headroom and modest clearance below the feet"
+  },
+  "cameras": {
+    "eye": {
+      "family": "eye",
+      "text": "Camera at eye level",
+      "distances": [
+        "close",
+        "mid",
+        "wide"
+      ]
+    },
+    "raised": {
+      "family": "high",
+      "text": "Camera slightly above eye level, looking gently downward",
+      "distances": [
+        "close",
+        "mid",
+        "wide"
+      ]
+    },
+    "overhead": {
+      "family": "high",
+      "text": "High camera angle, clearly looking downward",
+      "distances": [
+        "close",
+        "mid",
+        "wide"
+      ]
+    },
+    "lowered": {
+      "family": "low",
+      "text": "Camera below chest height, looking gently upward",
+      "distances": [
+        "close",
+        "mid",
+        "wide"
+      ]
+    },
+    "ground": {
+      "family": "low",
+      "text": "Camera near floor level, looking upward",
+      "distances": [
+        "mid",
+        "wide"
+      ]
+    },
+    "table": {
+      "family": "table",
+      "text": "Camera at table height, looking slightly upward",
+      "distances": [
+        "close",
+        "mid"
+      ]
+    },
+    "hip": {
+      "family": "low",
+      "text": "Camera at the subject's hip height, looking gently upward toward the torso",
+      "distances": [
+        "mid",
+        "wide"
+      ]
+    },
+    "knee": {
+      "family": "low",
+      "text": "Camera at the subject's knee height, looking upward while keeping the requested body region in view",
+      "distances": [
+        "mid",
+        "wide"
+      ]
+    },
+    "steep": {
+      "family": "high",
+      "text": "Camera high above the subject, looking steeply downward at an oblique angle",
+      "distances": [
+        "close",
+        "mid",
+        "wide"
+      ]
+    }
+  },
+  "orientations": {
+    "front": "Camera views the subject from the front; preserve the pose's torso rotation and head position",
+    "left_three_quarter": "Camera views the subject obliquely from the front-left; preserve the pose's torso rotation and head position",
+    "right_three_quarter": "Camera views the subject obliquely from the front-right; preserve the pose's torso rotation and head position",
+    "left_profile": "Camera views the subject from the left side; preserve the pose's torso rotation and head position instead of forcing the head into profile",
+    "right_profile": "Camera views the subject from the right side; preserve the pose's torso rotation and head position instead of forcing the head into profile",
+    "rear": "Camera directly behind the subject, showing the rear of the requested body region within the selected crop; preserve the natural head position and any resulting facial occlusion",
+    "rear_three_quarter": "Camera behind and to one side of the subject, showing the rear and one side of the requested body region within the selected crop; preserve the specified head turn",
+    "rear_left_three_quarter": "Camera views the subject obliquely from behind on the left; preserve the pose's torso rotation and head position",
+    "rear_right_three_quarter": "Camera views the subject obliquely from behind on the right; preserve the pose's torso rotation and head position"
+  },
+  "lenses": {
+    "close": {
+      "50mm": "Natural 50mm perspective",
+      "85mm": "85mm portrait perspective",
+      "105mm": "Compressed 105mm portrait perspective"
+    },
+    "mid": {
+      "35mm": "Environmental 35mm perspective",
+      "50mm": "Natural 50mm perspective",
+      "85mm": "Compressed 85mm perspective"
+    },
+    "wide": {
+      "28mm": "Wide 28mm perspective without fisheye distortion",
+      "35mm": "Environmental 35mm perspective",
+      "50mm": "Natural 50mm perspective"
+    }
+  },
+  "compositions": {
+    "center": "Subject centered with balanced safe margins around the requested body region; keep background space modest",
+    "left": "Subject slightly left of center with a little breathing room to the right; keep safe margins around the requested body region and avoid pushing the subject against the left edge",
+    "right": "Subject slightly right of center with a little breathing room to the left; keep safe margins around the requested body region and avoid pushing the subject against the right edge",
+    "tilted": "Subject centered with the camera rolled gently about ten degrees, creating a diagonal composition; preserve the body pose and safe margins around the requested body region"
+  },
+  "body_overrides": {
+    "lying": {
+      "distances": {
+        "close": "Tight head-and-shoulders photograph of the supported subject from the specified viewpoint; complete head and shoulders fill the frame with small headroom; retain the specified back, side or stomach support and keep the torso below the shoulders outside the crop",
+        "mid": "Medium photograph showing the complete head and torso to the waist with small headroom. Frame diagonally or into the depth within the selected viewpoint. Preserve the supported pose; arms or legs extending beyond the waist-up crop remain outside it",
+        "wide": "Wide full-body photograph of the supported subject, head to toes inside the frame with small headroom and modest clearance around the figure. Frame diagonally or into the depth within the selected viewpoint. Preserve all specified support contacts, raised hips and bent knees; overlapping body parts may remain naturally hidden"
+      },
+      "cameras": {
+        "eye": "Camera beside the support, level with the lying subject's face; keep the lens above the support surface",
+        "raised": "Camera slightly above the lying subject's face and support, looking gently downward",
+        "overhead": "Camera directly above the supported subject, looking vertically down toward the support; preserve which body surface rests on the support",
+        "lowered": "Low oblique camera beside the support, lens just above its surface, looking along the body without obstruction",
+        "ground": "Camera close to the floor beside the support; lens just above its edge, aimed at the requested body region without forcing hidden facial features into view",
+        "table": "Camera at a low bedside-table height, looking gently down at the requested body region",
+        "hip": "Camera beside the support at the height of the supported hips, lens above the support surface and aimed along the body without obstruction",
+        "knee": "Camera low beside the support near the supported knees, lens above the surface and aimed obliquely toward the torso without obstruction",
+        "steep": "Camera high above and to one side of the supported subject, looking steeply downward at an oblique angle"
+      },
+      "orientations": {
+        "front": "Oblique view from the front at the specified camera height. Show naturally visible surfaces within the selected crop; preserve the pose and support contacts without turning the body upright or rolling it over",
+        "left_three_quarter": "Oblique view from the front-left at the specified camera height. Show naturally visible surfaces within the selected crop; preserve the pose and support contacts without turning the body upright or rolling it over",
+        "right_three_quarter": "Oblique view from the front-right at the specified camera height. Show naturally visible surfaces within the selected crop; preserve the pose and support contacts without turning the body upright or rolling it over",
+        "left_profile": "Oblique view from the left side at the specified camera height. Show naturally visible surfaces within the selected crop; preserve the pose and support contacts without turning the body upright or rolling it over",
+        "right_profile": "Oblique view from the right side at the specified camera height. Show naturally visible surfaces within the selected crop; preserve the pose and support contacts without turning the body upright or rolling it over",
+        "rear": "Oblique view from the rear at the specified camera height. Show naturally visible surfaces within the selected crop; preserve the pose and support contacts without turning the body upright or rolling it over",
+        "rear_three_quarter": "Oblique view from the rear three-quarter direction at the specified camera height. Show naturally visible surfaces within the selected crop; preserve the pose and support contacts without turning the body upright or rolling it over",
+        "rear_left_three_quarter": "Oblique view from the rear-left at the specified camera height. Show naturally visible surfaces within the selected crop; preserve the pose and support contacts without turning the body upright or rolling it over",
+        "rear_right_three_quarter": "Oblique view from the rear-right at the specified camera height. Show naturally visible surfaces within the selected crop; preserve the pose and support contacts without turning the body upright or rolling it over"
+      },
+      "camera_orientations": {
+        "overhead": {
+          "front": "Top-down frame rotation: the head end of the body points toward the top of the image. Rotate the camera around its vertical optical axis; keep the body pose and support contacts unchanged, showing only surfaces visible from above",
+          "left_three_quarter": "Top-down frame rotation: the head end of the body points toward the upper-left of the image. Rotate the camera around its vertical optical axis; keep the body pose and support contacts unchanged, showing only surfaces visible from above",
+          "right_three_quarter": "Top-down frame rotation: the head end of the body points toward the upper-right of the image. Rotate the camera around its vertical optical axis; keep the body pose and support contacts unchanged, showing only surfaces visible from above",
+          "left_profile": "Top-down frame rotation: the head end of the body points toward the left of the image. Rotate the camera around its vertical optical axis; keep the body pose and support contacts unchanged, showing only surfaces visible from above",
+          "right_profile": "Top-down frame rotation: the head end of the body points toward the right of the image. Rotate the camera around its vertical optical axis; keep the body pose and support contacts unchanged, showing only surfaces visible from above",
+          "rear": "Top-down frame rotation: the head end of the body points toward the bottom of the image. Rotate the camera around its vertical optical axis; keep the body pose and support contacts unchanged, showing only surfaces visible from above",
+          "rear_three_quarter": "Top-down frame rotation: the head end of the body points toward the lower-left of the image. Rotate the camera around its vertical optical axis; keep the body pose and support contacts unchanged, showing only surfaces visible from above",
+          "rear_left_three_quarter": "Top-down frame rotation: the head end of the body points toward the lower-left of the image. Rotate the camera around its vertical optical axis; keep the body pose and support contacts unchanged, showing only surfaces visible from above",
+          "rear_right_three_quarter": "Top-down frame rotation: the head end of the body points toward the lower-right of the image. Rotate the camera around its vertical optical axis; keep the body pose and support contacts unchanged, showing only surfaces visible from above"
+        }
+      }
+    }
+  }
+}
