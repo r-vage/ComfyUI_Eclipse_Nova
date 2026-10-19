@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-19
+
+### Version: 1.0.1
+
+- **Fix**
+  - Preserve category title colors for pipe, router and Get/Set nodes when applying themes or reopening workflows. Previously automatic gray titles return to their category color; custom title colors remain unchanged.
+- **Changed files**
+  - js/node-design-theme.js
+  - pyproject.toml
+
 ## 2026-10-17
 
 ### Version: 1.0.0

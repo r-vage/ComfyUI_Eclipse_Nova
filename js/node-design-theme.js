@@ -23,8 +23,10 @@ export function createNodeDesign({ app, api, settingId, category, route, prefix,
             : (created && colorTitlesOnCreate) || current === normalize(globalThis.LiteGraph?.NODE_DEFAULT_COLOR)
                 || Object.values(designs).some(design => current === normalize(design.node.title)
                     || (kind && current === normalize(design.node.category_titles[kind]))));
-        properties[titleKey] = automatic ? active.node.title : null;
-        if (automatic) node.color = active.node.title;
+        const title = kind === 'pipe' || kind === 'router'
+            ? active.node.category_titles[kind] : active.node.title;
+        properties[titleKey] = automatic ? title : null;
+        if (automatic) node.color = title;
         return automatic;
     }
 
