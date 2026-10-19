@@ -2,6 +2,22 @@
 
 ## 2026-10-19
 
+### Version: 1.0.3
+
+- **Feat**
+  - Add Neutral Jade, Neutral Ocean, Neutral Amethyst and Neutral Amber, pairing Neutral node backgrounds and titles with each palette's colored controls. Eclipse's Theme groups option applies matching Neutral group colors.
+- **Docs**
+  - Document the new variants, linked selection across the Nova packs and group appearance.
+- **Changed files**
+  - .defaults/themes/neutral-jade.json.example
+  - .defaults/themes/neutral-ocean.json.example
+  - .defaults/themes/neutral-amethyst.json.example
+  - .defaults/themes/neutral-amber.json.example
+  - Readme/Node_Design.md
+  - README.md
+  - Readme/README.md
+  - pyproject.toml
+
 ### Version: 1.0.2
 
 - **Fix**

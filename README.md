@@ -48,7 +48,9 @@ sections open. Folding a section changes the layout, not the stored settings.
 Text and preview panels fit within the node size chosen by the user.
 
 Choose **Settings → Eclipse Nova → Appearance → Node design** for **Jade,
-Neutral, Ocean, Amethyst or Amber**. Themes are editable JSON files; add your own
+Neutral, Ocean, Amethyst or Amber**, plus **Neutral Jade, Neutral Ocean,
+Neutral Amethyst and Neutral Amber** for lighter backgrounds and titles with
+colored controls. Themes are editable JSON files; add your own
 under `themes/custom/` and reload them from settings. Bundled themes are extracted
 once from `.defaults/themes/`; edits and deletions in `themes/` survive updates.
 The selected design applies to Nova backgrounds and automatic titles, including

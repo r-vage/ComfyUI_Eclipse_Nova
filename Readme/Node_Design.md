@@ -11,6 +11,16 @@ the default for new installations; existing saved theme choices are preserved.
 | Ocean | RGB 26 (`#1a1a1a`) | RGB 46 (`#2e2e2e`) | RGB 60 (`#3c3c3c`) | Blue accents and glow |
 | Amethyst | RGB 26 (`#1a1a1a`) | RGB 46 (`#2e2e2e`) | RGB 60 (`#3c3c3c`) | Purple accents and glow |
 | Amber | RGB 26 (`#1a1a1a`) | RGB 46 (`#2e2e2e`) | RGB 60 (`#3c3c3c`) | Warm yellow-gold (`#e8b978`) accents and glow, matching the Eclipse README tour |
+| Neutral Jade | RGB 58 (`#3a3a3a`) | RGB 78 (`#4e4e4e`) | RGB 80 (`#505050`) | Jade accents, purple selection glow |
+| Neutral Ocean | RGB 58 (`#3a3a3a`) | RGB 78 (`#4e4e4e`) | RGB 80 (`#505050`) | Blue accents and glow |
+| Neutral Amethyst | RGB 58 (`#3a3a3a`) | RGB 78 (`#4e4e4e`) | RGB 80 (`#505050`) | Purple accents and glow |
+| Neutral Amber | RGB 58 (`#3a3a3a`) | RGB 78 (`#4e4e4e`) | RGB 80 (`#505050`) | Warm yellow-gold accents and glow |
+
+The Neutral color variants use Neutral’s node background and automatic title
+(`#4e4e4e`) with the original palette’s controls and selection styling. All
+three Nova packs include the same variants, so Eclipse’s **Link Nova themes**
+can select them together. With Eclipse’s **Theme groups** enabled, their
+group color is Neutral’s `#505050`.
 
 Each gray RGB value applies to all three channels. Automatic titles use a +20
 offset from the bundled theme's background. Custom title colors stay unchanged;
