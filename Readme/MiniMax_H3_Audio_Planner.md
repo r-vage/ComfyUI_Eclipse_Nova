@@ -104,8 +104,24 @@ continuity is enabled.
 The master `audio` determines the complete duration. `conditioning_audio` is an
 optional native-rate guide source, such as a vocal stem; it must match the
 master duration within one 24 FPS frame. Wav2Vec `audio_encoder_output` is used
-only to place transitions or eligible single-image technical seams near
-activity gaps.
+only to place image transitions and technical seams near activity gaps,
+including technical cuts within each image's section in a multi-image timeline.
+
+With **Activity gaps** enabled, `activity_resume` uses the onset of a sustained
+departure from the quiet band, confirmed by a higher-activity sample. Softer
+beginnings remain part of that onset; the detector does not wait for the whole
+hold duration to stay above the higher threshold. `silence_start` selects the
+beginning of the qualifying gap instead. Wav2Vec activity is an acoustic cue,
+not a lyric or phoneme timestamp; a full music mix can obscure quiet vocals.
+
+For multi-image technical cuts, the planner searches around each balanced split
+using `search_window_seconds`. Both neighboring tasks must still fit their
+warmup or continuity prefix, hidden endpoint and render limit. The number of
+tasks and image ownership stay fixed during this adjustment. The search keeps
+the surrounding audio context even when only a narrow range of cut positions
+is legal. If no qualifying edge fits, the balanced split remains and the report
+records the fallback. Every adjusted cut updates the guide-audio slice and
+retained range together; warmup continues to use the actual preceding audio.
 
 Original `image_batch` entries are timeline states. Connect
 `manual_transition_times` from **String Multiline [Eclipse Nova]** and keep the
@@ -205,9 +221,18 @@ image. The technical-seam choices have distinct goals:
 - `plain_reset` independently regenerates from the active original image and can
   visibly reset framing at a same-image technical split.
 - `intentional_camera_cut` keeps that independent reset, source guide at hidden
-  local frame 0, and full warmup crop, then asks H3 to turn the first visible
-  generated frame into a deliberate editorial change of angle or shot size. It
-  does not transform, crop differently, or paste the source image.
+  local frame 0, and full warmup crop. The conditioner gives H3 one explicit
+  local cut time: change angle or shot size one third of the way into the hidden
+  warmup, capped at one second, then continue that shot through the visible
+  range. With a three-second warmup, the requested camera change is at one
+  second and the retained output begins at three seconds, leaving two seconds
+  for the new framing to settle. The performance continues against the same
+  guide audio throughout; retained frame ranges and audio timestamps do not
+  shift. Eclipse does not transform, crop differently, or paste the source image.
+
+These shot times guide generation; they are not a guarantee that H3 will follow
+an exact frame boundary. A source-like flash or second jump after the hidden
+warmup remains a failed transition and should be checked in the rendered result.
 
 The intentional instruction is never added to task 0, image transitions,
 first/last bridges, or generated-continuation tasks. `generated_continuation` is

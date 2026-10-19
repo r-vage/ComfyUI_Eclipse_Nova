@@ -81,12 +81,26 @@ def encoded_audio_activity(
 
 
 def _sustained_activity_start(
-    high_mask: torch.Tensor, start_index: int, hold_samples: int
+    active_mask: torch.Tensor,
+    high_mask: torch.Tensor,
+    start_index: int,
+    hold_samples: int,
 ) -> int | None:
-    last_start = high_mask.numel() - hold_samples
-    for index in range(start_index, last_start + 1):
-        if bool(high_mask[index : index + hold_samples].all().item()):
-            return index
+    # Confirm a sustained departure from the quiet band with a high-activity
+    # sample. Return its onset, including a softer lead-in, rather than waiting
+    # for every sample to exceed the high threshold throughout the hold.
+    index = start_index
+    while index < active_mask.numel():
+        if not bool(active_mask[index].item()):
+            index += 1
+            continue
+        run_start = index
+        while index < active_mask.numel() and bool(active_mask[index].item()):
+            index += 1
+        if index - run_start >= hold_samples and bool(
+            high_mask[run_start:index].any().item()
+        ):
+            return run_start
     return None
 
 
@@ -107,12 +121,9 @@ def align_activity_gap(
     search_samples = search_window_seconds * ENCODED_ACTIVITY_FPS
     window_start = max(0, math.floor(ideal_sample - search_samples))
     window_end = min(activity.numel(), math.ceil(ideal_sample + search_samples) + 1)
-    if minimum_frame is not None:
-        minimum_sample = minimum_frame / fps * ENCODED_ACTIVITY_FPS
-        window_start = max(window_start, math.ceil(minimum_sample))
-    if maximum_frame is not None:
-        maximum_sample = maximum_frame / fps * ENCODED_ACTIVITY_FPS
-        window_end = min(window_end, math.floor(maximum_sample) + 1)
+    # Capacity bounds constrain the selected cut, not the evidence used to
+    # recognize its gap/onset. A valid resume can follow a gap that starts
+    # before minimum_frame, or be confirmed after maximum_frame.
 
     local_activity = activity[window_start:window_end]
     if local_activity.numel() < 2:
@@ -139,13 +150,23 @@ def align_activity_gap(
         if run_end - run_start < silence_samples:
             continue
 
-        resume_start = _sustained_activity_start(high_mask, run_end, hold_samples)
+        resume_start = _sustained_activity_start(
+            ~low_mask, high_mask, run_end, hold_samples
+        )
         if resume_start is None:
             continue
 
         global_start = window_start + run_start
         global_end = window_start + run_end
         global_resume = window_start + resume_start
+        selected_sample = (
+            global_start if transition_edge == "silence_start" else global_resume
+        )
+        selected_frame = round(selected_sample / ENCODED_ACTIVITY_FPS * fps)
+        if minimum_frame is not None and selected_frame < minimum_frame:
+            continue
+        if maximum_frame is not None and selected_frame > maximum_frame:
+            continue
         if ideal_sample < global_start:
             interval_distance = global_start - ideal_sample
         elif ideal_sample >= global_end:

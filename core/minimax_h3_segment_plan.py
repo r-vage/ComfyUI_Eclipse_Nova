@@ -233,6 +233,59 @@ def _balanced_keeps(retained_frames: int, capacities: list[int]) -> list[int]:
     return keeps
 
 
+def _align_technical_keeps(
+    activity: torch.Tensor,
+    region_start: int,
+    keeps: list[int],
+    capacities: list[int],
+    transition_edge: str,
+    search_window_seconds: float,
+    min_gap_duration: float,
+    resume_hold_duration: float,
+    first_task_index: int,
+) -> tuple[list[int], list[str]]:
+    # Move internal boundaries only. The adjacent tasks must both fit their
+    # actual warmup/continuity and endpoint budgets; image boundaries stay fixed.
+    edges = [region_start]
+    for keep in keeps:
+        edges.append(edges[-1] + keep)
+    minimum_keeps = [min(round(H3_FPS), keep) for keep in keeps]
+    notes: list[str] = []
+    for index in range(1, len(keeps)):
+        target = edges[index]
+        minimum = max(
+            edges[index - 1] + minimum_keeps[index - 1],
+            edges[index + 1] - capacities[index],
+        )
+        maximum = min(
+            edges[index - 1] + capacities[index - 1],
+            edges[index + 1] - minimum_keeps[index],
+        )
+        aligned, details = align_activity_gap(
+            activity,
+            target,
+            H3_FPS,
+            transition_edge,
+            search_window_seconds,
+            min_gap_duration,
+            resume_hold_duration,
+            minimum_frame=minimum,
+            maximum_frame=maximum,
+        )
+        seam_number = first_task_index + index
+        if aligned is None:
+            notes.append(
+                f"Technical seam {seam_number}: frame {target} retained; {details}."
+            )
+        else:
+            edges[index] = aligned
+            notes.append(
+                f"Technical seam {seam_number}: frame {target} -> {aligned} "
+                f"({transition_edge}); {details}."
+            )
+    return [end - start for start, end in pairwise(edges)], notes
+
+
 def _audio_metadata(
     render_start: int,
     render_frames: int,
@@ -273,7 +326,12 @@ def build_segment_tasks(
     technical_seam_style: str,
     ref_image_size: str,
     max_render_frames: int,
-) -> list[dict[str, Any]]:
+    activity: torch.Tensor | None = None,
+    transition_edge: str = "activity_resume",
+    search_window_seconds: float = 5.0,
+    min_gap_duration: float = 0.25,
+    resume_hold_duration: float = 0.15,
+) -> tuple[list[dict[str, Any]], list[str]]:
     interval_edges = [0, *transition_frames, total_frames]
     regions: list[tuple[int, int, int, bool, bool]] = []
     if image_count == 1 and continuation_frames:
@@ -290,6 +348,7 @@ def build_segment_tasks(
         ]
 
     tasks: list[dict[str, Any]] = []
+    alignment_notes: list[str] = []
     for region_start, region_end, owner, is_first_region, forced_technical in regions:
         retained_frames = region_end - region_start
         is_transition_start = owner > 0 and region_start == transition_frames[owner - 1]
@@ -337,6 +396,19 @@ def build_segment_tasks(
             for prefix, tail in zip(prefixes, tails)
         ]
         keeps = _balanced_keeps(retained_frames, capacities)
+        if activity is not None and image_count > 1:
+            keeps, notes = _align_technical_keeps(
+                activity,
+                region_start,
+                keeps,
+                capacities,
+                transition_edge,
+                search_window_seconds,
+                min_gap_duration,
+                resume_hold_duration,
+                len(tasks),
+            )
+            alignment_notes.extend(notes)
         output_start = region_start
         for region_task_index, (prefix, tail, keep_frames) in enumerate(
             zip(prefixes, tails, keeps)
@@ -409,7 +481,7 @@ def build_segment_tasks(
             }
             tasks.append(task)
             output_start = output_end
-    return tasks
+    return tasks, alignment_notes
 
 
 def task_uses_intentional_camera_cut(

@@ -292,7 +292,7 @@ def plan_segments(
     elif image_count == 1 and align_to_activity_gap:
         notes.append(f"Single-image activity fallback: {activity_error}.")
 
-    tasks = build_segment_tasks(
+    tasks, technical_notes = build_segment_tasks(
         transition_frames=transition_frames,
         continuation_frames=continuation_frames,
         total_frames=total_frames,
@@ -309,7 +309,17 @@ def plan_segments(
         technical_seam_style=technical_seam_style,
         ref_image_size=ref_image_size,
         max_render_frames=max_render_frames,
+        activity=activity,
+        transition_edge=transition_edge,
+        search_window_seconds=search_window_seconds,
+        min_gap_duration=min_gap_duration,
+        resume_hold_duration=resume_hold_duration,
     )
+    notes.extend(technical_notes)
+    if image_count > 1 and activity is not None:
+        continuation_frames = [
+            task["output_start_frame"] for task in tasks if task["is_technical_seam"]
+        ]
     plan: dict[str, Any] = {
         "kind": PLAN_KIND,
         "version": PLAN_VERSION,

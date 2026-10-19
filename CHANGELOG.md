@@ -2,6 +2,22 @@
 
 ## 2026-10-19
 
+### Version: 1.0.4
+
+- **Fix**
+  - Give each intentional MiniMax H3 camera cut one early timestamp inside the discarded warmup, allowing the new shot to settle before visible output while preserving frame ranges and audio timing.
+  - Align MiniMax H3 technical cuts to activity gaps in multi-image timelines while respecting warmup, endpoint and render limits.
+  - Detect softer activity onsets before sustained high activity, and retain surrounding gap evidence when constraining cut positions.
+- **Docs**
+  - Explain hidden camera-cut timing, activity-gap placement and rendered transition checks.
+- **Changed files**
+  - core/audio_timeline.py
+  - core/minimax_h3_segment_plan.py
+  - core/minimax_h3_segmented_timeline.py
+  - core/minimax_h3_segmented_conditioning.py
+  - Readme/MiniMax_H3_Audio_Planner.md
+  - pyproject.toml
+
 ### Version: 1.0.3
 
 - **Feat**

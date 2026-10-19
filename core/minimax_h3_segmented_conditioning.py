@@ -99,6 +99,30 @@ def _reference_geometry(
     return target_width, target_height
 
 
+def _technical_cut_text(plan: dict[str, Any], task: dict[str, Any]) -> str:
+    # The model sees a local clip, not the caller's crop. Put its camera change
+    # early in the discarded prefix and leave the rest of that prefix to settle.
+    visible_seconds = task["crop_start_frames"] / plan["fps"]
+    cut_seconds = min(1.0, visible_seconds / 3.0)
+    cut_time = f"{int(cut_seconds // 60):02d}:{cut_seconds % 60:06.3f}"
+    # Do not expose the retained-range timestamp: H3 can turn even a negated
+    # reference to that time into a second, visible camera cut.
+    return (
+        f"{technical_cut_prompt_for_task(plan, task)}\n"
+        "Camera timing within this clip:\n"
+        "[Shot 1] Begin in the opening composition of <Picture 1>, with the "
+        "ongoing performance following the supplied audio.\n"
+        f"[Shot 2] At {cut_time}, the camera cuts to the new framing described "
+        "above. Complete the change of both angle and shot size at this cut, "
+        "then maintain the established framing as one uninterrupted moving shot "
+        "for the remainder of the clip. The performance and supplied audio "
+        "continue uninterrupted across "
+        "the camera cut. Lip movement follows the current supplied audio without "
+        "restarting the vocal phrase; retain the main prompt's behavior during "
+        "instrumental passages and silence."
+    )
+
+
 def encode_segment(
     clip,
     vae,
@@ -197,7 +221,7 @@ def encode_segment(
         if task_uses_intentional_camera_cut(plan, task):
             selected_prompt = (
                 f"{selected_prompt.rstrip()}\n"
-                f"{technical_cut_prompt_for_task(plan, task)}"
+                f"{_technical_cut_text(plan, task)}"
             ).strip()
 
     if conditioning_family == "ref2va_active_reference":
