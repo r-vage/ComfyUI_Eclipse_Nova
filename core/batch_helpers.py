@@ -7,6 +7,10 @@ import torch
 
 from .image_helpers import is_conditioning
 
+# These ComfyUI metadata tensors use their first dimension for samples.
+# Attention masks retain their token/head dimensions when split or combined.
+_CONDITIONING_BATCH_FIELDS = ("pooled_output", "mask", "attention_mask")
+
 
 def metadata_equal(left: Any, right: Any) -> bool:
     if isinstance(left, torch.Tensor) or isinstance(right, torch.Tensor):
@@ -53,7 +57,7 @@ def split_conditioning(conditioning: Any) -> list[list]:
         raise ValueError("Conditioning embeddings must have a nonempty batch axis.")
     counts = [t.shape[0] for t, _ in conditioning]
     for _, metadata in conditioning:
-        for key in ('pooled_output', 'mask'):
+        for key in _CONDITIONING_BATCH_FIELDS:
             value = metadata.get(key)
             if isinstance(value, torch.Tensor) and value.ndim >= (3 if key == 'mask' else 2):
                 counts.append(value.shape[0])
@@ -63,12 +67,12 @@ def split_conditioning(conditioning: Any) -> list[list]:
         tensor = _broadcast(tensor, batch, "Conditioning embeddings")
         per_sample = {}
         for key, value in metadata.items():
-            # ComfyUI retains this key even when the encoder has no pooled output.
-            if key == "pooled_output" and value is None:
+            # Optional encoder outputs can be absent without removing their keys.
+            if key in ("pooled_output", "attention_mask") and value is None:
                 continue
-            if key in ("pooled_output", "mask"):
+            if key in _CONDITIONING_BATCH_FIELDS:
                 if not isinstance(value, torch.Tensor):
-                    expected = "a tensor or None" if key == "pooled_output" else "a tensor"
+                    expected = "a tensor" if key == "mask" else "a tensor or None"
                     raise ValueError(f"Conditioning {key} must be {expected}.")
                 if key == "mask" and value.ndim == 2:
                     value = value.unsqueeze(0)
@@ -109,7 +113,7 @@ def batch_conditionings(conditionings: Any) -> list:
         extra = dict(reference)
         for key in reference:
             values = [entry[1][key] for entry in entries]
-            if key in ("pooled_output", "mask") and all(isinstance(value, torch.Tensor) for value in values):
+            if key in _CONDITIONING_BATCH_FIELDS and all(isinstance(value, torch.Tensor) for value in values):
                 extra[key] = _cat(values, f"Conditioning {key}")
             elif not all(metadata_equal(values[0], value) for value in values[1:]):
                 raise ValueError(f"Conditioning metadata '{key}' conflicts; keep separate prompts as a list.")

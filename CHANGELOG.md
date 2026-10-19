@@ -2,6 +2,14 @@
 
 ## 2026-10-19
 
+### Version: 1.0.2
+
+- **Fix**
+  - Preserve conditioning attention masks in IO Slice & Dice and list/batch conversion, including single-image selections and shared masks.
+- **Changed files**
+  - core/batch_helpers.py
+  - pyproject.toml
+
 ### Version: 1.0.1
 
 - **Fix**
