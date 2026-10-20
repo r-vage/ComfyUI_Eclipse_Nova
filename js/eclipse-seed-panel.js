@@ -8,7 +8,7 @@ import { NODE_ID, WIDGET_TYPE, EDITOR_KEY, StandaloneSeedState } from './eclipse
 import { installStandaloneSeedHooks, resolveNodeSeed } from './eclipse-seed-queue.js';
 
 const controllers = new WeakMap();
-class SeedForm {
+export class SeedForm {
     constructor(controller) { this.controller = controller; }
     render() {
         const { root, state } = this.controller;
@@ -27,13 +27,23 @@ class SeedForm {
             bits.title = 'Enabled: unsigned 64-bit seeds. Disabled: unsigned 32-bit seeds. Switching to 32-bit keeps the lower 32 bits.';
             bar.append(bits);
         }
-        content.append(bar); seedControls(content, this.controller);
+        content.append(bar);
+        if (state.config.seeds) {
+            for (const key of ['image', 'prompt']) {
+                const controller = this.controller;
+                seedControls(content, {
+                    state: state.channel(key),
+                    edit: (fn, render = true) => controller.edit(state => fn(state.channel(key)), render),
+                }, key === 'image' ? 'Image' : 'Prompt');
+            }
+        } else seedControls(content, this.controller);
+        const historyLabel = value => state.historyLabel ? state.historyLabel(value) : value;
         const section = element('section', 'en-panel-section'); section.setAttribute('aria-label', 'Results');
         const header = element('div', 'en-panel-section-header'), open = state.editor.resultsOpen;
         const toggle = button('', 'Results', () => edit(state => { state.editor.resultsOpen = !open; }));
         toggle.className = 'en-panel-section-toggle'; toggle.setAttribute('aria-expanded', String(open));
         toggle.append(element('span', 'en-panel-section-label', `${open ? '▾' : '▸'} Results`),
-            element('span', 'en-panel-summary', state.editor.history[0] ?? 'No seeds used yet'));
+            element('span', 'en-panel-summary', state.editor.history.length ? historyLabel(state.editor.history[0]) : 'No seeds used yet'));
         const clear = button('↺', 'Clear seed history', () => edit(state => { state.editor.history = []; }));
         clear.disabled = !state.editor.history.length; header.append(toggle, clear); section.append(header);
         if (open) {
@@ -41,8 +51,8 @@ class SeedForm {
             list.addEventListener('wheel', event => event.stopPropagation(), { passive: true });
             for (const value of state.editor.history) {
                 const row = element('div'); row.setAttribute('role', 'listitem');
-                const use = button(value, `Use seed ${value}`, () => edit(state => state.reuse(value)));
-                use.title = state.validSeed(value) ? `Use seed ${value}` : `Use seed ${value} in 64-bit mode`;
+                const use = button(historyLabel(value), `Use seed ${historyLabel(value)}`, () => edit(state => state.reuse(value)));
+                use.title = state.validSeed(value) ? `Use seed ${historyLabel(value)}` : `Use seed ${historyLabel(value)} in 64-bit mode`;
                 row.append(use); list.append(row);
             }
             if (!state.editor.history.length) list.append(element('div', 'en-panel-note', 'Used seeds appear here after execution.'));

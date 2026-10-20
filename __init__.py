@@ -92,6 +92,7 @@ class EclipseExtension(ComfyExtension):
         from .py.RvLogic_Integer_Gen import RvLogic_IntegerGen
         from .py.RvLogic_None import RvLogic_None
         from .py.RvLogic_Seed import RvLogic_Seed
+        from .py.RvLogic_DualSeed import RvLogic_DualSeed
 
         # Sampler nodes
         from .py.RvSampler_KSamplerKargim import RvSampler_KSamplerKargim
@@ -266,6 +267,7 @@ class EclipseExtension(ComfyExtension):
             RvLogic_IntegerGen,
             RvLogic_None,
             RvLogic_Seed,
+            RvLogic_DualSeed,
             # Sampler
             RvSampler_KSamplerKargim,
             # Pipe IO

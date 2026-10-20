@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-10-20
+
+### Version: 1.0.5
+
+- **Feat (New)**
+  - Add Dual Seed_v2 with independent Image and Prompt controls and outputs, one shared 64-bit toggle, and reusable paired results.
+- **Feat**
+  - Keep up to 50 recent results in Seed and Dual Seed; histories persist with workflows.
+- **Changed files**
+  - core/dual_seed_configuration.py
+  - py/RvLogic_DualSeed.py
+  - js/eclipse-dual-seed-panel.js
+  - js/eclipse-dual-seed-queue.js
+  - js/eclipse-dual-seed-state.js
+  - js/eclipse-panel-seed-controls.js
+  - js/eclipse-seed-panel.js
+  - js/eclipse-seed-state.js
+  - Readme/Seed.md
+  - Readme/README.md
+  - pyproject.toml
+
 ## 2026-10-19
 
 ### Version: 1.0.4

@@ -4,7 +4,7 @@ import { SeedState, validSeed } from './eclipse-panel-seed.js';
 export const NODE_ID = 'Seed [Eclipse Nova]';
 export const WIDGET_TYPE = 'ECLIPSE_NOVA_SEED';
 export const EDITOR_KEY = 'eclipseSeed';
-export const HISTORY_LIMIT = 20;
+export const HISTORY_LIMIT = 50;
 
 export class StandaloneSeedState extends SeedState {
     constructor(raw, _spec = {}, editor = {}) {
