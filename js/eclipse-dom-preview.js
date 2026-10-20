@@ -13,6 +13,8 @@ import {
 export const DOM_IMAGE_PREVIEW_NAME = '_eclipse_dom_preview';
 const FREE_RESIZE_CLASS = 'eclipse-dom-preview-vue-free-resize';
 let _freeResizeCSSInjected = false;
+const previewSession = Date.now().toString(36);
+let previewRevision = 0;
 
 function _injectFreeResizeCSS() {
     if (_freeResizeCSSInjected) return;
@@ -40,18 +42,18 @@ function _injectFreeResizeCSS() {
     document.head.appendChild(style);
 }
 
-function imageUrl(data) {
-    return api.apiURL(`/view?filename=${encodeURIComponent(data.filename)}` + `&type=${encodeURIComponent(data.type || 'temp')}` + `&subfolder=${encodeURIComponent(data.subfolder || '')}`);
+function imageUrl(data, revision) {
+    return api.apiURL(`/view?filename=${encodeURIComponent(data.filename)}` + `&type=${encodeURIComponent(data.type || 'temp')}` + `&subfolder=${encodeURIComponent(data.subfolder || '')}` + `&eclipse_preview=${revision}`);
 }
 
 // Probe natural dimensions of all images. Returns Promise<Array<{w,h}>>.
 // Images are already in the browser cache from the grid cells, so this is near-instant.
-function _probeAspects(images) {
+function _probeAspects(images, revision) {
     return Promise.all(images.map(data => new Promise(resolve => {
         const probe = new Image();
         probe.onload = () => resolve({ w: probe.naturalWidth, h: probe.naturalHeight });
         probe.onerror = () => resolve({ w: 1, h: 1 });
-        probe.src = imageUrl(data);
+        probe.src = imageUrl(data, revision);
     })));
 }
 
@@ -215,6 +217,7 @@ export function createDOMPreviewController(node, opts = {}) {
     const dispose = () => {
         if (disposed) return;
         disposed = true;
+        state.revision = null;
         resizeObserver.disconnect();
         modeUnsubscribe?.();
         modeUnsubscribe = null;
@@ -355,6 +358,9 @@ export function setDOMPreviewController(preview, images) {
         state
     } = preview;
     state.images = imageData;
+    // Files can be replaced or their counters reused after deletion. Refresh
+    // once per result, retaining one URL for grid cells, probes and navigation.
+    state.revision = `${previewSession}-${++previewRevision}`;
     state.index = 0;
     state.aspects = null;  // reset so grid reprobes dimensions for the new image set
     if (imageData.length > 1) {
@@ -376,6 +382,7 @@ export function clearDOMPreviewController(preview) {
         state
     } = preview;
     state.images = [];
+    state.revision = null;
     state.index = 0;
     state.aspects = null;
     img.style.display = 'none';
@@ -421,7 +428,7 @@ function showSingle(state, img, dimLabel, idxLabel) {
         return;
     }
     const data = state.images[state.index];
-    const url = imageUrl(data);
+    const url = imageUrl(data, state.revision);
     img.onload = function () {
         dimLabel.textContent = `${this.naturalWidth} × ${this.naturalHeight}`;
     };
@@ -452,7 +459,7 @@ function showGrid(state, singleImg, grid, dimLabel, idxLabel) {
     for (let i = 0; i < n; i++) {
         const data = state.images[i];
         const cell = document.createElement('img');
-        cell.src = imageUrl(data);
+        cell.src = imageUrl(data, state.revision);
         cell.style.cssText = 'width:100%;height:100%;object-fit:contain;cursor:pointer;' + 'border-radius:2px;background:#222;';
         cell.draggable = false;
         cell.addEventListener('click', (e) => {
@@ -468,7 +475,9 @@ function showGrid(state, singleImg, grid, dimLabel, idxLabel) {
     state._applyLayout?.();
     // Probe image dimensions if not yet cached, then refine column layout
     if (!state.aspects) {
-        _probeAspects(state.images).then(aspects => {
+        const revision = state.revision;
+        _probeAspects(state.images, revision).then(aspects => {
+            if (state.revision !== revision) return;
             state.aspects = aspects;
             if (state.mode === 'grid') state._applyLayout?.();
         });

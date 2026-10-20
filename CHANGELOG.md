@@ -2,6 +2,17 @@
 
 ## 2026-10-20
 
+### Version: 1.0.7
+
+- **Fix**
+  - Refresh Save Images and shared image previews when filenames are reused, preventing stale browser-cached pictures while retaining cached navigation within each result.
+  - Ignore late preview dimension responses from previous results after a newer batch arrives or the preview is cleared.
+- **Changed files**
+  - js/eclipse-dom-preview.js
+  - pyproject.toml
+
+## 2026-10-20
+
 ### Version: 1.0.6
 
 - **Fix**
