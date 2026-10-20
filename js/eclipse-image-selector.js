@@ -63,6 +63,34 @@ const ECLIPSE_SEED_ADAPTER = Object.freeze({
         widget.value = JSON.stringify(config); widget.callback?.(widget.value);
     },
 });
+const DUAL_SEED_KEYS = Object.freeze(['image', 'prompt']);
+const ECLIPSE_DUAL_SEED_ADAPTER = Object.freeze({
+    cacheFields: Object.freeze([]), sourceProvider: true, valueLabel: 'seed pair',
+    isDynamic(node) {
+        const seeds = _nodeConfiguration(node)?.seeds;
+        return DUAL_SEED_KEYS.some(key => ['random', 'increment', 'decrement'].includes(seeds?.[key]?.policy));
+    },
+    readValue(node, promptNode) {
+        if (promptNode) {
+            try {
+                const seeds = JSON.parse(promptNode.inputs.configuration).seeds;
+                return DUAL_SEED_KEYS.every(key => seeds?.[key]?.policy === 'fixed' && validSeed(seeds[key].value))
+                    ? DUAL_SEED_KEYS.map(key => seeds[key].value) : null;
+            } catch { return null; }
+        }
+        const seeds = node.properties?.eclipseDualSeed?.lastSeeds;
+        return DUAL_SEED_KEYS.every(key => validSeed(seeds?.[key]))
+            ? DUAL_SEED_KEYS.map(key => seeds[key]) : null;
+    },
+    freezeValue(node, values) {
+        const widget = node.widgets.find(widget => widget.name === 'configuration'), config = _nodeConfiguration(node);
+        if (values.some(value => BigInt(value) > 0xffffffffn)) config.bits = 64;
+        for (const [index, key] of DUAL_SEED_KEYS.entries()) {
+            config.seeds[key] = { value: String(values[index]), policy: 'fixed' };
+        }
+        widget.value = JSON.stringify(config); widget.callback?.(widget.value);
+    },
+});
 function _nodeConfiguration(node) {
     try { return JSON.parse(node.widgets?.find(widget => widget.name === 'configuration')?.value); }
     catch { return null; }
@@ -159,6 +187,7 @@ const CONTINUATION_VALUE_ADAPTERS = Object.freeze({
     }),
     'Load Files From Folder [Eclipse Nova]': FILES_CONTINUATION_ADAPTER,
     'Seed [Eclipse Nova]': ECLIPSE_SEED_ADAPTER,
+    'Dual Seed_v2 [Eclipse Nova]': ECLIPSE_DUAL_SEED_ADAPTER,
     'Smart Model Loader [Eclipse]': Object.freeze({
         cacheFields: Object.freeze(['_Eclipse_cachedSeedInput', '_Eclipse_cachedSeedResolved']),
         controlInputName: 'seed',
@@ -384,6 +413,7 @@ function _capEarlyPromptEvents(collection) {
 
 function _isResolvedContinuationValue(value) {
     if (value == null || value === '') return false;
+    if (Array.isArray(value)) return value.length === 2 && value.every(seed => validSeed(seed));
     if (validSeed(value)) return true;
     const resolved = Number(value);
     return Number.isSafeInteger(resolved) && resolved >= 0;

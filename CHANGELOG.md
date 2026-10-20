@@ -2,6 +2,16 @@
 
 ## 2026-10-20
 
+### Version: 1.0.6
+
+- **Fix**
+  - Image Selector confirmation locks both Dual Seed values to the displayed execution, preserving full 64-bit precision and saved workflow selections.
+- **Changed files**
+  - js/eclipse-image-selector.js
+  - pyproject.toml
+
+## 2026-10-20
+
 ### Version: 1.0.5
 
 - **Feat (New)**

@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI_Eclipse_Nova"
 description = "ComfyUI prompt, pipe and media tools redesigned from Eclipse with compact panels and a focus on canvas performance in classic canvas and Nodes 2.0."
-version = "1.0.5"
+version = "1.0.6"
 license = {file = "LICENSE"}
 dependencies = [
     "torch",
