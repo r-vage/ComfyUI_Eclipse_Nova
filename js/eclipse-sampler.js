@@ -86,7 +86,9 @@ export class SamplerController {
             this.measuredPreview = preview;
             for (const key of detailer ? ['min-height'] : ['height', 'min-height', 'max-height']) this.root.style.setProperty(`--comfy-widget-${key}`, `${height}px`);
             const size = this.node.computeSize();
-            const retainHeight = ['sampler', 'advanced'].includes(this.spec.profile) || preview;
+            // Resizable preview panels retain user geometry even before their
+            // first render or when Preview is off. Settings alone auto-fit.
+            const retainHeight = detailer;
             this.node.setSize([Math.max(320, this.node.size[0]), retainHeight ? Math.max(this.node.size[1], size[1]) : size[1]]);
             this.node.setDirtyCanvas(true, true);
         });

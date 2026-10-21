@@ -2,6 +2,16 @@
 
 ## 2026-10-21
 
+### Version: 1.0.9
+
+- **Fix**
+  - Preserve the resized Detailer SEGS node height on workflow reload, before its first render and with preview disabled.
+- **Changed files**
+  - js/eclipse-sampler.js
+  - pyproject.toml
+
+## 2026-10-21
+
 ### Version: 1.0.8
 
 - **Feat (New)**
