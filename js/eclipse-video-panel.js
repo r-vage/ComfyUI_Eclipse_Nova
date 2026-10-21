@@ -86,10 +86,10 @@ class VideoForm {
         this.controls.replaceChildren();
         const bar = this.bar(this.controls);
         if (this.load) {
-            if (this.config.timing_mode === 'fixed' && !this.state.editor.barCollapsed) this.number(bar, 'fps', 'FPS', 1, 240, 0.01);
+            if (this.config.timing_mode === 'fixed' && !this.state.editor.barCollapsed) this.number(bar, 'fps', 'FPS', 1, 240, 0.1);
             this.sizeSection(this.controls);
         } else if (!this.sourceTimed()) {
-            const grid = element('div', 'en-panel-grid'); this.number(grid, 'fps', 'FPS', 1, 120, 0.01); this.controls.append(grid);
+            const grid = element('div', 'en-panel-grid'); this.number(grid, 'fps', 'FPS', 1, 120, 0.1); this.controls.append(grid);
         } else this.controls.append(element('div', 'en-panel-note', 'Source timing and dimensions are retained.'));
         const content = element('div', 'en-panel-content'); content.append(this.controls, this.load ? this.playlist.element : this.preview);
         root.replaceChildren(content); this.controller.measure();

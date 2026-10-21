@@ -170,6 +170,19 @@ Merges 2–64 pipe/context dicts into a single pipe. Essential when combining ou
 
 **Output:** Single `PIPE` — merged context dict.
 
+Every non-empty dictionary field is accepted, including custom fields, `model_2`,
+Stage 2 controls and `sampling_stages`; there is no fixed field whitelist. Zero
+and False are valid values. Nested audio, latent and configuration dictionaries
+stay intact, with conflict resolution applied to the whole field. Structured
+`loras` entries remain separate from the `lora_names` text field.
+
+To combine loader metadata with actual sampling results, use **overwrite**:
+loader PIPE first, sampler output PIPE last. This keeps model names while using
+the resolved seed/settings/dimensions. **Merge** intentionally concatenates images
+and lists, so combining a PIPE with its sampled output can duplicate images.
+An existing IO KSampler already preserves unrelated loader fields; a separate
+Concat node is unnecessary for that direct connection.
+
 See the "Connecting the Pipe" sections in [Smart Model Loader Nova](https://github.com/r-vage/ComfyUI_SmartModelLoader_Nova), [Sampler Settings](Sampler.md#smart-sampler-settings), and [Smart Folder](Smart_Folder.md) for usage examples.
 
 **Category:** `Eclipse Nova > Conversion`

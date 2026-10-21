@@ -174,7 +174,7 @@ class RvVideo_WanLipSyncTimelinePlanner(OperationPanel, io.ComfyNode):
                     tooltip="Optional existing Wav2Vec2 output already used by InfiniteTalk.",
                 ),
                 io.Image.Input("image_batch", tooltip="Ordered reference image batch."),
-                io.Float.Input("fps", default=25.0, min=1.0, max=240.0, step=0.01),
+                io.Float.Input("fps", default=25.0, min=1.0, max=240.0, step=0.1),
                 io.Int.Input("context_length", default=81, min=2, max=4096, step=1),
                 io.Int.Input("overlap_frames", default=9, min=1, max=4095, step=1),
                 io.String.Input(

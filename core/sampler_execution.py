@@ -7,13 +7,13 @@ from datetime import datetime, timezone
 import comfy.sample  # type: ignore
 import comfy.samplers  # type: ignore
 import comfy.utils  # type: ignore
-import latent_preview  # type: ignore
 import nodes  # type: ignore
 import torch
 from comfy_api.latest import io  # type: ignore
 
 from .common import get_workflow_node
 from .logger import log
+from .sampler_preview import prepare_callback
 
 _LOG_PREFIX = "Sampler (Kargim)"
 
@@ -38,7 +38,7 @@ def sample_kargim(steps, cfg, sampler_name, scheduler, denoise, seed,
                   model=None, vae=None, positive=None, negative=None,
                   preview_mode="Preview", tiled_decode=False, tile_size=512,
                   latent=None, image=None, pipe=None, allow_overwrite=False,
-                  *, prompt=None, extra_pnginfo=None, unique_id=None, alpha=True):
+                  *, prompt=None, extra_pnginfo=None, unique_id=None, alpha=True, sampling_function=None):
     def is_input_connected(key):
         if prompt is not None and unique_id is not None and unique_id in prompt:
             node_inputs = prompt[unique_id].get("inputs", {})
@@ -184,76 +184,85 @@ def sample_kargim(steps, cfg, sampler_name, scheduler, denoise, seed,
         resolved_latent.get("downscale_ratio_temporal", None),
     )
 
-    batch_inds = resolved_latent.get("batch_index")
-    noise = comfy.sample.prepare_noise(latent_samples, seed, batch_inds)
-
-    noise_mask = None
-    if "noise_mask" in resolved_latent:
-        noise_mask = resolved_latent["noise_mask"]
-
-    # Conditional latent preview callback
-    if preview_mode == "None":
-        callback = None
+    if sampling_function is not None:
+        samples = sampling_function(
+            model=model, samples=latent_samples, seed=seed, steps=steps, cfg=cfg,
+            sampler_name=sampler_name, scheduler=scheduler, denoise=denoise,
+            positive=positive, negative=negative,
+            batch_index=resolved_latent.get("batch_index"), noise_mask=resolved_latent.get("noise_mask"),
+            preview_mode=preview_mode,
+        )
     else:
-        callback = latent_preview.prepare_callback(model, steps)
-    disable_pbar = not comfy.utils.PROGRESS_BAR_ENABLED
-    batch_size = latent_samples.shape[0]
-    if batch_size > 1:
-        # Process each batch element individually and concatenate
-        sampled_list = []
-        for i in range(batch_size):
-            curr_latent = latent_samples[i : i + 1]
-            curr_noise = noise[i : i + 1]
-            curr_noise_mask = None
-            if noise_mask is not None:
-                if noise_mask.shape[0] >= batch_size:
-                    curr_noise_mask = noise_mask[i : i + 1]
-                else:
-                    curr_noise_mask = noise_mask
+        batch_inds = resolved_latent.get("batch_index")
+        noise = comfy.sample.prepare_noise(latent_samples, seed, batch_inds)
 
-            curr_samples = comfy.sample.sample(
+        noise_mask = None
+        if "noise_mask" in resolved_latent:
+            noise_mask = resolved_latent["noise_mask"]
+
+        # Conditional latent preview callback
+        if preview_mode == "None":
+            callback = None
+        else:
+            callback = prepare_callback(model, steps)
+        disable_pbar = not comfy.utils.PROGRESS_BAR_ENABLED
+        batch_size = latent_samples.shape[0]
+        if batch_size > 1:
+            # Process each batch element individually and concatenate
+            sampled_list = []
+            for i in range(batch_size):
+                curr_latent = latent_samples[i : i + 1]
+                curr_noise = noise[i : i + 1]
+                curr_noise_mask = None
+                if noise_mask is not None:
+                    if noise_mask.shape[0] >= batch_size:
+                        curr_noise_mask = noise_mask[i : i + 1]
+                    else:
+                        curr_noise_mask = noise_mask
+
+                curr_samples = comfy.sample.sample(
+                    model,
+                    curr_noise,
+                    steps,
+                    cfg,
+                    sampler_name,
+                    scheduler,
+                    positive,
+                    negative,
+                    curr_latent,
+                    denoise=denoise,
+                    disable_noise=False,
+                    start_step=None,
+                    last_step=None,
+                    force_full_denoise=False,
+                    noise_mask=curr_noise_mask,
+                    callback=callback,
+                    disable_pbar=disable_pbar,
+                    seed=seed,
+                )
+                sampled_list.append(curr_samples)
+            samples = torch.cat(sampled_list, dim=0)
+        else:
+            samples = comfy.sample.sample(
                 model,
-                curr_noise,
+                noise,
                 steps,
                 cfg,
                 sampler_name,
                 scheduler,
                 positive,
                 negative,
-                curr_latent,
+                latent_samples,
                 denoise=denoise,
                 disable_noise=False,
                 start_step=None,
                 last_step=None,
                 force_full_denoise=False,
-                noise_mask=curr_noise_mask,
+                noise_mask=noise_mask,
                 callback=callback,
                 disable_pbar=disable_pbar,
                 seed=seed,
             )
-            sampled_list.append(curr_samples)
-        samples = torch.cat(sampled_list, dim=0)
-    else:
-        samples = comfy.sample.sample(
-            model,
-            noise,
-            steps,
-            cfg,
-            sampler_name,
-            scheduler,
-            positive,
-            negative,
-            latent_samples,
-            denoise=denoise,
-            disable_noise=False,
-            start_step=None,
-            last_step=None,
-            force_full_denoise=False,
-            noise_mask=noise_mask,
-            callback=callback,
-            disable_pbar=disable_pbar,
-            seed=seed,
-        )
 
     latent_output = resolved_latent.copy()
     latent_output.pop("downscale_ratio_spacial", None)

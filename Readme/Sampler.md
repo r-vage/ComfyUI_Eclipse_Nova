@@ -34,6 +34,8 @@ Local sampler controls stay visible when pipe priority is enabled. An available 
 
 Guidance, noise-injection and upscale pipe values need compatible consumers; Kargim uses standard sampling.
 
+The final preview fills the remaining node space and resizes with the node in classic canvas and Nodes 2.0. For batches, click a thumbnail to enlarge it, click the enlarged image to advance (wrapping after the last image), and use **Close preview** to return to the grid. Live frames and final images share one viewer. Live-preview latents are reduced before decoding to limit memory use; final outputs retain full resolution. A preview-only OOM disables live frames for the current run without discarding sampling.
+
 ## Detailer (SEGS/pipe)
 
 ![Detailer with its pipe inputs, Options bar and Sampler, Sizing, Mask and Seed sections](assets/nova-detailer.png)

@@ -20,7 +20,7 @@ SIZING = {
     "divisors": [8, 16, 32, 64],
     "divisor": number("Divisible by", 16, 1, 32768),
     "ratio": number("Ratio", 1, 0.01, 10000, 0.01),
-    "megapixels": number("Megapixels", 1, 0.000256, 1073.741824, 0.01),
+    "megapixels": number("Megapixels", 1, 0.000256, 1073.741824, 0.000001),
 }
 
 

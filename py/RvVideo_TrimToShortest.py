@@ -54,7 +54,7 @@ class RvVideo_TrimToShortest(OperationPanel, io.ComfyNode):
                     default=16.0,
                     min=1.0,
                     max=240.0,
-                    step=0.01,
+                    step=0.1,
                     tooltip="Target frame rate (frames per second) of the video.",
                 ),
                 io.Combo.Input(

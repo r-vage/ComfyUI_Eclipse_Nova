@@ -6,7 +6,7 @@ from .audio_loading import SOURCES
 from .resolution_sizing import number, require_choice, require_fields, require_number
 
 WIDGET = "ECLIPSE_NOVA_LOAD_AUDIO"
-SECONDS = number("Seconds", 0.0, 0.0, 86400.0, 0.01)
+SECONDS = number("Seconds", 0.0, 0.0, 86400.0, 0.1)
 
 
 def default_configuration():

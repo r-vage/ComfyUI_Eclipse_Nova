@@ -96,6 +96,8 @@ class EclipseExtension(ComfyExtension):
 
         # Sampler nodes
         from .py.RvSampler_KSamplerKargim import RvSampler_KSamplerKargim
+        from .py.RvSampler_KSamplerAdvanced import RvSampler_KSamplerAdvanced
+        from .py.RvPipe_IO_KSampler import RvPipe_IO_KSampler
 
         # Pipe IO nodes
         from .py.RvPipe_IO_12CH_Any import RvPipe_IO_12CH_Any
@@ -270,6 +272,8 @@ class EclipseExtension(ComfyExtension):
             RvLogic_DualSeed,
             # Sampler
             RvSampler_KSamplerKargim,
+            RvSampler_KSamplerAdvanced,
+            RvPipe_IO_KSampler,
             # Pipe IO
             RvPipe_IO_12CH_Any,
             RvPipe_IO_24CH_Any,

@@ -112,7 +112,7 @@ class AudioForm {
             const body = element('div', 'en-panel-section-body'), grid = element('div', 'en-panel-grid');
             for (const [key, title] of [['start_time', 'Start (seconds)'], ['duration', 'Duration (seconds)']]) {
                 const field = element('label', 'en-panel-field'), label = element('span', '', title);
-                const input = element('input'); input.type = 'number'; input.min = '0'; input.max = '86400'; input.step = '0.01';
+                const input = element('input'); input.type = 'number'; input.min = '0'; input.max = '86400'; input.step = '0.1';
                 input.setAttribute('aria-label', title); input.value = String(config[key]); input.disabled = this.connected(key);
                 if (input.disabled) { label.textContent += ' · input'; input.title = 'A connected input overrides this local value. Disconnect it to edit.'; }
                 input.onchange = () => {

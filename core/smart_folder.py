@@ -32,7 +32,7 @@ MAX_COUNTER = 2**64 - 1
 
 FIELDS = {
     "batch_size": number("Batch size", 1, 1, 4096),
-    "frame_rate": number("Frame rate", 30, 8, 240, 0.01),
+    "frame_rate": number("Frame rate", 30, 8, 240, 0.1),
     "duration": number("Duration (seconds)", 15, 0.5, 180, 0.5),
     "frame_load_cap": number("Frame load cap", 162, 0, 32768),
     "context_length": number("Context length", 81, 1, 32768),

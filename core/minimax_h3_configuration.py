@@ -18,7 +18,7 @@ TITLES = {
 }
 NUMBERS = {
     "max_render_frames": number("Max render frames", 362, 124, 362, 17),
-    "warmup_seconds": number("Warmup seconds", 2.0, 0, 10, 0.01),
+    "warmup_seconds": number("Warmup seconds", 2.0, 0, 10, 0.1),
     "search_window_seconds": number("Search radius (seconds)", 5.0, 0, 10, 0.05),
     "min_gap_duration": number("Minimum gap (seconds)", 0.25, 0.02, 5, 0.01),
     "resume_hold_duration": number("Resume hold (seconds)", 0.15, 0.02, 5, 0.01),

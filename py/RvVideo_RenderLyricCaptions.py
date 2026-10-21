@@ -27,9 +27,9 @@ class RvVideo_RenderLyricCaptions(io.ComfyNode):
             inputs=[
                 io.Audio.Input("audio"),
                 io.String.Input("lyrics", force_input=True, tooltip="Full-song plain lyrics or YuE2/MiniMax song JSON."),
-                io.Float.Input("trim_start", force_input=True, min=0, max=86400, step=0.01,
+                io.Float.Input("trim_start", force_input=True, min=0, max=86400, step=0.1,
                                tooltip="Trim audio and captions together, in seconds from the start of the full song."),
-                io.Float.Input("duration", force_input=True, min=0, max=86400, step=0.01,
+                io.Float.Input("duration", force_input=True, min=0, max=86400, step=0.1,
                                tooltip="Seconds to render. Zero uses the remainder of the song; clamped to available samples."),
                 io.Audio.Input("vocals", optional=True, lazy=True,
                                tooltip="Full-song isolated vocals starting at zero, matching audio within 50 ms."),

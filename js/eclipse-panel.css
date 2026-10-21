@@ -180,9 +180,6 @@
 .en-panel-results button:is(:hover, [aria-selected="true"]) { background: var(--en-option-bg); color: var(--en-accent); border-color: var(--en-menu-border); }
 .en-panel-menu :focus-visible { outline: 1px solid var(--en-accent); outline-offset: -1px; }
 .en-panel-empty { padding: 7px; color: var(--en-muted-accent); }
-/* Kargim's intrinsic form leaves the remaining space for its native preview. */
-.lg-node .lg-node-widgets:has(.en-panel[data-profile="sampler"]) { flex: 0 0 auto !important; }
-.lg-node:has(.en-panel[data-profile="sampler"]) img { object-position: center top; }
 /* Smart Prompt keeps content and order separate from folder/file names. */
 .en-prompt .en-panel-section-label { flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .en-prompt .en-panel-summary { min-width: 35px; }

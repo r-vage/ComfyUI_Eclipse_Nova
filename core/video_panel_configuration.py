@@ -8,8 +8,8 @@ from .video_loader import parse_playlist
 LOAD_WIDGET = "ECLIPSE_NOVA_LOAD_VIDEO"
 PREVIEW_WIDGET = "ECLIPSE_NOVA_PREVIEW_VIDEO"
 SIZE = number("Size", 0, 0, 16384)
-FPS = number("FPS", 24.0, 1.0, 240.0, 0.01)
-PREVIEW_FPS = number("FPS", 16.0, 1.0, 120.0, 0.01)
+FPS = number("FPS", 24.0, 1.0, 240.0, 0.1)
+PREVIEW_FPS = number("FPS", 16.0, 1.0, 120.0, 0.1)
 
 
 def default_load():

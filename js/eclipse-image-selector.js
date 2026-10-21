@@ -150,6 +150,7 @@ const CONTINUATION_VALUE_ADAPTERS = Object.freeze({
     'Danbooru Prompt Forge [Eclipse Nova]': _panelSeedAdapter('eclipsePromptForge'),
     'Smart Sampler Settings [Eclipse Nova]': _panelSeedAdapter('eclipseSamplerV2'),
     'Eclipse KSampler (Kargim) [Eclipse Nova]': _panelSeedAdapter('eclipseSamplerV2'),
+    'Eclipse KSampler Advanced [Eclipse Nova]': _panelSeedAdapter('eclipseSamplerV2'),
     'Detailer (SEGS/pipe) [Eclipse Nova]': _panelSeedAdapter('eclipseSamplerV2'),
     'Smart Folder [Eclipse Nova]': _panelSeedAdapter('eclipseSmartFolderV2'),
     'Smart Model Loader [SML2]': _panelSeedAdapter('smartModelLoaderV2'),

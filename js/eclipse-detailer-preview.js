@@ -1,4 +1,4 @@
-/** Detailer live frames and final images share one locally controlled preview. */
+/** Sampler/detailer live frames and final batches share one resizable preview. */
 import { app, api, revokeNodePreview, clearNodeOutputImages } from './comfy/index.js';
 import { createDOMPreview, setDOMPreviewController } from './eclipse-dom-preview.js';
 
@@ -19,21 +19,30 @@ export class DetailerPreview {
         this.controller = controller; this.node = controller.node;
         this.element = document.createElement('div');
         this.element.className = 'en-review-preview-content';
-        this.element.setAttribute('aria-label', 'Detailed image preview');
+        const detailer = controller.spec.profile === 'detailer';
+        const label = detailer ? 'Detailed image preview' : 'Sampler image preview';
+        this.element.setAttribute('aria-label', label);
         this.element.style.position = 'relative';
-        const final = createDOMPreview(this.node, { noWidget: true, freeResize: true, minHeight: 100, label: 'Detailed image preview' });
+        const final = createDOMPreview(this.node, { noWidget: true, freeResize: true, minHeight: 100, label });
         this.final = this.node._eclipseDomPreview;
-        this.final.img.alt = 'Detailed image';
+        this.final.img.alt = detailer ? 'Detailed image' : 'Sampled image';
         this.final.img.style.width = '100%'; this.final.img.style.height = '100%';
         final.style.background = 'transparent';
-        this.live = document.createElement('img'); this.live.alt = 'Live detailed image'; this.live.draggable = false;
+        this.live = document.createElement('img'); this.live.alt = detailer ? 'Live detailed image' : 'Live sampled image'; this.live.draggable = false;
         this.live.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;';
         this.element.append(final, this.live);
         previews.set(this.node, this);
         this.sync();
     }
+    get enabled() {
+        const p = this.controller.state.config.parameters;
+        if (this.effectivePreview && (this.effectivePreview.local !== p.preview_mode
+            || this.effectivePreview.usePipe !== p.allow_overwrite)) this.effectivePreview = null;
+        return this.controller.spec.profile === 'detailer' ? p.live_preview
+            : this.effectivePreview?.enabled ?? p.preview_mode === 'Preview';
+    }
     get visible() {
-        return !this.controller.invalid && this.controller.state.config.parameters.live_preview
+        return !this.controller.invalid && this.enabled
             && !!(this.liveUrl || this.final.state.images.length);
     }
     sync() {
@@ -62,9 +71,14 @@ export class DetailerPreview {
     complete(output) {
         if (this.disposed) return;
         this.releaseLive();
+        const effective = output?.eclipse_preview_enabled?.[0];
+        if (typeof effective === 'boolean') this.effectivePreview = {
+            local: this.controller.state.config.parameters.preview_mode,
+            usePipe: this.controller.state.config.parameters.allow_overwrite, enabled: effective,
+        };
         // A run with Preview off has no new preview files. Keep the last
         // available images so turning it on again does not require a queue.
-        if (Array.isArray(output?.images) && (output.images.length || this.controller.state.config.parameters.live_preview)) {
+        if (Array.isArray(output?.images) && (output.images.length || this.enabled)) {
             setDOMPreviewController(this.final, output.images);
         }
         suppressNativePreview(this.node);

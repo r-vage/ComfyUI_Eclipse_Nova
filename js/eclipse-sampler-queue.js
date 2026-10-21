@@ -1,5 +1,5 @@
 /** Resolve seeds only on submission; accepted queues advance the editor. */
-import { NODE_IDS, EDITOR_KEY, queueConfiguration, nextSeed, clone } from './eclipse-sampler-v2-state.js';
+import { NODE_IDS, EDITOR_KEY, queueConfiguration, nextSeed, clone } from './eclipse-sampler-state.js';
 import { queueEntries } from './eclipse-execution-scope.js';
 
 function liveNode(graph, path) {
@@ -25,7 +25,7 @@ export function installQueueHook(api, app, controllers) {
             const before = JSON.parse(node.inputs.configuration);
             // The server knows whether a pipe contains a seed. It resolves and
             // reports the effective seed when pipe priority is selected.
-            if (!before.seed || (['sampler', 'detailer'].includes(before.profile) && before.parameters.allow_overwrite)) continue;
+            if (!before.seed || (['sampler', 'detailer', 'advanced'].includes(before.profile) && before.parameters.allow_overwrite)) continue;
             const config = queueConfiguration(node.inputs.configuration);
             const seed = clone(config.seed); config.seed.policy = 'fixed';
             const raw = JSON.stringify(config);

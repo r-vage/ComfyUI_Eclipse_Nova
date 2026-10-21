@@ -1,5 +1,64 @@
 # Changelog
 
+## 2026-10-21
+
+### Version: 1.0.8
+
+- **Feat (New)**
+  - Add PIPE-only Eclipse KSampler Advanced with standard/two-stage modes, independent step ranges and noise controls, optional between-stage latent upscale, a shared base seed and Stage 2 offset, and final-only decoding. Defaults match the configured Nova sampler in the Moody Moss workflow, including 2× bicubic upscale.
+  - Add IO KSampler to control both sampling stages, seeds, noise toggles, latent upscale, preview and decode through a PIPE, using the standard sampler fields for Stage 1 and separate Stage 2 fields, with local fallback for missing values and preservation of other metadata.
+- **Feat**
+  - Support Image Selector seed locking for the new advanced sampler.
+  - Add adjacent model_1 and model_2 connections to IO KSampler for high/low-noise model pairs, with latent-format checks, independent model patches and preview-decoder replacement at the handoff. Stage 2 automatically reuses model_1 when model_2 is absent from the PIPE.
+  - Add optional Qwen schedule, DiT skip guidance and Detail Daemon sections with value tooltips and local-only controls independent of PIPE overrides. Recalculate Qwen sigmas per stage resolution, isolate model patches, and include the Detail Daemon curve and sampler wrapper.
+  - Give both Eclipse samplers a shared live/final preview that resizes with the node and supports batch thumbnail selection, click-to-next navigation and returning to the grid in both renderers.
+- **Fix**
+  - Restore local preview visibility immediately when Use pipe settings changes, and preserve wrapped sampler inpainting options in Detail Daemon.
+  - Use 0.1 increments for general float controls, retaining finer precision where fractional defaults or bounds require it, including Qwen schedule and Detail Daemon controls, sampler noise, MiniMax timing, audio alignment and resolution controls so valid values are not marked invalid.
+  - Preserve structured LoRA and audio payloads in Concat Pipe Multi while retaining arbitrary PIPE fields and advanced sampler controls. Reject malformed tuple inputs and unsupported merge options. Document loader-to-sampler PIPE extraction and overwrite ordering for resolved generation data.
+  - Bound sampler live-preview resolution before TAESD decoding and reuse one decoder across advanced sampling stages. Preview-only out-of-memory errors disable live frames while sampling and final decoding continue.
+- **Changed files**
+  - py/RvConversion_ConcatMulti.py
+  - Readme/Utility_Nodes.md
+  - core/advanced_sampler.py
+  - core/sampler_extras.py
+  - core/detail_daemon.py
+  - licenses/detail-daemon-MIT.txt
+  - core/sampler_configuration.py
+  - core/sampler_execution.py
+  - core/sampler_preview.py
+  - py/RvSampler_KSamplerAdvanced.py
+  - py/RvPipe_IO_KSampler.py
+  - js/eclipse-sampler-state.js
+  - js/eclipse-sampler-form.js
+  - js/eclipse-sampler.js
+  - js/eclipse-sampler-queue.js
+  - js/eclipse-image-selector.js
+  - js/eclipse-detailer-preview.js
+  - js/eclipse-panel.css
+  - Readme/Sampler.md
+  - Readme/Advanced_Sampler.md
+  - Readme/README.md
+  - pyproject.toml
+
+  - py/RvVideo_RenderLyricCaptions.py
+  - py/RvRouter_Float_Passer.py
+  - py/RvAudio_LoopCalc.py
+  - py/RvTools_ResolutionScale.py
+  - py/RvAudio_LoopAlignSilence.py
+  - py/RvVideo_WanLipSyncTimelinePlanner.py
+  - py/RvVideo_TrimToShortest.py
+  - py/RvLogic_Float.py
+  - core/save_video_configuration.py
+  - core/video_panel_configuration.py
+  - core/lyric_caption_configuration.py
+  - core/minimax_h3_configuration.py
+  - core/resolution_sizing.py
+  - core/audio_loader_configuration.py
+  - core/smart_folder.py
+  - js/eclipse-load-audio-panel.js
+  - js/eclipse-video-panel.js
+
 ## 2026-10-20
 
 ### Version: 1.0.7

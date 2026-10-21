@@ -17,7 +17,7 @@ FIELDS = [
      "tooltip": "Empty uses ComfyUI output. Relative folders, absolute destinations and placeholders are supported. Pipe output_path, then path, takes priority."},
     {"key": "filename_prefix", "label": "Filename prefix", "section": "output", "default": "video/ComfyUI_Eclipse_Nova", "maxLength": 4096,
      "tooltip": "Name or nested path, with %today, %time, %model, %basemodel, %seed, %sampler_name, %scheduler, %steps, %cfg, %denoise and %clip_skip placeholders. Pipe filename_prefix takes priority."},
-    {"key": "fps", "label": "FPS", "section": "encoding", "default": 24.0, "min": 1, "max": 240, "step": 0.01,
+    {"key": "fps", "label": "FPS", "section": "encoding", "default": 24.0, "min": 1, "max": 240, "step": 0.1,
      "tooltip": "IMAGE frame rate. Pipe fps takes priority. VIDEO, exact timelines and timing_opt keep their own timing."},
     {"key": "crf", "label": "CRF", "section": "encoding", "default": 19, "min": 0, "max": 51, "step": 1,
      "tooltip": "H.264 quality factor. Lower values give higher quality and larger files."},

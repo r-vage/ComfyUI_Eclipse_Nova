@@ -17,7 +17,7 @@ class RvRouter_Float_Passer(io.ComfyNode):
                     default=0.0,
                     min=-3.4028235e38,
                     max=3.4028235e38,
-                    step=0.01,
+                    step=0.1,
                     force_input=True,
                     tooltip="Float input to be passed through.",
                 ),

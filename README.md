@@ -10,7 +10,7 @@ previews in **classic canvas and Nodes 2.0**.
 Eclipse workflows need their nodes replaced explicitly; Nova does not include
 legacy aliases or workflow migration tools.
 
-[![ComfyUI](https://img.shields.io/badge/tested-ComfyUI%200.38.0-orange)](https://github.com/comfyanonymous/ComfyUI)
+[![ComfyUI](https://img.shields.io/badge/tested-ComfyUI%200.42.1-orange)](https://github.com/comfyanonymous/ComfyUI)
 [![Platform](https://img.shields.io/badge/tested-Linux%20Mint%2022.3-blue)](https://linuxmint.com/)
 [![GPU](https://img.shields.io/badge/tested-RTX%204070%20Ti%20SUPER%20(SM89)-76b900)](https://www.nvidia.com/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green)](LICENSE)

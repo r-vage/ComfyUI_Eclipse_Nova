@@ -4,7 +4,8 @@ export { MAX_SEED, validSeed, randomSeed, nextSeed } from './eclipse-panel-seed.
 export const SETTINGS_ID = 'Smart Sampler Settings [Eclipse Nova]';
 export const SAMPLER_ID = 'Eclipse KSampler (Kargim) [Eclipse Nova]';
 export const DETAILER_ID = 'Detailer (SEGS/pipe) [Eclipse Nova]';
-export const NODE_IDS = new Set([SETTINGS_ID, SAMPLER_ID, DETAILER_ID]);
+export const ADVANCED_ID = 'Eclipse KSampler Advanced [Eclipse Nova]';
+export const NODE_IDS = new Set([SETTINGS_ID, SAMPLER_ID, DETAILER_ID, ADVANCED_ID]);
 export const WIDGET_TYPE = 'ECLIPSE_NOVA_SAMPLER_CONFIGURATION';
 export const EDITOR_KEY = 'eclipseSamplerV2';
 export const clone = value => JSON.parse(JSON.stringify(value));
@@ -17,7 +18,7 @@ const keysFor = key => key === 'noise' ? ['sigmas_denoise', 'noise_strength'] : 
 
 export function parseConfiguration(raw) {
     const config = typeof raw === 'string' ? JSON.parse(raw) : clone(raw);
-    if (config?.version !== 1 || !['settings', 'sampler', 'detailer'].includes(config.profile)
+    if (config?.version !== 1 || !['settings', 'sampler', 'detailer', 'advanced'].includes(config.profile)
         || !config.parameters || Array.isArray(config.parameters) || typeof config.parameters !== 'object'
         || Object.keys(config).some(key => !['version', 'profile', 'parameters', 'seed'].includes(key))) {
         throw Error('Unsupported sampler configuration. Expected version 1.');
@@ -29,6 +30,9 @@ export class SamplerState extends SeedState {
     constructor(raw, spec, editor = {}) {
         super();
         this.config = parseConfiguration(raw); this.spec = spec; this.editor = clone(editor);
+        for (const [key, field] of Object.entries(spec.fields)) {
+            if (field.optional && !Object.hasOwn(this.config.parameters, key)) this.config.parameters[key] = clone(field.default);
+        }
         if (this.config.profile !== spec.profile
             || Object.keys(this.config.parameters).some(key => !Object.hasOwn(spec.fields, key))) {
             throw Error('Configuration does not match this node.');
@@ -39,7 +43,7 @@ export class SamplerState extends SeedState {
     toggleSection(key) {
         this.editor.sections ??= {};
         const open = !this.sectionOpen(key);
-        if (open) for (const other of ['sampler', 'sizing', 'mask', 'seed']) {
+        if (open) for (const other of ['sampler', 'stage2', 'upscale', 'qwen', 'dit', 'detail', 'sizing', 'mask', 'seed']) {
             if (other !== key && !this.editor.pins?.[other]) this.editor.sections[other] = false;
         }
         this.editor.sections[key] = open;

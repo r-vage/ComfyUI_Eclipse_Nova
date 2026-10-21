@@ -40,6 +40,7 @@ regular queues.
 
 | Guide | What it covers |
 | --- | --- |
+| [Advanced sampler](Advanced_Sampler.md) | PIPE-only standard/two-stage sampling and IO KSampler; optional latent upscale |
 | [Sampler panels](Sampler.md) | Smart Sampler Settings, Eclipse KSampler and Detailer; pipe priority, seed controls and previews |
 | [Smart Folder](Smart_Folder.md) | Output paths, image/video size, video timing and a separate Seed section |
 | [Resolution Pipe](Resolution_Pipe.md) | Aspect/resolution menus, custom dimensions, divisibility and optional batch size |

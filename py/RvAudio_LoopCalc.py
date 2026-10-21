@@ -36,7 +36,7 @@ class RvAudio_LoopCalc(OperationPanel, io.ComfyNode):
                     default=0.0,
                     min=0.0,
                     max=86400.0,
-                    step=0.01,
+                    step=0.1,
                     tooltip="Audio duration in seconds. Ignored when an AUDIO input is connected.",
                 ),
                 io.Float.Input(
@@ -44,7 +44,7 @@ class RvAudio_LoopCalc(OperationPanel, io.ComfyNode):
                     default=16.0,
                     min=1.0,
                     max=240.0,
-                    step=0.01,
+                    step=0.1,
                     tooltip="Target frame rate (frames per second).",
                 ),
                 io.Int.Input(

@@ -16,7 +16,7 @@ class RvLogic_Float(io.ComfyNode):
                     default=1.00,
                     min=-sys.float_info.max,
                     max=sys.float_info.max,
-                    step=0.01,
+                    step=0.1,
                     tooltip="Float value to output.",
                 ),
             ],

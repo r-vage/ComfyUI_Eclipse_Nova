@@ -23,8 +23,6 @@ _TENSOR_KEYS = {
 
 # keys that should be treated as list-like when merging
 _KNOWN_LIST_KEYS = {
-    "audio_in",
-    "audio_out",
     "lora_names",
     "loras",
     "embeddings",
@@ -146,7 +144,7 @@ class RvConversion_ConcatMulti(io.ComfyNode):
             node_id="Concat Pipe Multi [Eclipse Nova]",
             display_name="Concat Pipe Multi",
             category=CATEGORY.MAIN.value + CATEGORY.CONVERSION.value,
-            description="Merge multiple pipe/context inputs into a single context dict pipe.",
+            description="Merge every non-empty field from multiple PIPE dictionaries, including custom fields and advanced sampler settings. Overwrite is recommended for combining loader metadata with resolved sampler outputs; merge also concatenates images and lists.",
             inputs=[
                 io.Int.Input(
                     "inputcount", default=2, min=2, max=64, step=1, socketless=True
@@ -188,6 +186,12 @@ class RvConversion_ConcatMulti(io.ComfyNode):
         tensor_size_mismatch: str = "letterbox",
         **kwargs,
     ) -> io.NodeOutput:
+        if merge_strategy not in {"overwrite", "preserve", "merge"}:
+            raise ValueError("Unknown PIPE merge strategy.")
+        if tensor_size_mismatch not in {"match", "crop", "letterbox", "ignore"}:
+            raise ValueError("Unknown tensor size mismatch strategy.")
+        if type(inputcount) is not int or not 2 <= inputcount <= 64:
+            raise ValueError("PIPE input count must be an integer between 2 and 64.")
         result: Dict[str, Any] = {}
 
         aliases = {
@@ -195,7 +199,6 @@ class RvConversion_ConcatMulti(io.ComfyNode):
             "CFG": "cfg",
             "model_name": "model_name",
             "lora_names": "lora_names",
-            "loras": "lora_names",
             "seed": "seed",
             "sampler_name": "sampler_name",
             "sampler": "sampler_name",
@@ -213,6 +216,11 @@ class RvConversion_ConcatMulti(io.ComfyNode):
             if merge_strategy == "merge":
                 if k in result:
                     existing = result[k]
+                    # Audio, latents and configuration dictionaries are complete
+                    # payloads. Do not turn them into lists or deep-merge their state.
+                    if isinstance(existing, dict) or isinstance(v, dict):
+                        result[k] = v
+                        return
                     # Tensor keys: concatenate along batch dim with torch.cat
                     if k in _TENSOR_KEYS and _is_tensor(existing) and _is_tensor(v):
                         if existing.shape[1:] == v.shape[1:]:
@@ -265,7 +273,9 @@ class RvConversion_ConcatMulti(io.ComfyNode):
                 continue
 
             if isinstance(pipe, tuple):
-                ctx = pipe[0] if pipe and isinstance(pipe[0], dict) else {}
+                if not pipe or not isinstance(pipe[0], dict):
+                    raise ValueError(f"Pipe input pipe_{idx} tuple must start with a dictionary.")
+                ctx = pipe[0]
             elif isinstance(pipe, dict):
                 ctx = pipe
             else:
@@ -288,12 +298,16 @@ class RvConversion_ConcatMulti(io.ComfyNode):
                 if _is_empty_value(v):
                     continue
                 key = aliases.get(k, k)
+                # Legacy text names are an alias; structured LoRA entries are not.
+                if k == "loras" and isinstance(v, str):
+                    key = "lora_names"
                 # Only wrap in list for true list keys, never for tensors
                 if (
                     merge_strategy == "merge"
                     and key in _KNOWN_LIST_KEYS
                     and not isinstance(v, (list, tuple))
                     and not isinstance(v, str)
+                    and not isinstance(v, dict)
                     and not _is_tensor(v)
                 ):
                     v = [v]

@@ -1,8 +1,8 @@
 /** Eclipse Nova structured sampler editors, mounted identically in both renderers. */
-import { app, api, hasNodePreview, revokeNodePreview } from './comfy/index.js';
-import { NODE_IDS, SETTINGS_ID, DETAILER_ID, WIDGET_TYPE, EDITOR_KEY, SamplerState, clone, validSeed, nextSeed } from './eclipse-sampler-v2-state.js';
-import { SamplerForm } from './eclipse-sampler-v2-form.js';
-import { installQueueHook } from './eclipse-sampler-v2-queue.js';
+import { app, api } from './comfy/index.js';
+import { NODE_IDS, SETTINGS_ID, WIDGET_TYPE, EDITOR_KEY, SamplerState, clone, validSeed, nextSeed } from './eclipse-sampler-state.js';
+import { SamplerForm } from './eclipse-sampler-form.js';
+import { installQueueHook } from './eclipse-sampler-queue.js';
 import { ensurePanelStyle } from './eclipse-panel-controls.js';
 import { PanelNumbers } from './eclipse-panel-numbers.js';
 import { DetailerPreview, installDetailerPreviews } from './eclipse-detailer-preview.js';
@@ -12,10 +12,10 @@ export class SamplerController {
     constructor(node, name, options) {
         this.node = node; this.spec = options.editorSpec; this.raw = options.default;
         this.state = new SamplerState(this.raw, this.spec); this.height = 0;
-        const detailer = this.spec.profile === 'detailer';
+        const detailer = this.spec.profile !== 'settings';
         this.root = document.createElement('div'); this.root.className = 'en-panel'; this.root.dataset.profile = this.spec.profile;
         if (detailer) this.root.classList.add('en-panel-fill-height');
-        this.root.setAttribute('aria-label', { settings: 'Smart sampler settings', sampler: 'Eclipse sampler settings', detailer: 'Detailer settings' }[this.spec.profile]);
+        this.root.setAttribute('aria-label', { settings: 'Smart sampler settings', sampler: 'Eclipse sampler settings', detailer: 'Detailer settings', advanced: 'Advanced sampler settings' }[this.spec.profile]);
         this.root.onpointerdown = event => event.stopPropagation(); this.root.onkeydown = event => event.stopPropagation();
         this.numbers = new PanelNumbers(this.root, () => this.measure());
         this.widget = node.addDOMWidget(name, WIDGET_TYPE, this.root, {
@@ -86,7 +86,7 @@ export class SamplerController {
             this.measuredPreview = preview;
             for (const key of detailer ? ['min-height'] : ['height', 'min-height', 'max-height']) this.root.style.setProperty(`--comfy-widget-${key}`, `${height}px`);
             const size = this.node.computeSize();
-            const retainHeight = this.spec.profile === 'sampler' || preview;
+            const retainHeight = ['sampler', 'advanced'].includes(this.spec.profile) || preview;
             this.node.setSize([Math.max(320, this.node.size[0]), retainHeight ? Math.max(this.node.size[1], size[1]) : size[1]]);
             this.node.setDirtyCanvas(true, true);
         });
@@ -112,12 +112,11 @@ app.registerExtension({
     beforeRegisterNodeDef(nodeType, data) {
         if (!NODE_IDS.has(data.name)) return;
         if (data.name !== SETTINGS_ID) {
-            const detailer = data.name === DETAILER_ID;
-            Object.defineProperty(nodeType.prototype, 'hideOutputImages', { configurable: true, get() { return detailer || hasNodePreview(this); } });
+            Object.defineProperty(nodeType.prototype, 'hideOutputImages', { configurable: true, get() { return true; } });
             const executed = nodeType.prototype.onExecuted;
             nodeType.prototype.onExecuted = function (output, ...args) {
                 const { images: _images, ...withoutImages } = output;
-                const result = executed?.call(this, detailer ? withoutImages : output, ...args);
+                const result = executed?.call(this, withoutImages, ...args);
                 const controller = controllers.get(this), seed = output?.eclipse_seed?.[0];
                 if (controller && validSeed(seed)) controller.edit(state => {
                     const submitted = output?.eclipse_local_seed?.[0];
@@ -127,15 +126,7 @@ app.registerExtension({
                     }
                     state.editor.lastSeed = seed;
                 });
-                if (detailer) controller?.preview.complete(output);
-                else if (Array.isArray(output?.images)) {
-                    revokeNodePreview(this); this.images = undefined; this.preview = undefined;
-                    if (!output.images.length) {
-                        this.imgs = undefined; this.imageIndex = null;
-                        for (const widget of [...(this.widgets ?? [])]) if (widget.name === '$$canvas-image-preview') this.removeWidget(widget);
-                    }
-                    this.setDirtyCanvas(true, true);
-                }
+                controller?.preview.complete(output);
                 return result;
             };
         }
