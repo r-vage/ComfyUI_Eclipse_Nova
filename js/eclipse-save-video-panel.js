@@ -1,5 +1,6 @@
 /** Single DOM configuration/preview host for both ComfyUI canvases. */
 import { app } from './comfy/index.js';
+import { fitNodeToWidgets } from './eclipse-widget-utils.js';
 import { ConfigurationPanel } from './eclipse-configuration-panel.js';
 import { ensurePanelStyle } from './eclipse-panel-controls.js';
 import { attachVideoPreview, setVideoPreviewSource, stopVideoPreview } from './eclipse-video-preview-common.js';
@@ -58,8 +59,7 @@ class SaveVideoPanel extends ConfigurationPanel {
             if (height <= 16 || (height === this.height && preview === this.measuredPreview)) return;
             this.height = height; this.profile.minHeight = height; this.measuredPreview = preview;
             this.root.style.setProperty('--comfy-widget-min-height', `${height}px`);
-            const size = this.node.computeSize();
-            this.node.setSize([Math.max(340, this.node.size[0]), preview ? Math.max(this.node.size[1], size[1]) : size[1]]);
+            fitNodeToWidgets(this.node, { minHeight: preview ? this.node.size[1] : 0 });
             this.node.setDirtyCanvas(true, true);
         });
     }

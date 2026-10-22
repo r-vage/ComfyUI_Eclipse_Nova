@@ -117,6 +117,7 @@ def _build_tasks(
     transition_frames: list[int],
     context_length: int,
     overlap_frames: int,
+    warmup_frames: int = 0,
 ) -> list[dict[str, int | bool]]:
     stride = context_length - overlap_frames
     transition_set = set(transition_frames)
@@ -132,7 +133,11 @@ def _build_tasks(
             if image_index < len(transition_frames)
             else total_frames
         )
-        end_frame = min(start_frame + stride, next_transition, total_frames)
+        # Hidden generated lead-in uses preceding real audio; the visible range
+        # remains at start_frame. Keep the fixed render length and budget less
+        # visible content only on an image change.
+        warmup = min(warmup_frames, start_frame - overlap_frames, stride - 1) if start_frame in transition_set else 0
+        end_frame = min(start_frame + stride - warmup, next_transition, total_frames)
         if end_frame <= start_frame:
             raise ValueError("Timeline planning produced an empty extension task.")
         tasks.append(
@@ -142,6 +147,7 @@ def _build_tasks(
                 "image_index": image_index,
                 "keep_frames": end_frame - start_frame,
                 "starts_transition": start_frame in transition_set,
+                "warmup_frames": warmup,
             }
         )
         start_frame = end_frame
@@ -186,6 +192,10 @@ class RvVideo_WanLipSyncTimelinePlanner(OperationPanel, io.ComfyNode):
                         "automatic targets. Disable silence alignment to preserve "
                         "the exact requested frames."
                     ),
+                ),
+                io.Float.Input(
+                    "warmup_seconds", default=0.0, min=0.0, max=10.0, step=0.1,
+                    tooltip="Hidden generated lead-in at image changes. Uses preceding real audio and the new reference; cropped before appending. 0 keeps the original blend. Limited by available past audio and context capacity; may add sampling calls. Requires Plan Step trim_image output wired to the decoded crop. InfiniteTalk warmup requires 25 FPS.",
                 ),
                 io.Boolean.Input(
                     "align_to_silence",
@@ -247,8 +257,15 @@ class RvVideo_WanLipSyncTimelinePlanner(OperationPanel, io.ComfyNode):
         min_silence_duration,
         resume_hold_duration,
         audio_encoder_output=None,
+        warmup_seconds=0.0,
     ):
+        warmup_seconds = unwrap_value(warmup_seconds, 0.0)
+        if not isinstance(warmup_seconds, (int, float)) or isinstance(warmup_seconds, bool) or not math.isfinite(warmup_seconds) or not 0 <= warmup_seconds <= 10:
+            raise ValueError("warmup_seconds must be between 0 and 10.")
         fps = unwrap_value(fps, 25.0)
+        if warmup_seconds and fps != 25:
+            raise ValueError("InfiniteTalk warmup requires 25 FPS to match its audio feature clock.")
+        warmup_frames = round(warmup_seconds * fps)
         context_length = unwrap_value(context_length, 81)
         overlap_frames = unwrap_value(overlap_frames, 9)
         manual_transition_times = unwrap_value(manual_transition_times, "")
@@ -390,9 +407,10 @@ class RvVideo_WanLipSyncTimelinePlanner(OperationPanel, io.ComfyNode):
                 transition_frames,
                 context_length,
                 overlap_frames,
+                warmup_frames,
             )
 
-        if tasks and tasks[-1]["keep_frames"] == 1:
+        if tasks and tasks[-1]["keep_frames"] == 1 and not warmup_frames:
             omitted_task = tasks.pop()
             original_total_frames = total_frames
             total_frames = int(omitted_task["start_frame"])
@@ -416,6 +434,7 @@ class RvVideo_WanLipSyncTimelinePlanner(OperationPanel, io.ComfyNode):
             "fps": fps,
             "context_length": context_length,
             "overlap_frames": overlap_frames,
+            "warmup_seconds": warmup_seconds,
             "transition_edge": transition_edge,
             "align_to_silence": align_to_silence,
             "search_window_seconds": search_window_seconds,
@@ -427,6 +446,8 @@ class RvVideo_WanLipSyncTimelinePlanner(OperationPanel, io.ComfyNode):
             "base_keep_frames": base_keep_frames,
             "tasks": tasks,
         }
+        report_lines.append(f"Requested image-change warmup: {warmup_frames} frames; actual crops: " +
+                            ", ".join(f"task {i}: {task['warmup_frames']}" for i, task in enumerate(tasks) if task['starts_transition']))
         report_lines.append(f"Base crop: {base_keep_frames} frames")
         report_lines.append(f"Extension tasks: {len(tasks)}")
         report_lines.append(

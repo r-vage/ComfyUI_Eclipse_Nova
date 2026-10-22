@@ -1,0 +1,5 @@
+# Optional native Qwen3 ForcedAligner backend. Install with ComfyUI's Python.
+# Keep the Hub compatible with Diffusers/Gradio installations using 1.x.
+transformers==5.20.2
+huggingface-hub>=1.31.0,<2
+# Japanese and Korean alignment additionally need nagisa and soynlp, respectively.

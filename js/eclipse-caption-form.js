@@ -20,6 +20,7 @@ export class CaptionForm {
             const grid = this.grid(parent);
             for (const key of ['width', 'height', 'fps']) this.number(grid, key);
             this.color(grid, 'background_color');
+            if (this.state.spec.pipe_only) this.note(parent, 'IO Lyric Captions can override dimensions, FPS, trim and seed. Appearance and alignment choices stay local to this renderer. The output pipe carries the settings, lyrics and timing actually used.');
             const connected = ['width', 'height', 'fps'].filter(key => this.connected(key));
             if (connected.length) this.note(parent, `Connected ${connected.join(', ')} override local values when non-None. Local settings are retained.`);
             if (this.connected('background')) this.note(parent, 'The background starts at clip zero and holds its last frame if shorter. Exact frame timelines require matching FPS. Background audio is ignored.');
@@ -53,14 +54,19 @@ export class CaptionForm {
         this.section(content, 'alignment', 'Alignment & timing', parent => {
             const grid = this.grid(parent);
             this.choice(grid, 'language', 'Language'); this.choice(grid, 'device', 'Device');
+            if (this.state.spec.choices.word_timing) this.choice(grid, 'word_timing', 'Word timing');
             this.choice(grid, 'unmatched_passages', 'Unmatched passages'); this.number(grid, 'timing_adjustment');
-            this.note(parent, this.connected('corrected_timing')
+            if (this.state.spec.pipe_only) {
+                for (const key of ['trim_start', 'duration']) this.number(grid, key);
+                this.note(parent, 'Blank correction fields keep the original lyrics and timing. Wording edits reuse reference phrases; full corrected timing takes priority. Without a reference, the shared transcription helper creates one.');
+            } else this.note(parent, this.connected('corrected_timing')
                 ? 'Non-empty corrected timing bypasses alignment and isolated vocals. It must describe the full song before trimming.'
                 : 'Aligns the full song; optional vocals must start at zero and match its duration. Changing appearance reuses cached alignment.');
             this.note(parent, 'trim_start and duration trim audio and captions together. Duration 0 renders the remainder. Positive timing adjustment delays captions.');
         });
         this.section(content, 'seed', 'Seed', parent => {
             seedControls(parent, this.controller);
+            if (this.state.spec.pipe_only) this.note(parent, 'A seed supplied in the pipe takes priority over this local seed.');
             this.note(parent, 'Repeatable floating-caption positions across the full song and trimmed clips. Other caption modes do not use the seed.');
         });
         root.replaceChildren(content);
@@ -131,7 +137,7 @@ export class CaptionForm {
         if (key === 'placement') return `${this.state.floating ? 'Floating' : this.state.spec.choices.position[p.position]} · ${p.margin_x} / ${p.margin_y}`;
         if (key === 'animation') return `${p.fade_in} / ${p.fade_out} s · ${p.min_display} s hold`;
         if (key === 'glow') return `${p.glow_intensity} steps · ${p.glow_range} px`;
-        if (key === 'alignment') return `${p.language} · ${this.state.spec.choices.unmatched_passages[p.unmatched_passages]} · ${p.timing_adjustment} s`;
+        if (key === 'alignment') return `${p.language} · ${this.state.spec.choices.word_timing?.[p.word_timing] ?? 'Whisper'} · ${this.state.spec.choices.unmatched_passages[p.unmatched_passages]} · ${p.timing_adjustment} s`;
         const seed = this.state.config.seed;
         return seed.policy === 'fixed' ? seed.value : { random: 'Random each run', increment: 'Increment each run', decrement: 'Decrement each run' }[seed.policy];
     }

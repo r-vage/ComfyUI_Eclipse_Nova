@@ -6,6 +6,7 @@ import { element, button, SearchMenu } from './eclipse-panel-controls.js';
 import { TextFieldSizes } from './eclipse-panel-text-layout.js';
 import { createDOMPreview, feedDOMPreview } from './eclipse-dom-preview.js';
 import { captureScrollableWheelInVue } from './eclipse-widget-utils.js';
+import { runActions } from './eclipse-panel-run.js';
 
 export class OperationForm {
     constructor(controller) {
@@ -59,6 +60,7 @@ export class OperationForm {
     }
     bar(parent, spec) {
         const collapsed = this.state.editor.bars?.[spec.key] === true, bar = element('div', 'en-panel-bar');
+        if (spec.run) bar.classList.add('en-panel-with-run');
         bar.dataset.collapsed = String(collapsed); bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', spec.label);
         const disclosure = button('', spec.label, () => this.edit(state => { (state.editor.bars ??= {})[spec.key] = !collapsed; }));
         disclosure.className = 'en-panel-disclosure'; disclosure.dataset.field = `bar.${spec.key}`;
@@ -66,7 +68,8 @@ export class OperationForm {
         disclosure.append(element('span', '', collapsed ? '▸' : '▾'), element('span', 'en-panel-bar-label', `${spec.label}:`));
         if (collapsed) disclosure.append(element('span', 'en-panel-summary', [
             ...(spec.choice ? [this.connected(spec.choice) ? 'Input' : this.choiceLabel(this.params[spec.choice])] : []),
-            ...spec.toggles.filter(key => this.visible(this.layout.when?.[key]) && (this.params[key] || this.connected(key))).map(key => this.state.spec.fields[key].label),
+            ...spec.toggles.filter(key => !(spec.run && key === 'stop') && this.visible(this.layout.when?.[key]) && (this.params[key] || this.connected(key))).map(key => this.state.spec.fields[key].label),
+            ...(spec.run ? [this.params.stop ? 'Stop' : 'Stop off'] : []),
         ].join(' · ') || 'Off'));
         bar.append(disclosure);
         if (!collapsed) {
@@ -76,6 +79,7 @@ export class OperationForm {
                 control.dataset.field = `choice.${spec.choice}.${value}`; control.title = this.tip(spec.choice); bar.append(control);
             }
             for (const key of spec.toggles) {
+                if (spec.run && key === 'stop') continue;
                 if (!this.visible(this.layout.when?.[key])) continue;
                 const field = this.state.spec.fields[key];
                 const control = button(field.label, field.label, () => this.edit(state => { state.config.parameters[key] = !state.config.parameters[key]; }));
@@ -83,6 +87,10 @@ export class OperationForm {
                 control.title = this.tip(key); bar.append(control);
             }
         }
+        if (spec.run) bar.append(runActions(this.controller, {
+            stop: !collapsed, stopConfig: state => state.config.parameters,
+            beforeRun: () => { if (!this.state.sectionOpen('result')) this.edit(state => state.toggleSection('result')); },
+        }));
         parent.append(bar);
     }
     section(parent, key, title, build) {
@@ -114,7 +122,11 @@ export class OperationForm {
         const field = this.state.spec.fields[key], title = field.label + (this.connected(key) ? ' · input' : '');
         if (field.type === 'COMBO') {
             const change = value => this.edit(state => { state.config.parameters[key] = value; });
-            const control = this.menu.field(parent, title, this.params[key], field.options, change);
+            const labelled = this.state.spec.layout.labelled_choices?.includes(key);
+            const options = labelled ? field.options.map(value => this.choiceLabel(value)) : field.options;
+            const current = labelled ? this.choiceLabel(this.params[key]) : this.params[key];
+            const control = this.menu.field(parent, title, current, options,
+                value => change(labelled ? field.options[options.indexOf(value)] : value));
             control.dataset.field = `parameters.${key}`; control.title = this.tip(key);
             if (this.layout.refresh?.includes(key)) {
                 control.onclick = () => this.openFreshChoices(control, key, title, change);

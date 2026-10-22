@@ -2,10 +2,11 @@
 import { app, api } from './comfy/index.js';
 import { ConfigurationPanel } from './eclipse-configuration-panel.js';
 import { button, element, ensurePanelStyle } from './eclipse-panel-controls.js';
+import { runActions } from './eclipse-panel-run.js';
 import { numericInputValue } from './eclipse-linked-numbers.js';
 import { createVideoEditor } from './eclipse-video-playlist.js';
 import { attachVideoPreview, setVideoPreviewSource, stopVideoPreview } from './eclipse-video-preview-common.js';
-import { isConfiguringGraph } from './eclipse-widget-utils.js';
+import { isConfiguringGraph, fitNodeToWidgets } from './eclipse-widget-utils.js';
 
 const IDS = ['Load Video [Eclipse Nova]', 'Preview Video [Eclipse Nova]'];
 const WIDGETS = ['ECLIPSE_NOVA_LOAD_VIDEO', 'ECLIPSE_NOVA_PREVIEW_VIDEO'];
@@ -108,15 +109,13 @@ class VideoForm {
             choice.title = key === 'source' ? 'Retain every original frame duration, including mixed frame rates.' : 'Duplicate/drop frames onto the selected FPS grid.';
             choice.setAttribute('aria-pressed', String(this.config.timing_mode === key)); bar.append(choice);
         }
-        if (!collapsed && !this.load) {
-            const actions = element('div', 'en-panel-run-actions');
-            const stop = button('■', 'Stop', () => this.change(state => { state.config.stop = !state.config.stop; }));
-            stop.setAttribute('aria-pressed', String(this.config.stop)); stop.title = 'Review changed inputs here. Queue unchanged again to continue downstream.';
-            const cancel = button('×', 'Stop current execution', async () => {
+        if (!this.load) {
+            const actions = runActions(this.controller, { stop: !collapsed });
+            if (!collapsed) actions.append(button('×', 'Stop current execution', async () => {
                 try { await api.interrupt(null); }
                 catch (error) { app.extensionManager.toast.add({ severity: 'error', summary: 'Could not stop execution', detail: error.message }); }
-            });
-            actions.append(stop, cancel); bar.append(actions);
+            }));
+            bar.append(actions);
         }
         parent.append(bar);
         return bar;
@@ -198,11 +197,10 @@ class VideoPanel extends ConfigurationPanel {
             // The scrollable clip list and stretched player are allocations,
             // never minimum-height measurements. Only fixed controls reserve space.
             const height = Math.ceil(top + (this.form?.playlist?.minimumHeight() ?? 100) + (this.form?.load ? 24 : 0));
-            const minWidth = this.form?.load ? 640 : 360;
-            if (height === this.height && this.node.size[0] >= minWidth) return;
+            if (height === this.height) return;
             this.height = height; this.profile.minHeight = height;
             this.root.style.setProperty('--comfy-widget-min-height', `${height}px`);
-            const size = this.node.computeSize(); this.node.setSize([Math.max(this.node.size[0], minWidth), Math.max(this.node.size[1], size[1])]);
+            fitNodeToWidgets(this.node, { minHeight: this.node.size[1] });
             this.node.setDirtyCanvas(true, true);
         });
     }

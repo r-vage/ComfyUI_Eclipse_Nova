@@ -40,6 +40,35 @@ the size of one generated scene; this node does not introduce temporal tiling.
 last 22 exact frames when generated continuity is requested. Original IMAGE
 workflows remain supported.
 
+### Wan InfiniteTalk and image-change warmup
+
+`WAN LipSync Plan Step` also accepts a disk timeline in `previous_frames`.
+Connect its small `previous_frames` output and `audio_start` to
+`WAN LipSync Conditioning`, which delegates to ComfyUI's native InfiniteTalk
+conditioner while preserving the absolute audio clock. Use 25 FPS. This avoids
+passing the accumulated image batch into every sampler call.
+
+Connect the sampler latent directly to `Decode and Append Timeline`. Its
+`crop_start` must come from **Plan Step → trim_image**, and `keep_frames` from
+Plan Step. Feed the carried disk timeline to the append node's `timeline` input.
+Use a second Decode and Append Timeline for the base render, with crop start 0
+and the planner's `base_keep_frames`.
+
+The planner's **Transitions → Warmup seconds** controls a hidden generated
+lead-in at image changes. It uses preceding real audio and the new reference,
+then discards that lead-in before appending. The cut remains at its planned
+frame; the soundtrack is neither shifted nor padded. Start with 1 second.
+Zero preserves the previous blend behavior, including in older configurations.
+Warmup is limited by the available past audio and render window. It reduces the
+visible frames retained from that pass and can add sampling calls, but does not
+increase the fixed render length. Perceptual lip-sync improvement still depends
+on the model and needs visual review.
+
+Keep the original soundtrack connected to previews and the final saver;
+Demucs vocals can remain the sampling guide. Captions and saving consume the
+disk timeline directly. Keep the loop gate and lazy base-only fallback, as in
+the MiniMax layout.
+
 `Preview Video` accepts the timeline in its existing source socket. It streams
 **all completed scenes**, uses stored FPS and the separately connected audio,
 and returns the same timeline. Preview MP4s are viewing copies; generation and

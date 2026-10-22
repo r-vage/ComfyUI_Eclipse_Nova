@@ -3,7 +3,7 @@ import { app } from './comfy/index.js';
 import { button, element } from './eclipse-panel-controls.js';
 import { executionTarget } from './eclipse-execution-scope.js';
 
-export function runActions(controller, { stop = false, beforeRun } = {}) {
+export function runActions(controller, { stop = false, beforeRun, stopConfig = state => state.config } = {}) {
     const actions = element('div', 'en-panel-run-actions');
     actions.setAttribute('role', 'group'); actions.setAttribute('aria-label', 'Execution');
     const play = button('▶', 'Run to this node', async () => {
@@ -25,8 +25,8 @@ export function runActions(controller, { stop = false, beforeRun } = {}) {
     play.disabled = controller.playSubmitting === true;
     actions.append(play);
     if (stop) {
-        const toggle = button('■', 'Stop', () => controller.edit(state => { state.config.stop = !state.config.stop; }));
-        toggle.setAttribute('aria-pressed', String(controller.state.config.stop === true));
+        const toggle = button('■', 'Stop', () => controller.edit(state => { const config = stopConfig(state); config.stop = !config.stop; }));
+        toggle.setAttribute('aria-pressed', String(stopConfig(controller.state).stop === true));
         toggle.title = 'Stop normal queues here after a changed execution. Queue again unchanged to continue from the cached result. Play already ends here without enabling Stop.';
         actions.append(toggle);
     }

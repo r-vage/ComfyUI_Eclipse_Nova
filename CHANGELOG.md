@@ -1,5 +1,65 @@
 # Changelog
 
+## 2026-10-23
+
+### Version: 1.0.10
+
+- **Feat (New)**
+  - Add Render Lyric Captions_v2 with PIPE-only input/output and compact IO Lyric Captions for original audio, vocals, lyrics/timing, separate manual corrections, background, dimensions, FPS, trim and seed. Keep appearance and alignment choices local to each renderer. Return the used settings and full-song timing alongside video, SRT and report; retain the existing renderer.
+  - Add WAN LipSync Conditioning, using native InfiniteTalk with an explicit audio start and a bounded motion tail. Plan Step accepts IMAGE batches or disk-backed timelines; the disk path preserves the full audio clock at 25 FPS without keeping all preceding frames in RAM.
+- **Feat**
+  - Add optional Qwen3 forced alignment to Transcribe Audio and both lyric renderers, with a compare-only mode, bounded phrase timing and cached reuse. Download missing official model files on first use, verify the pinned revision and reuse local files offline. Keep Whisper large-v3 as the default and preserve manual timing priority; invalid Qwen estimates retain existing phrase timing.
+  - Add Play to Preview Video's Mode bar to run its upstream branch through the preview without starting downstream work or changing Stop. Play remains available when collapsed; existing review and cancel controls are retained.
+  - Share transcription and bounded reference caches between Transcribe Audio and the new pipe renderer. Empty corrections keep original timing; recognizable wording edits align only changed phrases while preserving unchanged lines, and populated manual timing takes priority. Preview and final renders can reuse the same resolved pipe.
+  - Let Render Lyric Captions accept `{}` as automatic alignment for edited lyrics. This marker passes through empty-string fallback switches while muted manual inputs still select the original timing; populated timing JSON retains strict validation.
+  - Add Play and Stop controls to Transcribe Audio. Play opens the transcript and runs only its upstream branch; Stop pauses normal queues after changed results, with cached continuation when queued again unchanged. The collapsed bar keeps Play beside its summary. Existing workflows keep Stop disabled.
+  - Add optional image-change warmup to WAN LipSync Timeline Planner. Plan Step supplies trim_image for overlap plus warmup and audio_start for conditioning; its crop output applies to both IMAGE batches and disk timelines. Hidden lead-in frames use preceding guide audio without shifting visible transitions or the soundtrack. Warmup stays within the fixed render window and defaults to disabled.
+- **Fix**
+  - Filter the recurring “Satsang with Mooji” attribution artifact from automatic transcripts and lyric-recognition windows, including its word timestamps. Preserve surrounding lyrics and explicit manual text/timing; report filtered occurrences and invalidate older transcription caches.
+  - Recover short unmatched lyric sections, including openings and endings, with confined recognition retries on vocals and the original audio. Align recovered words using their matching audio source while preserving thresholds and neighboring timing; invalidate older alignment cache results.
+  - Preserve panel node widths when expanding or collapsing option bars and sections, including Add Filename Prefix, Smart Prompt, sampler and media panels. Heights continue adapting to controls, while resizable text and preview panels retain their existing height behavior.
+- **Docs**
+  - Explain lyric and timing correction priority, optional Qwen dependencies and model setup, transcript/preview controls, and Wan warmup and disk-timeline connections.
+- **Changed files**
+  - core/transcription_cleanup.py
+  - core/lyric_qwen.py
+  - core/lyric_caption_configuration.py
+  - requirements-qwen.txt
+  - core/audio_transcription.py
+  - core/lyric_cache.py
+  - core/lyric_reference.py
+  - core/lyric_caption_pipe.py
+  - py/RvPipe_IO_LyricCaptions.py
+  - py/RvVideo_RenderLyricCaptionsPipe.py
+  - js/eclipse-caption-state.js
+  - js/eclipse-caption-form.js
+  - js/eclipse-caption-panel.js
+  - js/eclipse-panel-seed-queue.js
+  - Readme/README.md
+  - core/lyric_alignment.py
+  - core/lyric_captions.py
+  - py/RvVideo_RenderLyricCaptions.py
+  - Readme/Lyric_Captions.md
+  - core/wan_motion_context.py
+  - py/RvVideo_WanLipSyncConditioning.py
+  - Readme/Frame_Timeline.md
+  - core/operation_panel.py
+  - core/operation_panel_layouts.py
+  - js/eclipse-operation-state.js
+  - js/eclipse-operation-form.js
+  - js/eclipse-panel-run.js
+  - py/RvAudio_TranscribeAudio.py
+  - py/RvVideo_WanLipSyncPlanStep.py
+  - py/RvVideo_WanLipSyncTimelinePlanner.py
+  - js/eclipse-configuration-panel.js
+  - js/eclipse-sampler.js
+  - js/eclipse-save-images-panel.js
+  - js/eclipse-save-video-panel.js
+  - js/eclipse-smart-prompt.js
+  - js/eclipse-video-panel.js
+  - Readme/Load_Video.md
+  - pyproject.toml
+
 ## 2026-10-21
 
 ### Version: 1.0.9

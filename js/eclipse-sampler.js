@@ -1,4 +1,5 @@
 /** Eclipse Nova structured sampler editors, mounted identically in both renderers. */
+import { fitNodeToWidgets } from './eclipse-widget-utils.js';
 import { app, api } from './comfy/index.js';
 import { NODE_IDS, SETTINGS_ID, WIDGET_TYPE, EDITOR_KEY, SamplerState, clone, validSeed, nextSeed } from './eclipse-sampler-state.js';
 import { SamplerForm } from './eclipse-sampler-form.js';
@@ -27,7 +28,7 @@ export class SamplerController {
         });
         this.widget.serializeValue = () => this.value();
         if (detailer) this.preview = new DetailerPreview(this);
-        else this.widget.computeSize = () => [320, this.height];
+        else this.widget.computeSize = () => [this.node.size[0], this.height];
         this.form = new SamplerForm(this);
         this.observer = new ResizeObserver(() => this.measure()); this.observer.observe(this.root);
         this.form.render();
@@ -85,11 +86,10 @@ export class SamplerController {
             this.height = height;
             this.measuredPreview = preview;
             for (const key of detailer ? ['min-height'] : ['height', 'min-height', 'max-height']) this.root.style.setProperty(`--comfy-widget-${key}`, `${height}px`);
-            const size = this.node.computeSize();
             // Resizable preview panels retain user geometry even before their
             // first render or when Preview is off. Settings alone auto-fit.
             const retainHeight = detailer;
-            this.node.setSize([Math.max(320, this.node.size[0]), retainHeight ? Math.max(this.node.size[1], size[1]) : size[1]]);
+            fitNodeToWidgets(this.node, { minHeight: retainHeight ? this.node.size[1] : 0 });
             this.node.setDirtyCanvas(true, true);
         });
     }

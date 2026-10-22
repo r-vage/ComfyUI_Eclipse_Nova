@@ -37,6 +37,14 @@ def _single(value, name):
     return value
 
 
+def _automatic_timing(value):
+    # A nonempty string sentinel survives fallback switches. Only an empty
+    # object requests alignment; populated or malformed JSON still validates.
+    text = value.strip() if value is not None else ""
+    return not text or (text.startswith("{") and text.endswith("}")
+                        and not text[1:-1].strip(" \t\r\n"))
+
+
 def fingerprint_inputs(font_file="", corrected_timing="", **kwargs):
     font_file = _single(font_file, "font_file")
     corrected_timing = _single(corrected_timing, "corrected_timing")
@@ -46,21 +54,21 @@ def fingerprint_inputs(font_file="", corrected_timing="", **kwargs):
     font = (path.stat().st_size, path.stat().st_mtime_ns) if path.is_file() else "missing"
     # Linked corrections are resolved at execution. Do not inspect model files
     # for a correction (or a link that might supply one).
-    identity = model_identity() if isinstance(corrected_timing, str) and not corrected_timing.strip() else ()
+    identity = model_identity() if isinstance(corrected_timing, str) and _automatic_timing(corrected_timing) else ()
     return font, identity, ALGORITHM_REVISION
 
 
 def check_lazy_status(vocals=_MISSING, corrected_timing=None, **kwargs):
     vocals = _single(vocals, "vocals")
     corrected_timing = _single(corrected_timing, "corrected_timing")
-    return ["vocals"] if not (corrected_timing or "").strip() and vocals is None else []
+    return ["vocals"] if _automatic_timing(corrected_timing) and vocals is None else []
 
 
 @debug_node(_LOG_PREFIX, values=("language", "device", "mode", "rotation_axis", "position",
                                 "unmatched_passages"))
 def render_captions(
     audio, lyrics, trim_start, duration, language="en", device="auto", vocals=None,
-    corrected_timing="", timing_adjustment=0, background=None, unmatched_passages="omit", **settings,
+    corrected_timing="", timing_adjustment=0, background=None, unmatched_passages="omit", word_timing="whisper", **settings,
 ):
     audio, lyrics, trim_start, duration, language, device, vocals, corrected_timing, timing_adjustment = (
         _single(value, name) for name, value in (
@@ -79,7 +87,7 @@ def render_captions(
     waveform, rate = audio_data(audio)
     full_duration = waveform.shape[-1] / rate
     clipped, actual_start = trim_audio(audio, trim_start, duration)
-    if (corrected_timing or "").strip():
+    if not _automatic_timing(corrected_timing):
         debug_event(_LOG_PREFIX, "Using corrected timing; bypassing recognition")
         data = validate_timing(corrected_timing, text)
         if abs(data["duration"] - full_duration) > 0.05:
@@ -95,6 +103,12 @@ def render_captions(
             **({"fallback_audio": audio} if vocals is not None else {}),
             **({"transcribe_unmatched": True} if unmatched_passages == "transcribe" else {}),
         )
+        from .lyric_qwen import refine_timing
+
+        data, comparison = refine_timing(audio, data, _single(word_timing, "word_timing"), device, vocals, language)
+        if comparison is not None:
+            report["word_timing"] = comparison
+            report.setdefault("warnings", []).extend(comparison["warnings"])
     # A resampled stem may differ by a sample, or within the allowed 50 ms.
     # Clamp timings at the original soundtrack end without shifting/stretching.
     data["duration"] = full_duration

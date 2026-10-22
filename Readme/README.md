@@ -71,7 +71,7 @@ image metadata.
 | [Load / Preview / Split Video](Load_Video.md) | Editable clip slots beside the preview, per-clip trims, input overrides and timing-preserving extraction |
 | [Upscale Video](Upscale_Video.md) | Integrated model selection, bounded frame batches, source timing and audio |
 | [Save Video with Generation Data](Save_Video_Data.md) | IMAGE/VIDEO/timeline saving, output and encoding controls, trim/loop behavior and metadata |
-| [Lyric Captions](Lyric_Captions.md) | Full-song timing, clip-relative export, appearance/motion controls and width/height/FPS inputs |
+| [Lyric Captions](Lyric_Captions.md) | PIPE renderer and IO slots, shared transcription, optional wording/timing corrections and caption controls |
 | [Frame timelines](Frame_Timeline.md) | Disk-backed append/trim, preview/export and base-only loop plans |
 | [MiniMax H3 planning](MiniMax_H3_Audio_Planner.md) | Three segmented-planning panels under **Eclipse Nova → MiniMax** |
 

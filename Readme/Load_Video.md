@@ -48,7 +48,12 @@ control IMAGE playback. VIDEO keeps its own audio, timing and dimensions;
 timelines keep their own FPS. Optional `audio` accompanies IMAGE or timeline
 input. The player fills the space left by the controls as the node is resized.
 
-The right-aligned **Stop** square in its Mode bar enables review: a changed run
+The right-aligned **Play (▶)** button in its Mode bar runs Preview Video and its
+required upstream nodes once, leaving downstream work idle. Stop does not need
+to be enabled, and Play keeps its current setting. Play remains available when
+the bar is collapsed, beside the Stop status summary.
+
+The **Stop (■)** toggle enables review during normal queues: a changed run
 shows the preview and interrupts before downstream work. Queue unchanged again
 to continue from the cached result. With Stop off, loop executions continue to
 refresh the preview. The adjacent **×** stops the current execution immediately.

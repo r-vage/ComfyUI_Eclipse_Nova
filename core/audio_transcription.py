@@ -1,11 +1,18 @@
 # Recognized text and observed timestamps, without a supplied lyric reference.
 import copy
 import math
+from contextlib import contextmanager, nullcontext
 from itertools import pairwise
 from numbers import Real
 
 from .logger import log
-from .lyric_alignment import MODEL_REVISION, recognition_model
+from .lyric_alignment import (
+    MODEL_REVISION,
+    model_identity,
+    model_path,
+    recognition_model,
+)
+from .lyric_cache import TimingCache, audio_key
 from .lyric_timing import (
     analysis_audio,
     audio_data,
@@ -15,10 +22,12 @@ from .lyric_timing import (
     validate_timing,
 )
 from .node_debug import DebugProgress, debug_event
+from .transcription_cleanup import filter_recognition_artifacts
 
 _LOG_PREFIX = "TranscribeAudio"
 
-TRANSCRIPTION_REVISION = "observed-transcript-v1"
+TRANSCRIPTION_REVISION = "observed-transcript-v2"
+_TRANSCRIPT_CACHE = TimingCache()
 
 
 def _valid_interval(start, end, duration):
@@ -30,6 +39,7 @@ def _valid_interval(start, end, duration):
 def transcript_timing(segments, duration, language):
     # Work on copies: callers may retain raw observations for diagnostics.
     segments = copy.deepcopy(segments)
+    segments, filtered = filter_recognition_artifacts(segments)
     accepted, rejected, confidence = [], [], []
     for index, segment in enumerate(segments, 1):
         # Faster-whisper can return NumPy timestamps, not builtin floats.
@@ -96,20 +106,22 @@ def transcript_timing(segments, duration, language):
         lines.append(line)
     data = validate_timing({"version": 1, "duration": duration,
                             "language": language, "lines": lines})
-    report = {"segments": confidence, "rejected_segments": rejected,
+    report = {"segments": confidence, "rejected_segments": rejected, "filtered_artifacts": filtered,
               "normalized_word_overlaps": normalized, "phrase_only_lines": phrase_only,
               **timing_coverage(lines)}
     return data, report
 
 
-def transcribe_audio(audio, language="Auto", device="auto", vocals=None):
+def transcribe_audio(audio, language="Auto", device="auto", vocals=None, *, session=None):
     import comfy.model_management as mm
 
     mm.throw_exception_if_processing_interrupted()
     waveform, rate = audio_data(audio)
     duration = waveform.shape[-1] / rate
     source, source_name = analysis_audio(audio, vocals)
-    with recognition_model(source, language, device) as (model, samples, detected_language, detection):
+    # The pipe renderer can continue aligning with this same loaded model.
+    context = nullcontext(session) if session is not None else recognition_model(source, language, device)
+    with context as (model, samples, detected_language, detection):
         log.msg("TranscribeAudio", f"Transcribing {duration:.3f}s; analysis: {source_name}.")
         segments, _ = model.transcribe_original(
             samples, language=detected_language, task="transcribe", beam_size=5,
@@ -153,3 +165,41 @@ def transcribe_audio(audio, language="Auto", device="auto", vocals=None):
                 partial_lines=len(details["partial_lines"]), unaligned_lines=len(details["unaligned_lines"]),
                 warnings=len(warnings))
     return "\n".join(line["text"] for line in data["lines"]), data, report
+
+
+@contextmanager
+def transcription_reference(audio, language="Auto", device="auto", vocals=None):
+    import comfy.model_management as mm
+
+    mm.throw_exception_if_processing_interrupted()
+    source, source_name = analysis_audio(audio, vocals)
+    key = (audio_key(audio, vocals), language, device, str(model_path()),
+           model_identity(), MODEL_REVISION, TRANSCRIPTION_REVISION)
+    result = _TRANSCRIPT_CACHE.get(key)
+    if result is not None:
+        result[2].update(cache_hit=True, analysis_source=source_name)
+        mm.throw_exception_if_processing_interrupted()
+        yield (*result, None)
+        return
+    with recognition_model(source, language, device) as session:
+        text, data, report = transcribe_audio(audio, language, device, vocals, session=session)
+        report["cache_hit"] = False
+        mm.throw_exception_if_processing_interrupted()
+        if data["lines"]:
+            _TRANSCRIPT_CACHE.put(key, [text, data, report])
+        yield text, data, report, session
+
+
+def cached_transcription(audio, language="Auto", device="auto", vocals=None, word_timing="whisper"):
+    from .lyric_qwen import refine_timing
+
+    with transcription_reference(audio, language, device, vocals) as (text, data, report, _session):
+        pass
+    del _session
+    # Whisper unloads before Qwen is loaded; the raw transcript cache stays reusable.
+    data, comparison = refine_timing(audio, data, word_timing, device, vocals, language)
+    if comparison is not None:
+        report["word_timing"] = comparison
+        report["warnings"].extend(comparison["warnings"])
+        report.update(timing_coverage(data["lines"]))
+    return text, data, report

@@ -6,7 +6,7 @@ import { PromptForm } from './eclipse-smart-prompt-form.js';
 import { installPromptQueueHook } from './eclipse-smart-prompt-queue.js';
 import { ensurePanelStyle } from './eclipse-panel-controls.js';
 import { PromptLibrary } from './eclipse-smart-prompt-library.js';
-import { captureFocusedTextWheel } from './eclipse-widget-utils.js';
+import { captureFocusedTextWheel, fitNodeToWidgets } from './eclipse-widget-utils.js';
 
 const controllers = new WeakMap(), graphKey = Symbol('EclipseNova.PromptGraph');
 const library = new PromptLibrary((...args) => api.fetchApi(...args));
@@ -22,7 +22,7 @@ export class PromptController {
             getMinHeight: () => this.height, getMaxHeight: () => this.height, getHeight: () => this.height,
             hideOnZoom: false, serialize: true, margin: 0,
         });
-        this.widget.serializeValue = () => this.value(); this.widget.computeSize = () => [340, this.height];
+        this.widget.serializeValue = () => this.value(); this.widget.computeSize = () => [this.node.size[0], this.height];
         this.form = new PromptForm(this); this.observer = new ResizeObserver(() => this.measure()); this.observer.observe(this.root); this.form.render();
         const remove = this.widget.onRemove.bind(this.widget); this.widget.onRemove = () => { this.dispose(); remove(); };
     }
@@ -102,7 +102,7 @@ export class PromptController {
             const height = Math.ceil((this.root.firstElementChild?.offsetHeight ?? this.root.scrollHeight) + 16); if (height <= 16 || height === this.height) return;
             this.height = height;
             for (const key of ['height', 'min-height', 'max-height']) this.root.style.setProperty(`--comfy-widget-${key}`, `${height}px`);
-            this.node.setSize([Math.max(340, this.node.size[0]), this.node.computeSize()[1]]); this.node.setDirtyCanvas(true, true);
+            fitNodeToWidgets(this.node); this.node.setDirtyCanvas(true, true);
         });
     }
     dispose() {

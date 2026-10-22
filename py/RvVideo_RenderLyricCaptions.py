@@ -34,7 +34,7 @@ class RvVideo_RenderLyricCaptions(io.ComfyNode):
                 io.Audio.Input("vocals", optional=True, lazy=True,
                                tooltip="Full-song isolated vocals starting at zero, matching audio within 50 ms."),
                 io.String.Input("corrected_timing", optional=True, force_input=True,
-                                tooltip="Full-song timing JSON matching the cleaned lyrics. Bypasses alignment and lazy vocal separation."),
+                                tooltip="Full-song timing JSON matching the cleaned lyrics bypasses alignment and lazy vocal separation. Blank or {} aligns the supplied lyrics automatically; {} passes through switches that skip empty strings."),
                 io.MatchType.Input("background", template=background, optional=True, display_name="background image / video",
                                    tooltip="IMAGE batch/list, VIDEO or exact frame timeline. Background audio is ignored. Short backgrounds hold the last frame. Timelines require matching FPS."),
                 io.Int.Input("width", optional=True, force_input=True, min=16, max=4096, step=2,

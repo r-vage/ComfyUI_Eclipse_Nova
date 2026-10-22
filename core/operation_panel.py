@@ -76,6 +76,17 @@ def validate_configuration(raw, spec):
         config = json.loads(raw)
     except (ValueError, RecursionError) as error:
         raise ValueError("Invalid configuration JSON.") from error
+    if (spec["kind"] == "wan_planner" and isinstance(config, dict)
+            and config.get("version") == 1 and config.get("kind") == "wan_planner"
+            and isinstance(config.get("parameters"), dict)
+            and set(config["parameters"]) == set(spec["fields"]) - {"warmup_seconds"}):
+        config["parameters"]["warmup_seconds"] = 0.0
+    if (spec["kind"] == "transcribe" and isinstance(config, dict)
+            and config.get("version") == 1 and config.get("kind") == "transcribe"
+            and isinstance(config.get("parameters"), dict)):
+        for key, default in (("stop", False), ("word_timing", "whisper")):
+            if key in spec["fields"]:
+                config["parameters"].setdefault(key, default)
     if (not isinstance(config, dict) or set(config) != {"version", "kind", "parameters"}
             or type(config["version"]) is not int or config["version"] != 1 or config["kind"] != spec["kind"]
             or not isinstance(config["parameters"], dict) or set(config["parameters"]) != set(spec["fields"])):

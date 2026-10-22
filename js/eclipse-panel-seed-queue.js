@@ -17,7 +17,7 @@ function savedNode(workflow, path) {
     }
     return node;
 }
-export function installSeedQueueHook(api, app, controllers, { nodeId, editorKey, usesSeed = () => true }, random = randomSeed) {
+export function installSeedQueueHook(api, app, controllers, { nodeId, editorKey, usesSeed = () => true, recordQueuedSeed = true }, random = randomSeed) {
     const original = api.queuePrompt;
     const unregister = registerLocalSeedInput(nodeId, usesSeed);
     async function queuePrompt(number, prompt, ...args) {
@@ -36,7 +36,7 @@ export function installSeedQueueHook(api, app, controllers, { nodeId, editorKey,
             const saved = savedNode(snapshot.workflow, id);
             if (saved) {
                 saved.widgets_values = [raw]; saved.properties ??= {}; saved.properties[editorKey] ??= {};
-                saved.properties[editorKey].lastSeed = seed.value;
+                if (recordQueuedSeed) saved.properties[editorKey].lastSeed = seed.value;
             }
             updates.push({ controller: controllers.get(liveNode(app.rootGraph ?? app.graph, id)), before, seed });
         }
@@ -45,7 +45,9 @@ export function installSeedQueueHook(api, app, controllers, { nodeId, editorKey,
             if (!controller || controller.disposed || controller.invalid) continue;
             const update = state => {
                 if (JSON.stringify(state.config.seed) === JSON.stringify(before)) state.config.seed = nextSeed(seed);
-                state.editor.lastSeed = seed.value;
+                // Pipes may supply a different seed. Those panels record the
+                // server's resolved value and retain it across cached queues.
+                if (recordQueuedSeed) state.editor.lastSeed = seed.value;
             };
             if (controller.editQueuedSeed) controller.editQueuedSeed(update);
             else controller.edit(update);

@@ -6,13 +6,18 @@ import { ConfigurationPanel } from './eclipse-configuration-panel.js';
 import { ensurePanelStyle } from './eclipse-panel-controls.js';
 import { installSeedQueueHook } from './eclipse-panel-seed-queue.js';
 import { validSeed } from './eclipse-panel-seed.js';
-import { NODE_ID, WIDGET_TYPE, EDITOR_KEY, CaptionState } from './eclipse-caption-state.js';
+import { NODE_ID, PIPE_NODE_ID, WIDGET_TYPE, EDITOR_KEY, CaptionState } from './eclipse-caption-state.js';
 import { CaptionForm } from './eclipse-caption-form.js';
 
 const controllers = new WeakMap();
 app.registerExtension({
     name: 'EclipseNova.LyricCaptionsPanel',
-    setup() { ensurePanelStyle(); installSeedQueueHook(api, app, controllers, { nodeId: NODE_ID, editorKey: EDITOR_KEY }); },
+    setup() {
+        ensurePanelStyle();
+        for (const nodeId of [NODE_ID, PIPE_NODE_ID]) installSeedQueueHook(api, app, controllers, {
+            nodeId, editorKey: EDITOR_KEY, recordQueuedSeed: nodeId !== PIPE_NODE_ID,
+        });
+    },
     getCustomWidgets() {
         return { [WIDGET_TYPE](node, name, inputData) {
             const controller = new ConfigurationPanel(node, name, inputData[1], {
@@ -23,7 +28,7 @@ app.registerExtension({
         } };
     },
     beforeRegisterNodeDef(nodeType, data) {
-        if (data.name !== NODE_ID) return;
+        if (![NODE_ID, PIPE_NODE_ID].includes(data.name)) return;
         for (const method of ['onConfigure', 'onAdded', 'onConnectionsChange']) {
             const original = nodeType.prototype[method];
             nodeType.prototype[method] = function (...args) {
@@ -32,7 +37,7 @@ app.registerExtension({
                     if (method === 'onConfigure') controller.restore(controller.value());
                     controller.bindHost();
                     if (method === 'onConnectionsChange' && args[0] === 1 && !controller.invalid
-                        && ['width', 'height', 'fps', 'background', 'corrected_timing'].includes(this.inputs?.[args[1]]?.name)) controller.form.render();
+                        && ['width', 'height', 'fps', 'background', 'corrected_timing', 'pipe'].includes(this.inputs?.[args[1]]?.name)) controller.form.render();
                 }
                 return result;
             };

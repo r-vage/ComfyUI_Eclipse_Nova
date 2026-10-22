@@ -83,6 +83,7 @@ class EclipseExtension(ComfyExtension):
 
         # Audio nodes (diffusion loaders live in ComfyUI_SmartModelLoader)
         from .py.RvVideo_RenderLyricCaptions import RvVideo_RenderLyricCaptions
+        from .py.RvVideo_RenderLyricCaptionsPipe import RvVideo_RenderLyricCaptionsPipe
         from .py.RvAudio_LoadAudio import RvAudio_LoadAudio
         from .py.RvAudio_TranscribeAudio import RvAudio_TranscribeAudio
         from .py.RvAudio_SystemAudioRecorder import RvAudio_SystemAudioRecorder
@@ -100,6 +101,7 @@ class EclipseExtension(ComfyExtension):
         from .py.RvPipe_IO_KSampler import RvPipe_IO_KSampler
 
         # Pipe IO nodes
+        from .py.RvPipe_IO_LyricCaptions import RvPipe_IO_LyricCaptions
         from .py.RvPipe_IO_12CH_Any import RvPipe_IO_12CH_Any
         from .py.RvPipe_IO_24CH_Any import RvPipe_IO_24CH_Any
         from .py.RvPipe_IO_36CH_Any import RvPipe_IO_36CH_Any
@@ -192,6 +194,7 @@ class EclipseExtension(ComfyExtension):
         from .py.RvAudio_LoopCalc import RvAudio_LoopCalc
         from .py.RvVideo_LoopKeepCalc import RvVideo_LoopKeepCalc
         from .py.RvAudio_LoopAlignSilence import RvAudio_LoopAlignSilence
+        from .py.RvVideo_WanLipSyncConditioning import RvVideo_WanLipSyncConditioning
         from .py.RvVideo_WanLipSyncPlanStep import RvVideo_WanLipSyncPlanStep
         from .py.RvVideo_WanLipSyncTimelinePlanner import RvVideo_WanLipSyncTimelinePlanner
         from .py.RvVideo_MiniMaxH3Panels import (
@@ -261,6 +264,7 @@ class EclipseExtension(ComfyExtension):
             RvImage_FilterAdjustmentsAdvanced,
             # Audio
             RvVideo_RenderLyricCaptions,
+            RvVideo_RenderLyricCaptionsPipe,
             RvAudio_LoadAudio,
             RvAudio_TranscribeAudio,
             RvAudio_SystemAudioRecorder,
@@ -275,6 +279,7 @@ class EclipseExtension(ComfyExtension):
             RvSampler_KSamplerAdvanced,
             RvPipe_IO_KSampler,
             # Pipe IO
+            RvPipe_IO_LyricCaptions,
             RvPipe_IO_12CH_Any,
             RvPipe_IO_24CH_Any,
             RvPipe_IO_36CH_Any,
@@ -357,6 +362,7 @@ class EclipseExtension(ComfyExtension):
             RvAudio_LoopAlignSilence,
             RvVideo_WanLipSyncTimelinePlanner,
             RvVideo_WanLipSyncPlanStep,
+            RvVideo_WanLipSyncConditioning,
             RvVideo_MiniMaxH3SegmentedTimelinePanel,
             RvVideo_MiniMaxH3SegmentedStepPanel,
             RvVideo_MiniMaxH3SegmentedConditioningPanel,

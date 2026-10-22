@@ -1,6 +1,76 @@
 # Lyric captions
 
-## Panel version
+## Pipe version
+
+**Render Lyric Captions_v2 [Eclipse Nova]** has one PIPE input and one PIPE
+output. **IO Lyric Captions [Eclipse Nova]** assembles its inputs and extracts
+the results. The existing Render Lyric Captions node remains available.
+
+```mermaid
+flowchart LR
+    song[Original audio and optional vocals] --> inputs[IO Lyric Captions]
+    reference[Original lyrics and timing] --> inputs
+    edits[Optional corrected lyrics and timing] --> inputs
+    inputs --> render[Render Lyric Captions_v2]
+    render --> outputs[IO Lyric Captions]
+    outputs --> preview[Preview Video / Save Video Data]
+```
+
+Connect full-song `audio`. Optional `vocals` supplies a separated vocal stem for
+analysis; the video keeps the original audio as its soundtrack. Both recordings
+must start at the same time and match in duration within 50 ms.
+
+| IO field | How the renderer uses it |
+| --- | --- |
+| `lyrics` | Original complete lyrics, song JSON or Transcribe Audio's text. Blank uses the timing reference's text, or automatic transcription. |
+| `timing` | Original full-song timing JSON, normally from Transcribe Audio. Blank creates the same reference internally. |
+| `corrected_lyrics` | Optional complete edited lyrics. Copy the original lyrics and correct the words that need changing. Blank keeps the original. |
+| `corrected_timing` | Optional manually edited timing JSON. Takes priority and must match the selected lyrics and full audio duration. Blank or `{}` means no manual timing override. |
+| `background` | IMAGE, VIDEO or frame timeline for the rendered clip. Without it, the renderer uses its background color. |
+| `width`, `height`, `fps` | Override the local canvas dimensions and frame rate. |
+| `trim_start`, `duration` | Override the excerpt in seconds; duration 0 uses the remainder of the recording. |
+| `seed` | Override the placement seed for repeatable floating captions. |
+| `video`, `srt`, `report` | Extract the rendered video, clip-relative subtitles and timing/rendering report. |
+
+The IO node keeps media, lyric/timing data, dimensions, FPS, trim and seed.
+Appearance, animation, fonts, glow and alignment choices stay in each renderer's
+panel. They are not overridden by inherited pipe fields, so a timing preview and
+the final overlay can use different styles while sharing the same resolved timing.
+
+Unconnected or `None` IO inputs retain inherited pipe fields. Connected empty
+strings clear inherited text/correction fields; zero remains a valid trim/seed
+override. No fallback switch or `{}` marker is needed for empty manual
+inputs in this flow.
+
+With the default Whisper timing, unchanged lyrics reuse their original timing. Recognizable wording edits keep
+unchanged lines fixed and align the changed phrases inside their reference
+windows. Insertions, reordered phrases and ambiguous repetitions use bounded
+alignment recovery. If word refinement fails, an existing phrase interval can
+still show the corrected line without inventing word timestamps. Inspect the
+report and preview when correcting lyrics; manual timing is available for exact
+adjustments.
+
+Transcribe Audio and this pipe renderer share the same transcription helper and
+bounded in-memory cache. A workflow with a separate Transcribe Audio node and a
+workflow that supplies lyrics directly therefore use the same reference approach
+for the same audio, vocals and language settings. Text edits can reuse that
+reference; changing appearance does not repeat recognition or alignment. Cache
+entries do not retain models or audio tensors and reset when the server restarts.
+
+The output pipe preserves other fields and adds `video`, `srt` and `report`.
+Its `lyrics` and `timing` fields contain the cleaned lyrics and full-song timing
+actually used, alongside the resolved settings and seed. Extract these with a
+second IO node, or pass the pipe to another caption renderer with a different
+background. A blank-background timing preview and the final video can reuse the
+same timing. SRT timestamps are relative to the rendered clip; timing JSON stays
+on the original full-song clock.
+
+The themed panel retains the caption modes and sections described below.
+**Alignment & timing** also contains local **Trim start (s)** and **Duration (s)**
+controls; duration 0 renders the remainder of the recording. Both values can be
+overridden through IO Lyric Captions.
+
+## Existing panel version
 
 **Render Lyric Captions [Eclipse Nova]** uses the shared themed panel in
 standard canvas and Nodes 2.0.
@@ -152,6 +222,11 @@ directly to Save Video with Generation Data.
 or singing. It uses the same local Whisper large-v3 files and dependencies as
 the renderer. No additional model or package is needed for transcription.
 
+Both share audio preparation, language detection and the initial recognition
+settings. Transcribe Audio returns the words it recognizes. Automatic caption
+alignment matches supplied lyrics and adds recovery passes for unresolved lines;
+those reference-based retries do not run in Transcribe Audio.
+
 Connect the complete recording to `audio`. Optionally connect isolated vocals
 to `vocals`; they must share the recording's time zero and duration, within
 50 ms. Select a language explicitly when known, or use `Auto`. Outputs are
@@ -170,17 +245,34 @@ support all six caption modes. Segments without usable word timing retain
 observed phrase bounds when available; missing/conflicting timings remain
 unresolved. Combined sentences are never divided into guessed timings.
 
-For a review stop, enable **Stop** in Show Any Stop's **Mode** bar, queue once,
-read the transcript, then queue unchanged again to continue. To edit wording,
-copy the transcript into **String Multiline**, connect it to `lyrics`, and
-disconnect `corrected_timing` so the renderer realigns the edited words. To
-adjust timing only, copy the current `timing_json` into String Multiline and
-connect it to `corrected_timing`, retaining matching transcript text. Editing
-both requires updating word character offsets too. Keep the same source audio.
+Use **Play** on Transcribe Audio to inspect its transcript before continuing
+downstream. Its **Stop** toggle pauses normal queues after a changed result;
+queue unchanged again to continue. To edit wording, copy the transcript into
+**String Multiline** and connect it to `lyrics`. Supply `{}` to `corrected_timing`
+to align those edited words automatically, without manually changing timestamps.
+The preview renderer outputs matching `cleaned_lyrics` and `timing_json` for the
+final renderer to reuse.
+
+With a fallback switch, keep `{}` in the enabled **Manual timing JSON** field.
+It passes through a switch that skips empty strings. Muting the manual inputs
+lets the switch select the original transcript and timing again. Leaving the
+manual timing field blank would also select the original timing, which does
+not match edited lyrics. Without a fallback switch, a blank or disconnected
+`corrected_timing` input also requests automatic alignment.
+
+To adjust timestamps manually, replace `{}` with the current `timing_json` and
+edit it, retaining matching transcript text. Editing wording inside populated
+timing JSON requires updating word character offsets too. Keep the same source audio.
 After saving text and timing separately, mute unused transcription preview
 nodes if you want the corrected run to skip transcription entirely.
 
 The recognition model unloads after completion, failure or cancellation.
+Automatic recognition filters the recurring “Satsang with Mooji” attribution
+artifact, including its word timestamps, with case and punctuation variations.
+The transcription report records removals in `filtered_artifacts`. Surrounding
+words keep their observed timestamps; manually supplied lyrics and timing are
+not filtered. Re-run transcription after updating to replace previously saved
+results containing that phrase.
 ComfyUI can reuse the transcription node's outputs when only downstream caption
 appearance or trim changes. This node can also supply text and subtitles to
 other audio/video setups; it does not generate lip movement itself.
@@ -190,7 +282,8 @@ other audio/video setups; it does not generate lip movement itself.
 Install Eclipse's `requirements.txt` in the ComfyUI environment. Alignment uses
 `stable-ts==2.19.1` and `faster-whisper>=1.2.1,<2`; glyph validation uses fonttools.
 These imports are lazy: corrected timing works without loading an alignment
-model. No model is downloaded automatically at execution or schema discovery.
+model. Whisper requires the manual model setup below; optional Qwen downloads
+missing files on its first requested alignment. Schema discovery downloads neither model.
 
 Place the following official CTranslate2 model files in
 `ComfyUI/models/whisper/large-v3/`: `model.bin`, `config.json`, `tokenizer.json`,
@@ -211,6 +304,82 @@ Select a font covering the song's script. Missing fonts/glyphs raise an actionab
 error before encoding. Pillow must include RAQM for shaping and RTL layout.
 Arabic and CJK require suitable fonts; Roboto does not cover every script.
 
+## Optional Qwen word timing
+
+**Word timing** is available in Transcribe Audio and in both renderers under
+**Alignment & timing**. Whisper large-v3 still recognizes the words. Qwen3
+ForcedAligner accepts that text and the audio to estimate word timestamps; it
+does not need an instruction prompt and does not correct transcription errors.
+
+- **Whisper** keeps the established timing path and is the default for new and
+  saved nodes.
+- **Qwen3 · compare only** leaves timing JSON and captions unchanged. The
+  report's `word_timing.phrases` contains the original words, candidate words,
+  onset disagreements of at least 0.5 seconds, and rejection reasons. Raw
+  `predictions` are relative to each reported `window`; candidate word times
+  use the full recording's clock. These are model disagreements, not accuracy scores.
+- **Qwen3** applies valid candidate phrase timings. Zero-length, overlapping,
+  out-of-window or incomplete predictions keep the existing phrase timing.
+  Partially supported reference lines and unresolved lines retain their existing
+  timing; Qwen is not asked to force missing lyrics into the recording.
+
+Qwen runs on the connected vocal stem, or on the original mix when no stem is
+connected. Phrases use bounded audio windows, so long recordings need not fit
+in one inference. Whisper unloads before Qwen loads. Timing caches hold JSON
+only, and an unchanged output pipe reuses its resolved Qwen timing in the final
+render. Appearance changes do not reload either model. Explicit
+`corrected_timing` remains authoritative and bypasses Qwen, including compare mode.
+For an initial comparison in the pipe flow, leave Transcribe Audio on Whisper
+and select the comparison in the renderer after any lyric corrections.
+
+Install the optional backend using **ComfyUI's Python**, then restart ComfyUI:
+
+```sh
+python -m pip install -r requirements-qwen.txt
+```
+
+When you execute **Qwen3** or **Qwen3 · compare only** for the first time, Eclipse
+checks `ComfyUI/models/qwen3_forced_aligner/Qwen3-ForcedAligner-0.6B-hf` and downloads
+missing files from the official pinned checkpoint (about 1.85 GB for a complete
+installation). The console shows download progress. Later runs reuse verified
+local files without checking the network. Interrupted or failed downloads can be
+retried; completed files are reused. Selecting Whisper or supplying manual timing
+does not download Qwen. Dependencies are installed separately with the command above.
+
+For an offline installation, download the files in advance with the actual
+models-folder path:
+
+```python
+from huggingface_hub import snapshot_download
+
+snapshot_download(
+    "Qwen/Qwen3-ForcedAligner-0.6B-hf",
+    revision="c07281df297b9905d24a508279258cccf987a064",
+    local_dir="/path/to/ComfyUI/models/qwen3_forced_aligner/Qwen3-ForcedAligner-0.6B-hf",
+    allow_patterns=["config.json", "processor_config.json", "tokenizer_config.json",
+                    "tokenizer.json", "chat_template.jinja", "model.safetensors"],
+)
+```
+
+All six runtime files are verified before loading, including the weight SHA-256
+`00568245ceca5af1991d28562a75fe1ddc9bfeb041c27fda66947ea05c47fb86`.
+Model loading and inference use only the verified local files. A present file
+with a mismatching hash produces an error; Eclipse does not silently replace it.
+This uses native Transformers support; the separate `qwen-asr` package is not required.
+
+Supported languages are English, Chinese, Cantonese, French, German, Italian,
+Japanese, Korean, Portuguese, Russian and Spanish. Japanese additionally needs
+`nagisa`, and Korean needs `soynlp` in the same environment. Auto uses the
+reference transcript's detected language; unsupported languages produce an
+explicit error rather than switching silently. CUDA uses BF16 where supported
+and FP16 otherwise; CPU uses FP32.
+
+The [official model card](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B-hf)
+documents forced alignment for speech. Singing, sustained vowels and separated
+stems need review. This option is experimental for lyrics: a faster run or a
+different timestamp does not establish better timing, and a clipped recording
+cannot recover lyrics that occur after its end.
+
 ## Language and timing
 
 New caption nodes select English (`en`) and automatic device selection.
@@ -228,13 +397,17 @@ remain matched alongside later cleaner repetitions. A single long transcript
 match cannot consume the first chorus and strand the rest of the lyrics.
 Candidate scoring rewards supported original text and penalizes unrelated
 recognized characters. Short missed sections first receive a confined recognition
-retry. If that fails, the decoder hears up to 30 seconds including neighboring
-lyrics, while accepted timestamps must still fit inside the missing interval.
+retry, including an unmatched opening or ending beside a supported lyric. This
+can recover corrected words missed by the full-song pass without lowering the
+matching threshold. If that fails, the decoder hears up to 30 seconds including
+neighboring lyrics, while accepted timestamps must still fit inside the missing interval.
 Missing spans longer than 30 seconds receive overlapping 30-second windows,
 with each unresolved section getting a turn before further windows in the same
 gap. Accepted matches remain inside their unresolved interval and cannot reuse
 another occurrence's audio. When connected vocals do not provide a match, the
-original soundtrack supplies an additional context check. Nearby gaps reuse
+original soundtrack also receives confined short-section retries before the
+broader context check. Recovered words are aligned using the same source that
+provided their matching phrase, preserving supported vocal-stem timing. Nearby gaps reuse
 decoded context. Recognition and boundary repairs share a budget of at most
 12 local passes; this budget can leave part of a long gap unchecked. The report
 lists the attempted windows. These checks cannot recover lyrics that lack
@@ -483,7 +656,10 @@ to improve matching on every recording.
 ## Corrected JSON
 
 Connect the exported, reviewed JSON from a STRING node to `corrected_timing`.
-This bypasses inference and model verification. The lazy `vocals` input also
+Populated timing JSON bypasses inference and model verification. An empty JSON
+object (`{}`, including whitespace inside the braces) requests automatic
+alignment of the supplied lyrics instead. Other incomplete or malformed JSON
+still produces a validation error. With populated timing JSON, the lazy `vocals` input also
 skips Demucs unless another executing branch needs its output. Schema version 1 uses seconds
 from the **full song**, even when rendering an excerpt:
 
@@ -538,9 +714,11 @@ Alignment always uses the full song. The exported video, audio and SRT use the
 selected trim, while timing JSON retains full-song timings, including lines
 beyond the exported excerpt.
 
-For review, connect the rendered VIDEO to Preview Video, enable **Stop** in its Mode bar,
-and connect its output to Save Video with Generation Data. The first queue publishes the preview and
-pauses; queue unchanged again to save. Changed content needs review again.
+For review, connect the rendered VIDEO to Preview Video and connect its output
+to Save Video with Generation Data. Preview Video's **Play (▶)** runs the caption
+branch up to the preview without starting downstream work. For review during
+normal queues, enable **Stop** in its Mode bar: the first queue publishes the
+preview and pauses; queue unchanged again to save. Changed content needs review again.
 The renderer itself has no preview or review controls.
 
 ## Qualification and limits
@@ -593,5 +771,5 @@ analysis now provides 22/32 timed lines (68.75% accepted-line coverage; two part
 lines), compared with 21 before the independent sentence pass. Ten lines remain
 unresolved, including recognition failures and supplied-order conflicts. The
 291.6-second recording retains all 36 timed lines and needs no sentence fallback.
-For a fresh automatic run, disconnect `corrected_timing`: pasted JSON deliberately
+For an automatic alignment run, use `{}` or disconnect `corrected_timing`: populated JSON deliberately
 bypasses every recognition and recovery pass, including this sentence check.

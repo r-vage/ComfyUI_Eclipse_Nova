@@ -12,6 +12,15 @@ export class OperationState {
         this.config = typeof raw === 'string' ? JSON.parse(raw) : clone(raw);
         this.spec = clone(spec); this.editor = clone(editor);
         const c = this.config;
+        if (spec.kind === 'wan_planner' && c?.version === 1 && c.kind === spec.kind
+            && hasFields(c.parameters, Object.keys(spec.fields).filter(key => key !== 'warmup_seconds'))
+            && Object.hasOwn(spec.fields, 'warmup_seconds')) c.parameters.warmup_seconds = 0;
+        if (spec.kind === 'transcribe' && c?.version === 1 && c.kind === spec.kind
+            && c.parameters && typeof c.parameters === 'object' && !Array.isArray(c.parameters)) {
+            for (const [key, value] of [['stop', false], ['word_timing', 'whisper']]) {
+                if (Object.hasOwn(spec.fields, key) && !Object.hasOwn(c.parameters, key)) c.parameters[key] = value;
+            }
+        }
         if (!hasFields(c, ['version', 'kind', 'parameters']) || c.version !== 1 || c.kind !== spec.kind
             || !hasFields(c.parameters, Object.keys(spec.fields))
             || Object.entries(spec.fields).some(([key, field]) => {

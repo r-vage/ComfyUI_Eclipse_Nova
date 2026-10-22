@@ -7,6 +7,8 @@ import secrets
 from .fonts import default_caption_font, get_font_list, get_font_path
 from .lyric_alignment import LANGUAGES
 from .lyric_animation import ANIMATED_MODES, ROTATION_AXES
+from .lyric_qwen import CHOICES as WORD_TIMING_CHOICES
+from .lyric_qwen import TIP as WORD_TIMING_TIP
 from .resolution_sizing import number, require_choice, require_fields, require_number
 
 WIDGET_TYPE = "ECLIPSE_NOVA_LYRIC_CAPTIONS"
@@ -48,8 +50,10 @@ CHOICES = {
     "position": {f"{v}_{h}": f"{v.title()} {h}" for v in ("top", "center", "bottom") for h in ("left", "center", "right")},
     "rotation_axis": {key: key for key in ROTATION_AXES},
     "unmatched_passages": {"omit": "Omit", "transcribe": "Transcribe"},
+    "word_timing": WORD_TIMING_CHOICES,
 }
 TIPS = {
+    "word_timing": WORD_TIMING_TIP,
     "font_size": "Maximum font size. Long captions shrink to fit the canvas, margins and effects.",
     "caption_transparency": "Fade text, outline, highlight and glow together. 100% hides captions; background and audio are unchanged.",
     "glow_intensity": "Glow buildup iterations; more creates denser glow.",
@@ -76,7 +80,7 @@ def default_configuration():
             **{key: spec[1] for key, spec in COLORS.items()},
             "font_file": default_caption_font(), "mode": "floating-words", "language": "en",
             "device": "auto", "position": "bottom_center", "rotation_axis": "Turning sign",
-            "unmatched_passages": "omit", "enable_glow": False,
+            "unmatched_passages": "omit", "enable_glow": False, "word_timing": "whisper",
         },
         "seed": {"source": "local", "value": "42", "policy": "fixed"},
     }
@@ -98,6 +102,8 @@ def validate_configuration(raw):
     if type(config["version"]) is not int or config["version"] != 1:
         raise ValueError("Expected version 1 caption configuration.")
     params = config["parameters"]
+    if isinstance(params, dict):
+        params.setdefault("word_timing", "whisper")
     require_fields(params, (*NUMBERS, *COLORS, *CHOICES, "font_file", "enable_glow"), name="Caption settings")
     for key, spec in NUMBERS.items():
         require_number(params[key], spec)

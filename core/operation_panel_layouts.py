@@ -28,7 +28,8 @@ LAYOUTS = {
     "audio_loop": {"rows": [["duration", "fps"], ["context_length", "overlap_frames"]],
                    "overrides": ["duration", "fps", "context_length", "overlap_frames"],
                    "note": "Connected audio supplies the duration. Loop count excludes the initial generation."},
-    "transcribe": {"bars": [bar("device", "Device", "device")], "rows": [["language"]],
+    "transcribe": {"bars": [bar("device", "Device", "device", ["stop"], run=True)], "rows": [["language"], ["word_timing"]],
+                   "labelled_choices": ["word_timing"],
                    "result": {"index": 0, "label": "Transcript"}},
     "indices": {"rows": [["indices"]], "overrides": ["indices"]},
     "rife_multiplier": {"rows": [["source_fps", "target_fps"]], "overrides": ["source_fps", "target_fps"]},
@@ -96,11 +97,13 @@ LAYOUTS = {
                       "when": {"resize_width": ["resize_to", "custom"], "resize_height": ["resize_to", "custom"]},
                       "overrides": ["resize_width", "resize_height"], "refresh": ["model_name"],
                       "result": {"index": 1, "label": "Report"}},
+    "wan_conditioning": {"rows": [["width", "height"], ["length", "motion_frame_count"], ["audio_start", "audio_scale"]],
+                         "overrides": ["width", "height", "length", "motion_frame_count", "audio_start", "audio_scale"]},
     "wan_step": {"bars": [bar("blend", "Blend", "blend_mode")], "rows": [["loop_index"]],
                  "overrides": ["loop_index"]},
     "wan_planner": {"bars": [bar("options", "Options", toggles=["align_to_silence"])],
                     "sections": [section("timing", "Timing", [["fps", "context_length"], ["overlap_frames"]]),
-                                 section("transitions", "Transitions", [["manual_transition_times"], ["transition_edge"]]),
+                                 section("transitions", "Transitions", [["manual_transition_times"], ["transition_edge"], ["warmup_seconds"]]),
                                  section("silence", "Silence alignment", [["search_window_seconds", "min_silence_duration"],
                                                                            ["resume_hold_duration"]], when=["align_to_silence", True])],
                     "overrides": ["fps", "context_length", "overlap_frames", "manual_transition_times"],
@@ -122,6 +125,7 @@ LABELS = {
 }
 
 CHOICE_LABELS = {
+    "whisper": "Whisper", "qwen3": "Qwen3", "qwen3_compare": "Qwen3 · compare only",
     "align_manual_targets": "Manual", "auto_detect_pauses": "Auto", "source": "Source", "new_images": "New",
     "both": "Both", "disable": "Off", "prefix": "Prefix", "postfix": "Suffix", "shortest": "Shortest",
     "video_to_audio": "Video to audio", "audio_to_video": "Audio to video", "auto": "Auto", "cpu": "CPU", "cuda": "CUDA",

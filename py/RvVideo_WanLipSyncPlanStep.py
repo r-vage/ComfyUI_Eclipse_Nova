@@ -14,6 +14,7 @@ import torch.nn.functional as F  # type: ignore
 from comfy_api.latest import io  # type: ignore
 
 from ..core import CATEGORY
+from ..core.frame_timeline import FrameTimeline, TIMELINE_TYPE
 from ..core.image_helpers import cat_and_fit_images, flatten_images, unwrap_value
 from ..core.logger import log
 
@@ -123,7 +124,12 @@ def _validate_plan(plan: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
             raise ValueError(f"Plan task {task_index} is not timeline-contiguous.")
         if end_frame <= start_frame or keep_frames != end_frame - start_frame:
             raise ValueError(f"Plan task {task_index} has an invalid frame range.")
-        if keep_frames > context_length - overlap_frames:
+        warmup = task.get("warmup_frames", 0)
+        if type(warmup) is not int or warmup < 0 or warmup > start_frame - overlap_frames:
+            raise ValueError(f"Plan task {task_index} has an invalid warmup.")
+        if warmup and not starts_transition:
+            raise ValueError("Warmup is only supported at image changes.")
+        if keep_frames + warmup > context_length - overlap_frames:
             raise ValueError(f"Plan task {task_index} exceeds the retained stride.")
         if image_index < 0 or image_index >= image_count:
             raise ValueError(f"Plan task {task_index} has an invalid image index.")
@@ -151,7 +157,7 @@ class RvVideo_WanLipSyncPlanStep(OperationPanel, io.ComfyNode):
                 io.Custom(_PLAN_KIND).Input("plan"),
                 io.Int.Input("loop_index", default=0, min=0, max=65535, step=1),
                 io.Image.Input("image_batch"),
-                io.Image.Input("previous_frames"),
+                io.MatchType.Input("previous_frames", io.MatchType.Template("history", allowed_types=[io.Image, io.Custom(TIMELINE_TYPE)])),
                 io.Combo.Input(
                     "blend_mode",
                     options=["linear", "pyramid"],
@@ -162,6 +168,8 @@ class RvVideo_WanLipSyncPlanStep(OperationPanel, io.ComfyNode):
                 io.Image.Output("start_image"),
                 io.Image.Output("previous_frames"),
                 io.Int.Output("keep_frames"),
+                io.Int.Output("trim_image", tooltip="Decoded crop start, including motion context and hidden warmup. Use instead of InfiniteTalk trim_image."),
+                io.Int.Output("audio_start", tooltip="Absolute audio frame for WAN LipSync Conditioning; connect together with previous_frames."),
             ],
         )
 
@@ -179,7 +187,12 @@ class RvVideo_WanLipSyncPlanStep(OperationPanel, io.ComfyNode):
             )
         if blend_mode_value not in ("linear", "pyramid"):
             raise ValueError(f"Unsupported blend_mode: {blend_mode_value}")
-        if not isinstance(previous_frames, torch.Tensor) or previous_frames.ndim != 4:
+        disk = isinstance(previous_frames, FrameTimeline)
+        if disk and plan_value["fps"] != 25:
+            raise ValueError("InfiniteTalk disk timelines require 25 FPS to match its audio feature clock.")
+        if disk and previous_frames.fps != plan_value["fps"]:
+            raise ValueError("Timeline FPS differs from the Wan plan.")
+        if not disk and (not isinstance(previous_frames, torch.Tensor) or previous_frames.ndim != 4):
             raise ValueError("previous_frames must be one 4D IMAGE batch.")
 
         images = flatten_images(image_batch)
@@ -203,14 +216,20 @@ class RvVideo_WanLipSyncPlanStep(OperationPanel, io.ComfyNode):
         start_image = images[image_index]
         mode = plan_value["mode"]
         starts_transition = task["starts_transition"]
+        overlap_frames = _require_int(plan_value, "overlap_frames")
+        warmup = task.get("warmup_frames", 0)
+        trim_image = overlap_frames + warmup
+        audio_start = start_frame - trim_image
+        if disk:
+            previous_frames = previous_frames.tail(overlap_frames)
 
         if mode == "single_reference":
             if image_count != 1 or image_index != 0 or starts_transition:
                 raise ValueError("Single-reference plan task metadata is inconsistent.")
-            return io.NodeOutput(start_image, previous_frames, keep_frames)
+            return io.NodeOutput(start_image, previous_frames, keep_frames, trim_image, audio_start)
 
         if not starts_transition:
-            return io.NodeOutput(start_image, previous_frames, keep_frames)
+            return io.NodeOutput(start_image, previous_frames, keep_frames, trim_image, audio_start)
 
         overlap_frames = _require_int(plan_value, "overlap_frames")
         if previous_frames.shape[0] < overlap_frames:
@@ -237,6 +256,14 @@ class RvVideo_WanLipSyncPlanStep(OperationPanel, io.ComfyNode):
         if fitted is None or fitted.shape[0] != 2:
             raise ValueError("Unable to fit the transition reference to the timeline.")
         target_overlap = fitted[1:2].repeat(overlap_frames, 1, 1, 1)
+        if warmup:
+            # InfiniteTalk derives audio_start from this temporary batch length.
+            # Shortening by W and cropping overlap+W preserves the original
+            # visible frame/audio time. Reset the guide to the destination image;
+            # the discarded generated frames settle its singing before the cut.
+            conditioning_frames = previous_frames.clone() if disk else previous_frames[:start_frame - warmup].clone()
+            conditioning_frames[-overlap_frames:] = target_overlap
+            return io.NodeOutput(start_image, conditioning_frames, keep_frames, trim_image, audio_start)
         source_overlap = previous_frames[-overlap_frames:]
         alpha = torch.linspace(
             0.0,
@@ -257,7 +284,7 @@ class RvVideo_WanLipSyncPlanStep(OperationPanel, io.ComfyNode):
 
         conditioning_frames = previous_frames.clone()
         conditioning_frames[-overlap_frames:] = blended_overlap
-        if conditioning_frames.shape[0] != start_frame:
+        if conditioning_frames.shape[0] != (overlap_frames if disk else start_frame):
             raise ValueError("Transition conditioning changed the accumulated length.")
 
         log.debug(
@@ -265,4 +292,4 @@ class RvVideo_WanLipSyncPlanStep(OperationPanel, io.ComfyNode):
             f"Task {loop_index_value}: blended {overlap_frames} conditioning "
             f"frames toward image {image_index} via {blend_mode_value}.",
         )
-        return io.NodeOutput(start_image, conditioning_frames, keep_frames)
+        return io.NodeOutput(start_image, conditioning_frames, keep_frames, trim_image, audio_start)
