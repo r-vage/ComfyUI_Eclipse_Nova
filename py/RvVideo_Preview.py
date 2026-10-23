@@ -53,7 +53,10 @@ class RvVideo_Preview(io.ComfyNode):
 
     @classmethod
     def fingerprint_inputs(cls, configuration, **_inputs):
-        return None if validate_preview(unwrap_value(configuration))["stop"] else float("nan")
+        validate_preview(unwrap_value(configuration))
+        # ComfyUI already tracks connected media and settings. An unconditional
+        # change here also invalidates downstream samplers and completed loops.
+        return False
 
     @classmethod
     def execute(cls, images, configuration, audio=None, fps=None):

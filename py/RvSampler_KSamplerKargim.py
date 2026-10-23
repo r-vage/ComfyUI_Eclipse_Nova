@@ -14,6 +14,7 @@ from ..core.sampler_configuration import (
     validate_configuration,
 )
 from ..core.sampler_execution import sample_kargim
+from ..core.seed_cache import automatic_fingerprint, record_automatic_execution
 
 
 class RvSampler_KSamplerKargim(io.ComfyNode):
@@ -51,7 +52,7 @@ class RvSampler_KSamplerKargim(io.ComfyNode):
     @classmethod
     def fingerprint_inputs(cls, configuration, **_inputs):
         config = validate_configuration(configuration, "sampler")
-        return float("nan") if config["seed"]["policy"] == "random" else configuration
+        return automatic_fingerprint() if config["seed"]["policy"] == "random" else configuration
 
     @classmethod
     def execute(cls, configuration, pipe=None, model=None, vae=None, positive=None, negative=None, latent=None, image=None):
@@ -73,7 +74,9 @@ class RvSampler_KSamplerKargim(io.ComfyNode):
         )
         # Include the resolved pipe seed so the local last-seed action also works
         # when a connected settings node controls sampling.
-        result.ui = {**(result.ui or {}), "eclipse_seed": [str(result.result[0]["seed"])]}
-        if local_seed and values["allow_overwrite"]:
-            result.ui["eclipse_local_seed"] = [config["seed"]]
+        # ComfyUI merges mapped results by UI key. Keep entries aligned even
+        # when only some PIPE items supply an overriding seed.
+        result.ui = {**(result.ui or {}), "eclipse_seed": [str(result.result[0]["seed"])],
+                     "eclipse_local_seed": [config["seed"] if local_seed and values["allow_overwrite"] else None]}
+        record_automatic_execution(local_seed and config["seed"]["policy"] == "random")
         return result

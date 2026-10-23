@@ -17,6 +17,7 @@ from ..core.sampler_configuration import (
 )
 from ..core.sampler_execution import sample_kargim
 from ..core.sampler_extras import extra_fields
+from ..core.seed_cache import automatic_fingerprint, record_automatic_execution
 
 
 class RvSampler_KSamplerAdvanced(io.ComfyNode):
@@ -49,7 +50,7 @@ class RvSampler_KSamplerAdvanced(io.ComfyNode):
     @classmethod
     def fingerprint_inputs(cls, configuration, **_inputs):
         config = validate_configuration(configuration, "advanced")
-        return float("nan") if config["seed"]["policy"] == "random" else configuration
+        return automatic_fingerprint() if config["seed"]["policy"] == "random" else configuration
 
     @classmethod
     def execute(cls, configuration, pipe):
@@ -100,9 +101,8 @@ class RvSampler_KSamplerAdvanced(io.ComfyNode):
         # Include the resolved pipe seed so the local last-seed action also works
         # when a connected settings node controls sampling.
         result.ui = {**(result.ui or {}), "eclipse_seed": [str(result.result[0]["seed"])],
-                     "eclipse_preview_enabled": [values["preview_mode"] == "Preview"]}
-        if local_seed and values["allow_overwrite"]:
-            result.ui["eclipse_local_seed"] = [config["seed"]]
+                     "eclipse_preview_enabled": [values["preview_mode"] == "Preview"],
+                     "eclipse_local_seed": [config["seed"] if local_seed and values["allow_overwrite"] else None]}
         out_pipe = result.result[0]
         out_pipe.update({key: value for key, value in values.items() if key not in ("allow_overwrite", "second_seed")})
         out_pipe["preview"] = values["preview_mode"] == "Preview"
@@ -112,4 +112,5 @@ class RvSampler_KSamplerAdvanced(io.ComfyNode):
             out_pipe.update({key: values["second_" + key] for key in ("steps", "cfg", "sampler_name", "scheduler")})
             out_pipe["seed"] = out_pipe["second_seed"]
             out_pipe["denoise"] = 1.0
+        record_automatic_execution(local_seed and config["seed"]["policy"] == "random")
         return io.NodeOutput(result.result[0], ui=result.ui)

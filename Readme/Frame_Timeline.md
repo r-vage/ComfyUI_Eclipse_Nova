@@ -74,6 +74,13 @@ the MiniMax layout.
 and returns the same timeline. Preview MP4s are viewing copies; generation and
 final rendering never decode pixels from them.
 
+Unchanged previews use ComfyUI's execution cache with Stop enabled or disabled.
+Requeueing a completed timeline, or changing only downstream caption styling,
+can reuse generation and loop results while those results remain cached. Change
+the style in the final caption renderer after the loop. Changes in a review
+branch connected before sampling remain upstream changes and can invalidate
+generation. Backend restarts or cache eviction require generation again.
+
 `Trim Frame Timeline` selects an exact frame range without copying pixels. It
 also returns width, height and frame count. Connect its output directly to
 `Render Lyric Captions` or `Save Video with Generation Data`.

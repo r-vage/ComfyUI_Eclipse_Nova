@@ -13,6 +13,7 @@ from ..core.prompt_files_configuration import (
     validate_configuration,
 )
 from ..core.prompt_reading import file_signature, read_prompt
+from ..core.seed_cache import automatic_fingerprint, record_automatic_execution
 
 
 class RvText_ReadPromptFiles(io.ComfyNode):
@@ -41,9 +42,10 @@ class RvText_ReadPromptFiles(io.ComfyNode):
     @classmethod
     def fingerprint_inputs(cls, configuration, **_inputs):
         options = validate_configuration(configuration, "read")["options"]
-        if options["advance"] != "fixed":
-            return float("nan")
-        return file_signature(options["file_paths"])
+        signature = file_signature(options["file_paths"])
+        if options["advance"] != "fixed" and _inputs.get("seed_input") is None:
+            return signature, automatic_fingerprint()
+        return signature
 
     @classmethod
     def execute(cls, configuration, seed_input=None):
@@ -51,5 +53,6 @@ class RvText_ReadPromptFiles(io.ComfyNode):
         workflow = (cls.hidden.extra_pnginfo or {}).get("workflow", {})
         key = (workflow.get("id", "api"), str(cls.hidden.unique_id))
         prompt, info = read_prompt(options, key=key, seed=seed_input)
+        record_automatic_execution(options["advance"] != "fixed" and seed_input is None)
         return io.NodeOutput(ExecutionBlocker(None) if info["stopped"] else prompt,
                              ui={"eclipse_prompt_files": [info]})

@@ -13,6 +13,7 @@ from ..core.image_loader_configuration import (
     validate_files,
 )
 from ..core.image_loading import catalog, load_files, resolve_paths
+from ..core.seed_cache import automatic_fingerprint, record_automatic_execution
 
 
 class RvImage_LoadFiles(io.ComfyNode):
@@ -44,10 +45,13 @@ class RvImage_LoadFiles(io.ComfyNode):
     @classmethod
     def fingerprint_inputs(cls, configuration, **_inputs):
         config = validate_files(configuration)
-        if config["mode"] in ("single", "step") and config[config["mode"]]["advance"] != "fixed":
-            return float("nan")
         sources, _, _ = catalog(config)
-        return [(str(source.path), source.path.stat().st_mtime_ns, source.path.stat().st_size) for source in sources]
+        signature = [(str(source.path), source.path.stat().st_mtime_ns, source.path.stat().st_size) for source in sources]
+        mode = config["mode"]
+        if (mode in ("single", "step") and config[mode]["advance"] != "fixed"
+                and (mode == "step" or _inputs.get("seed_input") is None)):
+            return signature, automatic_fingerprint()
+        return signature
 
     @classmethod
     def execute(cls, configuration, seed_input=None, width=None, height=None):
@@ -55,6 +59,9 @@ class RvImage_LoadFiles(io.ComfyNode):
         workflow = (cls.hidden.extra_pnginfo or {}).get("workflow", {})
         key = (workflow.get("id", "api"), str(cls.hidden.unique_id))
         output, info = load_files(config, key=key, seed=seed_input, width=width, height=height)
+        mode = config["mode"]
+        record_automatic_execution(mode in ("single", "step") and config[mode]["advance"] != "fixed"
+                                   and (mode == "step" or seed_input is None))
         ui = {"eclipse_loader": [info]}
         if output is None:
             blocker = ExecutionBlocker(None)

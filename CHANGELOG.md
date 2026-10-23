@@ -2,6 +2,28 @@
 
 ## 2026-10-23
 
+### Version: 1.0.13
+
+- **Fix**
+  - Preserve Image Selector's mounted previews, selection order and scroll position when confirming or receiving unchanged cached results, avoiding a visible grid reload during Continue.
+  - Let Preview Video reuse unchanged inputs with Stop enabled or disabled. Prevent previews from invalidating downstream sampling loops on every queue, allowing cached generation to remain available for downstream caption styling and export changes. Changed inputs still update the preview and trigger Stop review when enabled.
+  - Cache Read Prompt Files and Load Files From Folder (Single mode) when an unchanged connected seed freezes selection. Preserve automatic advancement without a seed, Step-mode advancement and detection of changed source files.
+  - Cache Kargim, KSampler Advanced, SEGS Detailer and PIPE lyric-caption rendering when a supplied seed overrides local Random. Preserve random fallback for missing or None seeds and disabled sampler overrides. Handle sampler PIPE lists mixing supplied and local seeds without UI aggregation errors.
+- **Changed files**
+  - js/eclipse-image-selector.js
+  - core/seed_cache.py
+  - py/RvImage_LoadFiles.py
+  - py/RvSampler_DetailerForEach.py
+  - py/RvSampler_KSamplerAdvanced.py
+  - py/RvSampler_KSamplerKargim.py
+  - py/RvText_ReadPromptFiles.py
+  - py/RvVideo_Preview.py
+  - py/RvVideo_RenderLyricCaptionsPipe.py
+  - Readme/Frame_Timeline.md
+  - pyproject.toml
+
+## 2026-10-23
+
 ### Version: 1.0.12
 
 - **Docs**

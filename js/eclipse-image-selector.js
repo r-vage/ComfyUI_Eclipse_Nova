@@ -333,7 +333,7 @@ function _disposeSelectorUI(node) {
     node._eclipseSelectorModeUnsubscribe?.();
     node._eclipseSelectorPointerEnterCleanup?.();
     for (const name of ['ResizeObserver', 'ModeUnsubscribe', 'PointerEnterCleanup',
-        'RefreshLayout', 'Dropdown', 'SetAutoSelection']) delete node[`_eclipseSelector${name}`];
+        'RefreshLayout', 'Dropdown', 'SetAutoSelection', 'Grid']) delete node[`_eclipseSelector${name}`];
 }
 
 function _expireSelectorSnapshot(node) {
@@ -744,6 +744,15 @@ async function _confirmSelectorSelection(node, indices) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function _buildSelectorUI(node, container, imageData, totalCount, initialSelection = []) {
+    const gridKey = JSON.stringify([node.properties?.[SELECTOR_SNAPSHOT]?.generation, totalCount,
+        imageData.map(image => [image.filename, image.subfolder || '', image.type || 'temp'])]);
+    const mounted = node._eclipseSelectorGrid;
+    if (mounted?.container === container && mounted.key === gridKey && mounted.grid.parentElement === container) {
+        // Confirm and cached executions return the same full grid. Update the
+        // decision without reloading images or losing scroll/focus/zoom state.
+        mounted.updateSelection(initialSelection);
+        return;
+    }
     _disposeSelectorUI(node);
     container.innerHTML = '';
     container.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;' +
@@ -1439,6 +1448,18 @@ function _buildSelectorUI(node, container, imageData, totalCount, initialSelecti
     toolbar.appendChild(actions);
     container.appendChild(toolbar);
 
+    node._eclipseSelectorGrid = {
+        key: gridKey, container, grid,
+        updateSelection(indices) {
+            selected.clear();
+            for (const index of indices) {
+                if (Number.isInteger(index) && index >= 0 && index < imageData.length) selected.add(index);
+            }
+            cells.forEach((cell, index) => cell.classList.toggle('selected', selected.has(index)));
+            btnDiscard.disabled = false;
+            updateToolbar();
+        },
+    };
     node._eclipseSelectorRefreshLayout = applyLayout;
     const syncRendererLayout = () => {
         const vueMode = isVueMode();

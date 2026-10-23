@@ -12,6 +12,7 @@ from ..core.lyric_caption_pipe import (
     validate_configuration,
 )
 from ..core.lyric_reference import REFERENCE_REVISION
+from ..core.seed_cache import automatic_fingerprint, record_automatic_execution
 
 
 class RvVideo_RenderLyricCaptionsPipe(io.ComfyNode):
@@ -38,14 +39,16 @@ class RvVideo_RenderLyricCaptionsPipe(io.ComfyNode):
     @classmethod
     def fingerprint_inputs(cls, configuration, **_inputs):
         config = validate_configuration(configuration)
-        if config["seed"]["policy"] == "random":
-            return float("nan")
         # Linked pipes are unresolved here. Model files need not exist for
         # reviewed timing; automatic paths verify their model at execution.
-        return (lyric_captions.fingerprint_inputs(font_file=config["parameters"]["font_file"], corrected_timing=None),
-                REFERENCE_REVISION)
+        signature = (lyric_captions.fingerprint_inputs(font_file=config["parameters"]["font_file"], corrected_timing=None),
+                     REFERENCE_REVISION)
+        if config["seed"]["policy"] == "random":
+            return signature, automatic_fingerprint()
+        return signature
 
     @classmethod
     def execute(cls, pipe, configuration):
         output = render_pipe(pipe, configuration)
+        record_automatic_execution(pipe.get("seed") is None and validate_configuration(configuration)["seed"]["policy"] == "random")
         return io.NodeOutput(output, ui={"eclipse_seed": [str(output["seed"])]})

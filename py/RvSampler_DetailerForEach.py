@@ -16,6 +16,7 @@ from ..core.sampler_configuration import (
     resolve_seed,
     validate_configuration,
 )
+from ..core.seed_cache import automatic_fingerprint, record_automatic_execution
 
 
 class RvSampler_DetailerForEach(io.ComfyNode):
@@ -59,7 +60,7 @@ class RvSampler_DetailerForEach(io.ComfyNode):
         config = validate_configuration(raw, "detailer")
         pipe = unwrap_value(_inputs.get("pipe_opt"))
         pipe_seed = config["parameters"]["allow_overwrite"] and isinstance(pipe, dict) and pipe.get("seed") is not None
-        return float("nan") if config["seed"]["policy"] == "random" and not pipe_seed else raw
+        return automatic_fingerprint() if config["seed"]["policy"] == "random" and not pipe_seed else raw
 
     @classmethod
     def execute(cls, image, segs, basic_pipe, configuration, scheduler_func_opt=None, pipe_opt=None):
@@ -101,4 +102,5 @@ class RvSampler_DetailerForEach(io.ComfyNode):
                 images=[frame[0] for frame in images], prompt=cls.hidden.prompt, extra_pnginfo=extra,
             )
             ui["images"] = preview["ui"]["images"]
+        record_automatic_execution(not pipe_seed and config["seed"]["policy"] == "random")
         return io.NodeOutput(images, detailed_segs, pipes, ui=ui)
