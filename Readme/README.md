@@ -69,6 +69,7 @@ image metadata.
 | [Load Audio](Load_Audio.md) | File or connected audio, auditioning, trim inputs and optional review |
 | [System Audio Recorder](System_Audio_Recorder.md) | Manual system-output capture, silence trim, WAV/MP3 and retained-source updates |
 | [Load / Preview / Split Video](Load_Video.md) | Editable clip slots beside the preview, per-clip trims, input overrides and timing-preserving extraction |
+| [Image Timeline Video](Image_Timeline_Video.md) | PIPE renderer and IO, manual image slots or Image Selector, per-image crop/blending and selected metadata, even/quiet-gap/manual timing for captions or saving |
 | [Upscale Video](Upscale_Video.md) | Integrated model selection, bounded frame batches, source timing and audio |
 | [Save Video with Generation Data](Save_Video_Data.md) | IMAGE/VIDEO/timeline saving, output and encoding controls, trim/loop behavior and metadata |
 | [Lyric Captions](Lyric_Captions.md) | PIPE renderer and IO slots, shared transcription, optional wording/timing corrections and caption controls |

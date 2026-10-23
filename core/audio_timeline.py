@@ -1,12 +1,40 @@
 """Shared audio-timeline validation and encoded-activity helpers."""
 
 import math
+from fractions import Fraction
 from typing import Any
 
 import torch  # type: ignore
 import torch.nn.functional as F  # type: ignore
 
 ENCODED_ACTIVITY_FPS = 50.0
+
+
+def waveform_audio_activity(audio: dict) -> torch.Tensor:
+    """Measure 20 ms RMS activity without copying a whole recording to CPU."""
+    duration = audio_duration_seconds(audio)
+    waveform = audio["waveform"]
+    rate = audio["sample_rate"]
+    if type(rate) not in (int, float) or not math.isfinite(rate) or int(rate) != rate:
+        raise ValueError("Activity audio sample rate must be a positive integer.")
+    if waveform.ndim != 3 or waveform.shape[0] != 1 or waveform.shape[1] not in (1, 2):
+        raise ValueError("Activity audio must have shape [1, 1 or 2, samples].")
+    if duration <= 0 or not math.isfinite(duration):
+        raise ValueError("Activity audio must not be empty.")
+    count = math.ceil(Fraction(waveform.shape[-1], int(rate)) * int(ENCODED_ACTIVITY_FPS))
+    activity = torch.empty(count, dtype=torch.float32)
+    # Ten-second blocks bound the temporary square/pooling buffers. Both channels
+    # contribute energy, so opposite-phase stereo cannot cancel the activity.
+    for first in range(0, count, 500):
+        stop = min(first + 500, count)
+        start_sample = round(first / ENCODED_ACTIVITY_FPS * rate)
+        end_sample = min(round(stop / ENCODED_ACTIVITY_FPS * rate), waveform.shape[-1])
+        block = waveform[..., start_sample:end_sample].detach().to(device="cpu", dtype=torch.float32)
+        if not torch.isfinite(block).all().item():
+            raise ValueError("Activity audio contains non-finite samples.")
+        energy = F.adaptive_avg_pool1d(block.square(), stop - first).mean(dim=(0, 1))
+        activity[first:stop] = energy.sqrt()
+    return activity
 
 
 def audio_duration_seconds(audio: Any) -> float:

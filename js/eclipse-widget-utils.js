@@ -190,7 +190,7 @@ export function captureFocusedTextWheel(root) {
     };
 }
 
-export function captureScrollableWheelInVue(element) {
+export function captureScrollableWheelInVue(element, { captureAtEdges = false } = {}) {
     let disposed = false;
 
     const releaseWheelCaptureForCanvas = () => {
@@ -205,14 +205,14 @@ export function captureScrollableWheelInVue(element) {
 
     const handleWheel = (event) => {
         if (!isVueMode()) return;
-        if (element.scrollHeight <= element.clientHeight) {
+        if (!captureAtEdges && element.scrollHeight <= element.clientHeight) {
             releaseWheelCaptureForCanvas();
             return;
         }
 
         const atTop = element.scrollTop <= 0;
         const atBottom = element.scrollTop + element.clientHeight >= element.scrollHeight - 1;
-        if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
+        if (!captureAtEdges && ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom))) {
             releaseWheelCaptureForCanvas();
             return;
         }
@@ -220,7 +220,7 @@ export function captureScrollableWheelInVue(element) {
     };
 
     const focusOnPointerEnter = () => {
-        if (isVueMode()) element.focus({ preventScroll: true });
+        if (isVueMode() && !element.contains(element.ownerDocument.activeElement)) element.focus({ preventScroll: true });
     };
     const syncRendererMode = () => {
         if (isVueMode()) {

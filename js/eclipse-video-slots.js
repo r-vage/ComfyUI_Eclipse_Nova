@@ -1,11 +1,14 @@
 /** Per-clip slot controls for the Nova video panel. Copyright (c) 2026 r-vage. Apache-2.0. */
 import { button, element } from './eclipse-panel-controls.js';
+import { captureScrollableWheelInVue } from './eclipse-widget-utils.js';
 
 export function createVideoSlots(actions) {
     const root = element('section', 'en-video-slots'); root.setAttribute('aria-label', 'Video slots');
     const header = element('div', 'evs-caption');
     header.append(element('span', '', 'Clips'), element('span', '', 'Drag rows to reorder'));
     const list = element('div', 'evs-list'); list.setAttribute('aria-label', 'Video clips');
+    list.tabIndex = -1;
+    const releaseScroll = captureScrollableWheelInVue(list, { captureAtEdges: true });
     const footer = element('div', 'evs-add'), count = element('span');
     const add = button('+ Video', 'Add video slot', () => {
         actions.add(); list.lastElementChild?.scrollIntoView({ block: 'nearest' });
@@ -51,6 +54,21 @@ export function createVideoSlots(actions) {
             input.onchange = () => { input.value = rowFor(id)?.[key] ?? 0; };
             label.append(input); trim.append(label);
         }
+        const blend = element('div', 'evs-trim');
+        if (actions.effects?.blend_modes) {
+            const label = element('label', '', 'Blend to next'), select = inputs.blend_mode = element('select');
+            select.setAttribute('aria-label', 'Blend to next');
+            for (const value of ['inherit', ...actions.effects.blend_modes]) {
+                const option = element('option', '', value === 'inherit' ? 'Use global blend' : value.replaceAll('_', ' ').replace(/^./, c => c.toUpperCase()));
+                option.value = value; option.title = actions.effects.blend_tooltips?.[value] ?? ''; select.append(option);
+            }
+            select.onchange = () => actions.update(id, { blend_mode: select.value }); label.append(select);
+            const seconds = element('label', '', 'Blend seconds'), input = inputs.blend_duration = element('input');
+            input.type = 'number'; input.min = '0'; input.max = '60'; input.step = '0.1'; input.setAttribute('aria-label', 'Blend seconds');
+            input.title = 'Centered on the cut into the next enabled clip. Short clips limit the fade. The last clip has no outgoing blend.';
+            input.oninput = () => { if (input.value !== '' && input.checkValidity()) actions.update(id, { blend_duration: input.valueAsNumber }); };
+            input.onchange = () => { input.value = rowFor(id)?.blend_duration ?? 1; }; seconds.append(input); blend.append(label, seconds);
+        }
         const toggles = element('div', 'evs-options'), bar = element('div', 'en-panel-bar'), flags = {};
         for (const [key, title] of [['mute', 'Mute'], ['use_metadata', 'Use metadata']]) {
             const toggle = button(title, title, () => actions.update(id, { [key]: !rowFor(id)[key] }));
@@ -58,8 +76,8 @@ export function createVideoSlots(actions) {
         }
         const duplicate = button('⧉', 'Duplicate clip', () => actions.duplicate(id)); duplicate.className = 'evs-duplicate';
         toggles.append(bar, duplicate);
-        const details = element('div', 'evs-detail'); fields.append(trim, toggles, details); card.append(top, summary, fields);
-        card.onclick = event => { if (!event.target.closest('button,input,label')) actions.select(id); };
+        const details = element('div', 'evs-detail'); fields.append(trim, blend, toggles, details); card.append(top, summary, fields);
+        card.onclick = event => { if (!event.target.closest('button,input,select,label')) actions.select(id); };
         card.onkeydown = event => {
             if (event.altKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
                 event.preventDefault(); actions.move(id, event.key === 'ArrowUp' ? -1 : 1);
@@ -97,8 +115,12 @@ export function createVideoSlots(actions) {
             view.summary.textContent = row.file ? `Start ${row.start_frame} · cap ${row.load_cap || 'all'}${seconds == null ? '' : ` · ${seconds.toFixed(2)}s`}${row.mute ? ' · muted' : ''}${row.use_metadata ? ' · GenData' : ''}${info?.error ? ' · unavailable' : ''}` : 'Empty · choose a file to set its trim';
             view.fields.hidden = !open;
             for (const [key, input] of Object.entries(view.inputs)) {
-                input.setAttribute('aria-label', key === 'start_frame' ? 'Start frame' : 'Load cap');
-                if (document.activeElement !== input) input.value = String(row[key]);
+                if (key === 'start_frame' || key === 'load_cap') input.setAttribute('aria-label', key === 'start_frame' ? 'Start frame' : 'Load cap');
+                if (document.activeElement !== input) input.value = String(row[key] ?? (key === 'blend_mode' ? 'inherit' : key === 'blend_duration' ? 1 : 0));
+            }
+            if (view.inputs.blend_mode) {
+                view.inputs.blend_mode.title = actions.effects.blend_tooltips?.[row.blend_mode] ?? 'Transition into the next enabled clip. Use global blend inherits its mode and duration.';
+                view.inputs.blend_duration.disabled = ['inherit', 'cut'].includes(row.blend_mode ?? 'inherit');
             }
             for (const [key, toggle] of Object.entries(view.flags)) {
                 toggle.setAttribute('aria-pressed', String(row[key])); toggle.disabled = key === 'use_metadata' && !row.enabled;
@@ -110,5 +132,5 @@ export function createVideoSlots(actions) {
         const included = rows.filter(row => row.enabled && row.file), lengths = included.map(row => duration(row, actions.probe(row.file)));
         total.textContent = `${included.length} clips included${included.length && lengths.every(n => n != null) ? ` · ${lengths.reduce((a, b) => a + b, 0).toFixed(2)}s selected` : ''}`;
     }
-    return { element: root, footer, render };
+    return { element: root, footer, render, destroy: releaseScroll };
 }

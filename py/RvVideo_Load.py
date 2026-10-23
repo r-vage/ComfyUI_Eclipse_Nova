@@ -5,9 +5,12 @@ import json
 from comfy_api.latest import io
 
 from ..core import CATEGORY
+from ..core.image_blending import BLEND_MODES, BLEND_TOOLTIPS
+from ..core.image_effects import STYLE_MODES, STYLE_TOOLTIP
 from ..core.video_helpers import preview_video_file
 from ..core.video_loader import file_version, load_playlist, resolve_video_file
 from ..core.video_panel_configuration import (
+    EFFECT_DEFAULTS,
     LOAD_WIDGET,
     default_load,
     playlist_value,
@@ -31,7 +34,10 @@ class RvVideo_Load(io.ComfyNode):
                 io.Float.Input("fps", optional=True, force_input=True, min=1.0, max=240.0,
                                tooltip="Override local FPS in Fixed timing mode. Source timing keeps its original timestamps."),
                 io.String.Input("configuration", socketless=True, default=json.dumps(default_load()),
-                                extra_dict={"widgetType": LOAD_WIDGET, "editorSpec": {"kind": "load"}}),
+                                extra_dict={"widgetType": LOAD_WIDGET, "editorSpec": {
+                                    "kind": "load", "effect_defaults": EFFECT_DEFAULTS,
+                                    "blend_modes": ["cut", *BLEND_MODES], "blend_tooltips": BLEND_TOOLTIPS,
+                                    "style_modes": list(STYLE_MODES), "style_tooltip": STYLE_TOOLTIP}}),
             ],
             outputs=[io.Video.Output("video"), io.Custom("PIPE").Output("generation_data"),
                      io.Float.Output("duration"), io.String.Output("report")],

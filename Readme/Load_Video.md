@@ -21,7 +21,7 @@ The playlist occupies the **left column**, with the shared player on the **right
 Click **+ Video** to add an empty slot, then its filename field to browse Input /
 Output or upload a local video. Each slot has its own include toggle, ordering
 arrows, remove button and collapsible settings for **Start frame**, **Load cap**,
-**Mute**, **Use metadata** and duplication. Drag a row header to reorder it. Only
+**Mute**, **Use metadata**, **Blend to next**, **Blend seconds** and duplication. Drag a row header to reorder it. Only
 one included clip can supply generation data. Empty slots remain in the workflow
 but are ignored during preview generation and execution; at least one filled,
 enabled slot is required to run.
@@ -31,7 +31,8 @@ to 128. The file browser also allows reusing a video with different trims. A
 slot's upload follows that slot when reordered; selecting another file while the
 upload finishes keeps the newer selection.
 
-The list scrolls independently of the player. Resize the node to change the
+Hover the clip list to scroll it independently of the player without zooming the
+canvas, including at the top and bottom of the list. Resize the node to change the
 player's available area; expanding clip settings does not enlarge the node.
 Saved configuration, open clip settings, playlist order and node size survive
 workflow reloads. Use **Source / Joined / GenData** above the player to switch
@@ -41,6 +42,32 @@ between the selected clip, rendered result and that clip's saved metadata.
 primitives when their values are available before execution. For inputs computed
 by other nodes, queue the workflow to build the output using their resolved
 values. These explicit preview actions do not run the workflow themselves.
+
+The **Blending** section sets the default transition and duration for all clips.
+Each clip's **Blend to next** can inherit that global setting or override it;
+the last enabled clip has no outgoing transition. Crossfades, wipes, dissolve,
+Morph, ghost zoom, flash/light leak, block glitch, zoom blur and dip to black
+share the same engine as [Image Timeline Video](Image_Timeline_Video.md).
+Cut is the default, and zero seconds also keeps a hard cut.
+
+Fades are centered on existing clip boundaries without shortening the playlist.
+Before the cut, the incoming clip's first frame is held over the moving outgoing
+clip; after it, the outgoing last frame is held while the incoming clip moves.
+Short clips limit the window so adjacent fades cannot overlap. Source timing,
+audio cuts and mute settings stay intact; these transitions blend the picture,
+not the audio. Morph recalculates optical flow for each changing frame pair and
+is more expensive than a crossfade.
+
+**Global style** applies a consistent grade or repeating effect across the entire
+playlist. Choose a cool desaturated grade, ghost zoom, light leak, block glitch,
+zoom blur, black pulses, or the combined **Black pulse flash / Ghost edit / Glitch edit** styles.
+**Black pulse flash** pairs two soft, warm-white flashes with a black dip each cycle.
+**Style strength** controls the amount and **Style period** sets the cycle in
+seconds. The style clock continues across clips; it is time-based rather than
+automatic beat detection. Styling defaults to Off. **Build joined preview** and
+queued execution use the same fades and styling. **Source** shows the original
+file, while **Preview selected trim** applies the global style to that trim alone.
+Frames stream to disk with bounded working memory, including when effects are on.
 
 Preview Video accepts IMAGE frames, native VIDEO, or an exact frame timeline
 and passes the same type through. Its local FPS field and optional `fps` input

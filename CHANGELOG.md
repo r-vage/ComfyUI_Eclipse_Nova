@@ -2,6 +2,67 @@
 
 ## 2026-10-23
 
+### Version: 1.0.11
+
+- **Feat (New)**
+  - Add PIPE-only Image Timeline Video and IO Image Timeline to hold one image for the soundtrack's duration or switch multiple images using even spacing, nearby quiet gaps or manual times. Share Wan/MiniMax activity-gap detection and Batch Extend With Overlap's visual blends, including CPU optical-flow morphs with reusable motion estimation, shared size/FPS overrides and a visible report. Stream a lossless temporary VIDEO with the original soundtrack for captions or saving, preserving audio timing without allocating a full decoded video batch.
+  - Add Load Image Timeline with reorderable file slots, multi-file drag-and-drop, centered cropping and per-image blends that override renderer defaults. Scroll the file list without canvas zoom. A shared Update previews button refreshes every crop locally or resolves optional width/height inputs through one partial run ending at the loader, with each dimension's source shown. Choose one image's sampler, prompt and seed metadata for downstream PIPE use; preserve per-image options when unchanged images pass through IO and retain the Image Selector route.
+- **Feat**
+  - Add Save Video's Audio input toggle to replace native VIDEO soundtracks with connected audio while preserving video duration, frame timing and crop/trim. Trim excess audio, pad shorter tracks with silence, and return the saved VIDEO with the same soundtrack as its preview. Existing workflows keep the override off.
+  - Share ghost zoom, flash/light leak, block glitch, zoom blur and dip-to-black transitions across image timelines, Load Video and Batch Extend With Overlap. Load Video adds global defaults and per-clip overrides to its joined preview and output, preserving clip timing, audio and metadata.
+  - Add a Global style section to Image Timeline Video and Load Video for whole-sequence colour grading and repeating effects, including combined Black pulse flash, Ghost edit and Glitch edit styles with strength and period controls. Stream effects without retaining full video batches; existing workflows keep styling off.
+- **Fix**
+  - Keep mouse-wheel scrolling inside Load Video's clip list in Nodes 2.0, including at its top and bottom, while retaining normal canvas zoom outside the list.
+  - Convert native VIDEO previews to browser-compatible H.264 with AAC audio instead of remuxing lossless RGB streams, preventing green/magenta playback from image timelines and video upscaling. Preserve source timing and reuse already compatible Eclipse previews.
+- **Docs**
+  - Document both image timeline sources, PIPE connections, framing, per-image/clip blending, global styles, metadata selection and connections to lyric captions and saving.
+
+- **Changed files**
+  - core/video_audio.py
+  - core/video_saving.py
+  - core/save_video_configuration.py
+  - py/RvVideo_SaveData.py
+  - js/eclipse-save-video-state.js
+  - js/eclipse-save-video-form.js
+  - Readme/Save_Video_Data.md
+  - Readme/Lyric_Captions.md
+  - core/audio_timeline.py
+  - core/image_timeline_video.py
+  - core/image_timeline_pipe.py
+  - core/image_timeline_loader.py
+  - core/image_blending.py
+  - core/image_morph.py
+  - core/image_effects.py
+  - core/video_transitions.py
+  - core/video_panel_configuration.py
+  - core/server_endpoints.py
+  - core/operation_panel.py
+  - core/video_loader.py
+  - py/RvImage_BatchExtendWithOverlap.py
+  - py/RvImage_LoadImageTimeline.py
+  - py/RvPipe_IO_ImageTimeline.py
+  - js/eclipse-image-timeline-state.js
+  - js/eclipse-image-timeline-form.js
+  - js/eclipse-image-timeline-panel.js
+  - js/eclipse-image-timeline.css
+  - js/eclipse-panel-run.js
+  - js/eclipse-widget-utils.js
+  - js/eclipse-video-slots.js
+  - js/eclipse-video-playlist.js
+  - js/eclipse-video-panel.js
+  - js/eclipse-operation-state.js
+  - js/eclipse-panel.css
+  - core/video_helpers.py
+  - core/operation_panel_layouts.py
+  - py/RvVideo_ImageTimeline.py
+  - py/RvVideo_Load.py
+  - Readme/Image_Timeline_Video.md
+  - Readme/Load_Video.md
+  - Readme/README.md
+  - pyproject.toml
+
+## 2026-10-23
+
 ### Version: 1.0.10
 
 - **Feat (New)**

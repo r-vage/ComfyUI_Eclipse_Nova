@@ -3,12 +3,18 @@ import { app } from './comfy/index.js';
 import { button, element } from './eclipse-panel-controls.js';
 import { executionTarget } from './eclipse-execution-scope.js';
 
-export function runActions(controller, { stop = false, beforeRun, stopConfig = state => state.config } = {}) {
+export function runActions(controller, {
+    stop = false, beforeRun, runLocally, stopConfig = state => state.config,
+    playText = '▶', playLabel = 'Run to this node',
+    playTooltip = 'Run this node and its required inputs once. Downstream nodes stay idle; Stop does not need to be enabled.',
+} = {}) {
     const actions = element('div', 'en-panel-run-actions');
     actions.setAttribute('role', 'group'); actions.setAttribute('aria-label', 'Execution');
-    const play = button('▶', 'Run to this node', async () => {
+    const play = button(playText, playLabel, async () => {
         if (controller.disposed || controller.invalid || controller.playSubmitting) return;
         try {
+            // A preview with no connected dependencies can finish in the browser.
+            if (runLocally?.() === true) return;
             if (app.processingQueue) throw Error('Another prompt is being submitted. Try again when it has been queued.');
             const id = executionTarget(app.rootGraph ?? app.graph, controller.node);
             controller.playSubmitting = true;
@@ -21,7 +27,7 @@ export function runActions(controller, { stop = false, beforeRun, stopConfig = s
         } finally { controller.playSubmitting = false; sync(); }
     });
     play.dataset.enRun = '';
-    play.title = 'Run this node and its required inputs once. Downstream nodes stay idle; Stop does not need to be enabled.';
+    play.title = playTooltip;
     play.disabled = controller.playSubmitting === true;
     actions.append(play);
     if (stop) {
@@ -32,8 +38,7 @@ export function runActions(controller, { stop = false, beforeRun, stopConfig = s
     }
     function sync() {
         if (controller.disposed) return;
-        const current = controller.root.querySelector('[data-en-run]');
-        if (current) {
+        for (const current of controller.root.querySelectorAll('[data-en-run]')) {
             current.disabled = controller.playSubmitting === true;
             current.setAttribute('aria-busy', String(controller.playSubmitting === true));
         }

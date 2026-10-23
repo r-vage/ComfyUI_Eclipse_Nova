@@ -13,9 +13,15 @@ This is the single Eclipse Nova video saver, registered as
 ![Save Video with Generation Data and its Encoding, Output, Trim and Metadata sections](assets/nova-save-video.png)
 
 The collapsible **Mode** bar contains **Preview** and **Trim**, both enabled by
-default. Disabling Preview still saves the file. Disabling Trim leaves ordinary
+default, and **Audio input**, initially off. Disabling Preview still saves the file. Disabling Trim leaves ordinary
 IMAGE frame and audio lengths unchanged. A single image with audio is always
 held for the complete soundtrack.
+
+Enable **Audio input** to replace native VIDEO's soundtrack with the connected
+AUDIO. It starts at video time zero and preserves the video's duration and frame
+timing: longer audio is trimmed, and shorter audio is padded with silence. Missing
+or invalid replacement audio raises an error. IMAGE and frame-timeline sources
+already use the audio input and keep their existing behavior.
 
 Four collapsible sections keep controls compact. Pin a section to keep it open
 while opening another. Settings, pins and disclosure choices are saved with the
@@ -37,12 +43,14 @@ blend length appears for `loop_match_blend`. Inactive choices remain saved.
 
 Connect the required **images / video** socket. Optional sockets are:
 
-- **audio**: soundtrack for IMAGE or frame-timeline input.
+- **audio**: soundtrack for IMAGE or frame-timeline input; replaces native VIDEO audio when **Audio input** is enabled.
 - **pipe_opt**: generation metadata and output settings.
 - **timing_opt**: exact timing paired with IMAGE frames from [Split Video](Load_Video.md).
 
 The output is a list containing the processed IMAGE frames/batch, frame timeline,
-or original VIDEO. The saved MP4 appears in the resizable preview when enabled.
+or original VIDEO. With **Audio input** enabled for VIDEO, the returned VIDEO
+points to the saved file containing the replacement soundtrack. The saved MP4
+appears in the resizable preview when enabled.
 
 ### Pipe priority
 
@@ -83,14 +91,22 @@ already carry timing and cannot also use `timing_opt`.
 
 ### Native VIDEO
 
-VIDEO retains its soundtrack, dimensions, frame rate and duration, including
-upstream crop or trim. Separate AUDIO and IMAGE trim/loop settings are ignored.
+VIDEO retains its dimensions, frame rate and duration, including upstream crop
+or trim. By default it retains its soundtrack and ignores separate AUDIO.
+**Audio input** replaces that soundtrack, including for silent videos; connect
+the already trimmed audio excerpt that should begin at the video's start.
+IMAGE trim/loop settings are ignored.
 CRF and preset still control H.264 export. Connect one VIDEO; multiple videos or
 mixed IMAGE/VIDEO collections are rejected.
 
 File-backed VIDEO exports stream without collecting the complete frame sequence.
 Source metadata is replaced according to the selected metadata options. Failed
 exports remove partial files while preserving the source.
+
+Audio replacement also streams the encoded video packets and small audio chunks;
+it does not expand the full video into an IMAGE batch. The saved preview and
+VIDEO output use the same replacement soundtrack. An upstream Preview Video
+still plays its own incoming VIDEO, before Save's replacement is applied.
 
 ### Single image with audio
 

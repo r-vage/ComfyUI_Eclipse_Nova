@@ -11,6 +11,23 @@ def section(key, label, rows, **options):
 
 
 LAYOUTS = {
+    "image_timeline": {
+        "bars": [bar("mode", "Transitions", "mode")],
+        "labelled_choices": ["style", "blend_mode"],
+        "sections": [
+            section("video", "Video", [["width", "height"], ["fps", "duration"], ["fit"]]),
+            section("transitions", "Manual transitions", [["manual_transition_times"]], when=["mode", "Manual"]),
+            section("silence", "Quiet-gap alignment", [["transition_edge"], ["search_window_seconds"],
+                                                      ["min_silence_duration", "resume_hold_duration"]], when=["mode", "Silence"]),
+            section("blending", "Blending", [["blend_mode"], ["blend_duration"]]),
+            section("style", "Global style", [["style"], ["style_strength", "style_period"]]),
+        ],
+        "when": {"blend_duration": ["blend_mode", {"not": "cut"}],
+                 "style_strength": ["style", {"not": "off"}],
+                 "style_period": {"all": [["style", {"not": "off"}], ["style", {"not": "cool_desaturated"}]]}},
+        "result": {"index": 0, "label": "Timeline report"},
+        "note": "IO Image Timeline supplies images, audio and overrides. Blend windows preserve the soundtrack's duration.",
+    },
     "audio_align": {
         "bars": [bar("mode", "Mode", "mode", ["align_to_silence"])],
         "sections": [
@@ -125,6 +142,10 @@ LABELS = {
 }
 
 CHOICE_LABELS = {
+    "off": "Off", "cool_desaturated": "Cool desaturated", "ghost_zoom": "Ghost zoom",
+    "light_leak": "Flash / light leak", "block_glitch": "Block glitch", "zoom_blur": "Zoom blur",
+    "dip_to_black": "Dip to black", "pulse_black": "Black pulses", "ghost_edit": "Ghost edit", "glitch_edit": "Glitch edit",
+    "black_pulse_flash": "Black pulse flash",
     "whisper": "Whisper", "qwen3": "Qwen3", "qwen3_compare": "Qwen3 · compare only",
     "align_manual_targets": "Manual", "auto_detect_pauses": "Auto", "source": "Source", "new_images": "New",
     "both": "Both", "disable": "Off", "prefix": "Prefix", "postfix": "Suffix", "shortest": "Shortest",

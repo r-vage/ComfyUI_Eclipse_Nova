@@ -168,9 +168,10 @@ Connect VIDEO directly to **Save Video Data [Eclipse Nova]**, or use **Preview V
 [Eclipse Nova] → Save Video Data [Eclipse Nova]** for review. Preview and Save accept IMAGE or
 VIDEO through their existing `images / video` socket.
 
-VIDEO inputs keep their own soundtrack, frame rate, and duration; the FPS,
-optional AUDIO, and frame trim/loop controls are for IMAGE input. A connected
-separate AUDIO is ignored when VIDEO is selected. Saving honors CRF/preset and
+VIDEO inputs keep their own frame rate and duration; the FPS and frame trim/loop
+controls are for IMAGE input. By default they retain their soundtrack. Save Video's
+**Audio input** button explicitly replaces it with connected AUDIO from time zero,
+trimming excess audio or padding a short track with silence. Saving honors CRF/preset and
 streams file-backed sources without expanding the complete video into tensors. Outputs pass through
 VIDEO for VIDEO input and processed IMAGE frames for IMAGE input. Native Save
 Video is also compatible. **Avoid GetVideoComponents for long videos:** four
@@ -215,6 +216,11 @@ independent types; the destination must support whichever type is selected.
 Preview Video [Eclipse Nova] also accepts both types and ignores separate AUDIO for
 VIDEO input. For a still image held across the complete song, connect the switch
 directly to Save Video with Generation Data.
+
+For a native VIDEO fallback, enable **Audio input** in Save Video to use the
+connected soundtrack even when the loaded clips have muted or different audio.
+This keeps the background video's duration; it does not extend footage to match
+a longer song. The captioned VIDEO already contains the renderer's soundtrack.
 
 ## Transcribing audio without supplied lyrics
 

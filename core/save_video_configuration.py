@@ -13,6 +13,8 @@ FIELDS = [
      "tooltip": "Show the saved video below the controls. Saving remains enabled."},
     {"key": "enable_trim", "label": "Trim", "section": "mode", "default": True,
      "tooltip": "Apply duration trimming or loop matching to IMAGE frames. Native VIDEO and explicit timing keep their source cadence."},
+    {"key": "force_audio", "label": "Audio input", "section": "mode", "default": False,
+     "tooltip": "Replace native VIDEO's soundtrack with the connected AUDIO, starting at video time zero. Requires audio. Keep video duration and timing: trim longer audio, pad shorter audio with silence. IMAGE and frame timelines already use the audio input."},
     {"key": "output_path", "label": "Output path", "section": "output", "default": "", "maxLength": 4096,
      "tooltip": "Empty uses ComfyUI output. Relative folders, absolute destinations and placeholders are supported. Pipe output_path, then path, takes priority."},
     {"key": "filename_prefix", "label": "Filename prefix", "section": "output", "default": "video/ComfyUI_Eclipse_Nova", "maxLength": 4096,
@@ -58,6 +60,9 @@ def validate_configuration(raw):
     if type(config["version"]) is not int or config["version"] != 1:
         raise ValueError("Expected version 1 Save Video configuration.")
     options = config["options"]
+    if isinstance(options, dict):
+        # Saved workflows predating the explicit soundtrack override keep VIDEO audio.
+        options.setdefault("force_audio", False)
     if not isinstance(options, dict) or set(options) != {field["key"] for field in FIELDS}:
         raise ValueError("Save Video options have missing or unsupported fields.")
     for field in FIELDS:

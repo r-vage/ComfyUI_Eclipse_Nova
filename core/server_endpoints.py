@@ -1234,7 +1234,8 @@ class LoadVideoEndpoints:
                 token = media_cancellation.set(job["cancel"])
                 try:
                     return load_playlist(payload["playlist"],
-                                         **{name: payload[name] for name in ("width", "height", "fit", "timing_mode", "fps") if name in payload})[0]
+                                         **{name: payload[name] for name in ("width", "height", "fit", "timing_mode", "fps",
+                                                                           "blend_mode", "blend_duration", "style", "style_strength", "style_period") if name in payload})[0]
                 finally:
                     media_cancellation.reset(token)
 

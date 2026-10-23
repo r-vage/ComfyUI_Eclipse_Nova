@@ -6,6 +6,7 @@ import math
 
 from comfy_api.latest import io
 
+from .image_effects import STYLE_DEFAULTS
 from .operation_panel_layouts import CHOICE_LABELS, LABELS, LAYOUTS
 
 WIDGET_TYPE = "ECLIPSE_NOVA_OPERATION"
@@ -76,6 +77,11 @@ def validate_configuration(raw, spec):
         config = json.loads(raw)
     except (ValueError, RecursionError) as error:
         raise ValueError("Invalid configuration JSON.") from error
+    if (spec["kind"] == "image_timeline" and isinstance(config, dict)
+            and config.get("version") == 1 and config.get("kind") == "image_timeline"
+            and isinstance(config.get("parameters"), dict)):
+        for key, default in STYLE_DEFAULTS.items():
+            config["parameters"].setdefault(key, default)
     if (spec["kind"] == "wan_planner" and isinstance(config, dict)
             and config.get("version") == 1 and config.get("kind") == "wan_planner"
             and isinstance(config.get("parameters"), dict)

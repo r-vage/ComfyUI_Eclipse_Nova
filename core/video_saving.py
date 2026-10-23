@@ -17,7 +17,7 @@ import folder_paths  # type: ignore
 import numpy as np  # type: ignore
 import torch  # type: ignore
 from comfy.cli_args import args  # type: ignore
-from comfy_api.latest import Input, io  # type: ignore
+from comfy_api.latest import Input, InputImpl, io  # type: ignore
 
 from .common import make_comfy_progress
 from .frame_timeline import (
@@ -35,6 +35,7 @@ from .image_helpers import (
 from .logger import log
 from .model_integrity import read_expected, sha256_for
 from .path_helpers import sanitize_output_path
+from .video_audio import replacement_audio
 from .video_helpers import (
     expand_still_image_for_audio,
     export_video_with_metadata,
@@ -842,6 +843,7 @@ class VideoSaver:
         audio: dict[str, Any] | None = None,
         pipe_opt: Any = None,
         timing_opt: Any = None,
+        force_audio: bool = False,
     ) -> io.NodeOutput:
         embed_workflow = bool(unwrap_value(embed_workflow, True))
         save_generation_data = bool(unwrap_value(save_generation_data, True))
@@ -862,6 +864,7 @@ class VideoSaver:
         loop_metric = str(unwrap_value(loop_metric, "ncc"))
         loop_trim_start = bool(unwrap_value(loop_trim_start, False))
         audio = unwrap_value(audio, None)
+        force_audio = bool(unwrap_value(force_audio, False))
         context = _unwrap_pipe(pipe_opt)
         timing = unwrap_value(timing_opt, None)
         if timing is not None and not isinstance(timing, VideoTiming):
@@ -876,8 +879,10 @@ class VideoSaver:
             if timing is not None:
                 raise ValueError("VIDEO already contains timing; timing_opt is for IMAGE input")
             width, height = video.get_dimensions()
+            if force_audio:
+                replacement_audio(audio)
             return self._save(
-                [video], None, float(video.get_frame_rate()), None,
+                [video], None, float(video.get_frame_rate()), audio if force_audio else None,
                 filename_prefix, codec, crf, preset, width, height, context,
                 embed_workflow, save_generation_data, remove_prompts,
                 add_loras_to_prompt, save_workflow_as_json, video=video,
@@ -1086,7 +1091,11 @@ class VideoSaver:
         )
         try:
             if video is not None:
-                export_video_with_metadata(video, output_path, crf=crf, preset=preset, metadata=metadata)
+                export_video_with_metadata(video, output_path, crf=crf, preset=preset,
+                                           metadata=metadata, audio_override=audio)
+                if audio is not None:
+                    # Downstream VIDEO and the saved preview must use the same soundtrack.
+                    images_out = [InputImpl.VideoFromFile(output_path)]
             elif timing is not None:
                 encode_timed_video(images_to_encode, timing, audio, output_path,
                                    width=width, height=height, codec="libx264" if codec == "h264" else codec,

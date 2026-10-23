@@ -9,37 +9,27 @@
 # Originally inspired by KJNodes ImageBatchExtendWithOverlap.
 #
 
-import math
-
-from ..core.operation_panel import OperationPanel
-
-import torch  # type: ignore
-import torch.nn.functional as F  # type: ignore
-
 import comfy.utils  # type: ignore
-
+import torch  # type: ignore
 from comfy_api.latest import io  # type: ignore
+
 from ..core import CATEGORY
+from ..core.image_blending import (
+    BLEND_MODES,
+    BLEND_TOOLTIP,
+    blend_frames,
+    pyramid_blend,
+    resolve_blend_mode,
+)
+from ..core.image_helpers import cat_and_fit_images, flatten_images, unwrap_value
 from ..core.logger import log
-from ..core.image_helpers import unwrap_value, flatten_images, cat_and_fit_images
+from ..core.operation_panel import OperationPanel
 
 _LOG_PREFIX = "ImageBatchExtendWithOverlap"
 
 _OVERLAP_SIDE_OPTIONS = ["source", "new_images", "both"]
 _OVERLAP_MODE_OPTIONS = [
-    "linear_blend",
-    "ease_in_out",
-    "filmic_crossfade",
-    "perceptual_crossfade",
-    "average",
-    "dissolve",
-    "pyramid_blend",
-    "clock_wipe",
-    "clock_wipe_ccw",
-    "wipe_left",
-    "wipe_right",
-    "wipe_top",
-    "wipe_bottom",
+    *BLEND_MODES,
     "cut",
     "concat",
     "match_ncc",
@@ -179,118 +169,6 @@ def _find_cross_batch_match(
     return src_start + best_s, best_n, score
 
 
-def _clock_wipe_mask(
-    n: int,
-    h: int,
-    w: int,
-    device: torch.device,
-    dtype: torch.dtype,
-    clockwise: bool = True,
-) -> torch.Tensor:
-    # Returns a boolean mask [N, H, W, 1] where True = use dst (new image).
-    # For frame i the swept angle threshold goes from 0 to 2π exclusive,
-    # sweeping clockwise (or counter-clockwise) from 12 o'clock.
-    cy = (h - 1) / 2.0
-    cx = (w - 1) / 2.0
-    y = torch.arange(h, device=device, dtype=torch.float32)
-    x = torch.arange(w, device=device, dtype=torch.float32)
-    yy, xx = torch.meshgrid(y, x, indexing="ij")  # [H, W]
-    # atan2(dx, -dy): 0 at top, increases clockwise; result in (-π, π]
-    angle = torch.atan2(xx - cx, cy - yy)
-    angle = (angle + 2 * math.pi) % (2 * math.pi)  # [H, W] in [0, 2π)
-    if not clockwise:
-        angle = (2 * math.pi - angle) % (2 * math.pi)  # flip direction
-    # Per-frame threshold: frame 0 → tiny slice, frame N-1 → almost full circle
-    thresholds = torch.linspace(
-        0, 2 * math.pi, n + 2, device=device, dtype=torch.float32
-    )[
-        1:-1
-    ]  # [N]
-    mask = angle.unsqueeze(0) < thresholds.view(-1, 1, 1)  # [N, H, W]
-    return mask.unsqueeze(-1).to(dtype=torch.bool)  # [N, H, W, 1]
-
-
-def _linear_wipe_mask(
-    n: int,
-    h: int,
-    w: int,
-    device: torch.device,
-    dtype: torch.dtype,
-    direction: str = "left",
-) -> torch.Tensor:
-    # Returns a boolean mask [N, H, W, 1] where True = use dst (new image).
-    # The mask sweeps a hard edge across the frame over N frames:
-    #   left   — edge moves left→right (leftmost column first)
-    #   right  — edge moves right→left (rightmost column first)
-    #   top    — edge moves top→bottom (top row first)
-    #   bottom — edge moves bottom→top (bottom row first)
-    # Threshold goes from 0 to 1 exclusive via linspace; pixels whose normalised
-    # coordinate is less than the threshold belong to dst.
-    thresholds = torch.linspace(0, 1, n + 2, device=device, dtype=torch.float32)[
-        1:-1
-    ]  # [N]
-    if direction in ("left", "right"):
-        coords = (
-            torch.arange(w, device=device, dtype=torch.float32) / w
-        )  # [W] in [0, 1)
-        if direction == "right":
-            coords = 1.0 - coords
-        mask = coords.view(1, 1, w) < thresholds.view(n, 1, 1)  # [N, 1, W]
-        mask = mask.expand(n, h, w)
-    else:  # top / bottom
-        coords = (
-            torch.arange(h, device=device, dtype=torch.float32) / h
-        )  # [H] in [0, 1)
-        if direction == "bottom":
-            coords = 1.0 - coords
-        mask = coords.view(1, h, 1) < thresholds.view(n, 1, 1)  # [N, H, 1]
-        mask = mask.expand(n, h, w)
-    return mask.unsqueeze(-1).to(dtype=torch.bool)  # [N, H, W, 1]
-
-
-def _pyramid_blend(
-    src: torch.Tensor, dst: torch.Tensor, alpha: torch.Tensor, levels: int = 4
-) -> torch.Tensor:
-    # Multi-scale Laplacian pyramid blend.
-    # src, dst: [N, H, W, C]   alpha: [N, 1, 1, 1] in 0..1
-    # Each spatial frequency band is blended independently with the same per-frame alpha,
-    # which produces sharper edges than a plain pixel-level crossfade.
-    src_f = src.float().permute(0, 3, 1, 2)  # NCHW
-    dst_f = dst.float().permute(0, 3, 1, 2)
-
-    def _laplacian(x: torch.Tensor) -> list:
-        gauss = [x]
-        for _ in range(levels - 1):
-            gauss.append(F.avg_pool2d(gauss[-1], kernel_size=2, stride=2, padding=0))
-        lap = []
-        for i in range(levels - 1):
-            up = F.interpolate(
-                gauss[i + 1],
-                size=gauss[i].shape[2:],
-                mode="bilinear",
-                align_corners=False,
-            )
-            lap.append(gauss[i] - up)
-        lap.append(gauss[-1])  # coarsest level stored as-is
-        return lap
-
-    lap_src = _laplacian(src_f)
-    lap_dst = _laplacian(dst_f)
-
-    blended_lap = [(1 - alpha) * ls + alpha * ld for ls, ld in zip(lap_src, lap_dst)]
-
-    result = blended_lap[-1]
-    for lap in reversed(blended_lap[:-1]):
-        result = (
-            F.interpolate(
-                result, size=lap.shape[2:], mode="bilinear", align_corners=False
-            )
-            + lap
-        )
-
-    return result.permute(0, 2, 3, 1).to(src.dtype)  # back to NHWC
-
-
 def _resize_to_match(
     images: torch.Tensor, target_h: int, target_w: int
 ) -> torch.Tensor:
@@ -393,6 +271,7 @@ class RvImage_BatchExtendWithOverlap(OperationPanel, io.ComfyNode):
                         "wipe_right: hard edge sweeps right→left.\n"
                         "wipe_top: hard edge sweeps top→bottom.\n"
                         "wipe_bottom: hard edge sweeps bottom→top.\n"
+                        f"{BLEND_TOOLTIP} Overlap batches estimate motion for each corresponding frame pair.\n"
                         "cut: drops overlap frames — overlap_side=source removes last N from source; overlap_side=new_images removes first N from new_images; overlap_side=both removes last N from source AND first N from new_images simultaneously.\n"
                         "concat: direct concatenation, no frames lost, overlap parameter ignored.\n"
                         "match_ncc / match_mse / match_luminance_mse / match_gradient_mse: scan frames "
@@ -519,7 +398,7 @@ class RvImage_BatchExtendWithOverlap(OperationPanel, io.ComfyNode):
                     )[1:-1]
                     alpha_h = alpha_h.view(-1, 1, 1, 1)
                     if blend_type == "pyramid":
-                        blended_h = _pyramid_blend(blend_src_h, blend_dst_h, alpha_h)
+                        blended_h = pyramid_blend(blend_src_h, blend_dst_h, alpha_h)
                     else:  # linear
                         blended_h = (1 - alpha_h) * blend_src_h + alpha_h * blend_dst_h
                     return io.NodeOutput(
@@ -565,147 +444,15 @@ class RvImage_BatchExtendWithOverlap(OperationPanel, io.ComfyNode):
                     (source_images, new_images[actual_overlap:]), dim=0
                 )
 
-        elif overlap_mode == "clock_wipe":
-            # Clockwise sweep from 12 o'clock: a hard edge rotates across the frame,
-            # gradually replacing src pixels with dst pixels each frame.
-            N, H, W, _C = blend_src.shape
-            mask = _clock_wipe_mask(
-                N, H, W, blend_src.device, blend_src.dtype
-            )  # [N, H, W, 1]
-            blended = torch.where(mask.expand_as(blend_src), blend_dst, blend_src)
-            extended_images = torch.cat((prefix, blended, suffix), dim=0)
-
-        elif overlap_mode == "clock_wipe_ccw":
-            N, H, W, _C = blend_src.shape
-            mask = _clock_wipe_mask(
-                N, H, W, blend_src.device, blend_src.dtype, clockwise=False
-            )
-            blended = torch.where(mask.expand_as(blend_src), blend_dst, blend_src)
-            extended_images = torch.cat((prefix, blended, suffix), dim=0)
-
-        elif overlap_mode in ("wipe_left", "wipe_right", "wipe_top", "wipe_bottom"):
-            N, H, W, _C = blend_src.shape
-            direction = overlap_mode[len("wipe_") :]
-            mask = _linear_wipe_mask(
-                N, H, W, blend_src.device, blend_src.dtype, direction
-            )
-            blended = torch.where(mask.expand_as(blend_src), blend_dst, blend_src)
-            extended_images = torch.cat((prefix, blended, suffix), dim=0)
-
-        elif overlap_mode == "linear_blend":
-            alpha = torch.linspace(
-                0, 1, actual_overlap + 2, device=blend_src.device, dtype=blend_src.dtype
-            )[1:-1]
-            alpha = alpha.view(-1, 1, 1, 1)
-            blended = (1 - alpha) * blend_src + alpha * blend_dst
-            extended_images = torch.cat((prefix, blended, suffix), dim=0)
-
-        elif overlap_mode == "ease_in_out":
-            t = torch.linspace(
-                0, 1, actual_overlap + 2, device=blend_src.device, dtype=blend_src.dtype
-            )[1:-1]
-            eased = 3 * t * t - 2 * t * t * t
-            eased = eased.view(-1, 1, 1, 1)
-            blended = (1 - eased) * blend_src + eased * blend_dst
-            extended_images = torch.cat((prefix, blended, suffix), dim=0)
-
-        elif overlap_mode == "filmic_crossfade":
-            gamma = 2.2
-            alpha = torch.linspace(
-                0, 1, actual_overlap + 2, device=blend_src.device, dtype=blend_src.dtype
-            )[1:-1]
-            alpha = alpha.view(-1, 1, 1, 1)
-            linear_src = torch.pow(blend_src.clamp(min=0), gamma)
-            linear_dst = torch.pow(blend_dst.clamp(min=0), gamma)
-            blended = torch.pow(
-                ((1 - alpha) * linear_src + alpha * linear_dst).clamp(min=0),
-                1.0 / gamma,
-            )
-            extended_images = torch.cat((prefix, blended, suffix), dim=0)
-
-        elif overlap_mode == "perceptual_crossfade":
-            try:
-                import kornia  # type: ignore
-            except ImportError:
-                log.warning(
-                    _LOG_PREFIX,
-                    "kornia is required for perceptual_crossfade — falling back to linear_blend. "
-                    "Install with: pip install kornia",
-                )
-                alpha = torch.linspace(
-                    0,
-                    1,
-                    actual_overlap + 2,
-                    device=blend_src.device,
-                    dtype=blend_src.dtype,
-                )[1:-1]
-                alpha = alpha.view(-1, 1, 1, 1)
-                blended = (1 - alpha) * blend_src + alpha * blend_dst
-                extended_images = torch.cat((prefix, blended, suffix), dim=0)
-            else:
-                alpha = torch.linspace(
-                    0,
-                    1,
-                    actual_overlap + 2,
-                    device=blend_src.device,
-                    dtype=blend_src.dtype,
-                )[1:-1]
-                alpha = alpha.view(-1, 1, 1, 1)
-                src_nchw = blend_src.movedim(-1, 1)
-                dst_nchw = blend_dst.movedim(-1, 1)
-                lab_src = kornia.color.rgb_to_lab(src_nchw)
-                lab_dst = kornia.color.rgb_to_lab(dst_nchw)
-                blended_lab = (1 - alpha) * lab_src + alpha * lab_dst
-                blended_rgb = kornia.color.lab_to_rgb(blended_lab)
-                blended = blended_rgb.movedim(1, -1)
-                extended_images = torch.cat((prefix, blended, suffix), dim=0)
-
-        elif overlap_mode == "average":
-            # Fixed 50/50 blend across all overlap frames — no directional fade.
-            blended = 0.5 * blend_src + 0.5 * blend_dst
-            extended_images = torch.cat((prefix, blended, suffix), dim=0)
-
-        elif overlap_mode == "dissolve":
-            # Per-pixel random selection: at frame i, alpha[i] fraction of pixels come from dst.
-            # Creates a dithered/grain-textured transition instead of a smooth fade.
-            alpha = torch.linspace(
-                0, 1, actual_overlap + 2, device=blend_src.device, dtype=blend_src.dtype
-            )[1:-1]
-            noise = torch.rand(
-                actual_overlap,
-                blend_src.shape[1],
-                blend_src.shape[2],
-                1,
-                device=blend_src.device,
-                dtype=blend_src.dtype,
-            )
-            mask = noise < alpha.view(-1, 1, 1, 1)
-            blended = torch.where(mask, blend_dst, blend_src)
-            extended_images = torch.cat((prefix, blended, suffix), dim=0)
-
-        elif overlap_mode == "pyramid_blend":
-            # Multi-scale Laplacian pyramid blend — each frequency band blended independently.
-            alpha = torch.linspace(
-                0, 1, actual_overlap + 2, device=blend_src.device, dtype=blend_src.dtype
-            )[1:-1]
-            alpha = alpha.view(-1, 1, 1, 1)
-            blended = _pyramid_blend(blend_src, blend_dst, alpha)
-            extended_images = torch.cat((prefix, blended, suffix), dim=0)
-
         elif overlap_mode == "concat":
-            # Direct concatenation — no frame loss, overlap parameter is ignored.
             extended_images = torch.cat((source_images, new_images), dim=0)
 
         else:
-            log.warning(
-                _LOG_PREFIX,
-                f"Unknown overlap_mode '{overlap_mode}', falling back to linear_blend.",
-            )
-            alpha = torch.linspace(
-                0, 1, actual_overlap + 2, device=blend_src.device, dtype=blend_src.dtype
-            )[1:-1]
-            alpha = alpha.view(-1, 1, 1, 1)
-            blended = (1 - alpha) * blend_src + alpha * blend_dst
+            if overlap_mode not in BLEND_MODES:
+                log.warning(_LOG_PREFIX, f"Unknown overlap_mode '{overlap_mode}', falling back to linear_blend.")
+                overlap_mode = "linear_blend"
+            alpha = torch.linspace(0, 1, actual_overlap + 2, device=blend_src.device, dtype=blend_src.dtype)[1:-1]
+            blended = blend_frames(blend_src, blend_dst, alpha.view(-1, 1, 1, 1), resolve_blend_mode(overlap_mode))
             extended_images = torch.cat((prefix, blended, suffix), dim=0)
 
         return io.NodeOutput(extended_images)

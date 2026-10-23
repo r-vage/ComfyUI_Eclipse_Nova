@@ -117,6 +117,7 @@ export function createVideoEditor(node, binding) {
         persist(next); void probeRows();
     }
     const slotEditor = createVideoSlots({
+        effects: binding.effects,
         rows, state: presentation, present, probe: file => probes.get(videoFileKey(file)), update: editRow,
         select(id) { present({ activeId: id, tab: 'source' }); render(); },
         choose(id) { browser.close(); pickerTarget = id; present({ activeId: id, tab: 'source' }); render(); browser.open(); },
@@ -342,7 +343,7 @@ export function createVideoEditor(node, binding) {
         if (cleaned) return;
         cleaned = disposed = true; revision++;
         for (const controller of controllers) controller.abort();
-        controllers.clear(); void releaseJob(); browser.destroy(); unsubscribe();
+        controllers.clear(); void releaseJob(); browser.destroy(); slotEditor.destroy(); unsubscribe();
         window.removeEventListener('pagehide', pageHide);
         stopPlaybackWatch();
         video.pause(); video.removeAttribute('src'); video.load();

@@ -58,7 +58,10 @@ export class SaveVideoForm {
             const notes = {
                 output: 'Pipe output_path (or path) and filename_prefix take priority when present.',
                 encoding: this.source === 'image' ? 'MP4 / H.264. Pipe fps takes priority over local FPS.'
-                    : this.source === 'video' ? 'VIDEO keeps its dimensions, timing and soundtrack.' : 'Source timing sets frame cadence; local and pipe FPS are ignored.',
+                    : this.source === 'video' ? (this.state.config.options.force_audio
+                        ? 'VIDEO keeps its dimensions and timing. The connected AUDIO replaces its soundtrack from time zero; excess audio is trimmed and short audio ends in silence.'
+                        : 'VIDEO keeps its dimensions, timing and soundtrack. Enable Audio input to replace its audio.')
+                        : 'Source timing sets frame cadence; local and pipe FPS are ignored.',
                 trim: this.source === 'timeline' ? 'Exact timelines support duration trimming. Loop matching requires IMAGE frames.' : 'A single image with audio is held for the full audio duration.',
                 metadata: 'Remove prompts affects generation parameters only. Embedded workflows and JSON keep their original text.',
             };

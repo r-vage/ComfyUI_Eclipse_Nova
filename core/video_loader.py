@@ -20,6 +20,8 @@ from comfy.model_management import get_free_memory
 from comfy_api.latest import InputImpl
 from PIL import Image
 
+from .image_blending import validate_blend
+from .image_effects import styled_frames, validate_style
 from .video_helpers import TemporaryVideo
 from .video_metadata import display_parameters, parse_video_parameters
 from .video_timing import (
@@ -29,6 +31,7 @@ from .video_timing import (
     join_timing,
     media_progress,
 )
+from .video_transitions import transition_frames, transition_windows
 
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v", ".mpg", ".mpeg", ".ts"}
 MAX_CLIPS = 128
@@ -112,6 +115,11 @@ def parse_playlist(value, *, allow_empty=False):
             if type(flag) is not bool:
                 raise ValueError(f"{name} must be a boolean")
             item[name] = flag
+        validate_blend(row.get("blend_mode", "inherit"), row.get("blend_duration", 1.0), inherit=True)
+        # Keep older rows unchanged when they contain no transition override.
+        for name in ("blend_mode", "blend_duration"):
+            if name in row:
+                item[name] = row[name]
         if item["use_metadata"]:
             if empty:
                 raise ValueError("An empty video slot cannot supply generation data")
@@ -238,7 +246,7 @@ def _cached_scan(path, version):
     return scan_video(path)
 
 
-def _fit(array, width, height, fit):
+def _fit(array, width, height, fit, *, crop_x=0.5, crop_y=0.5):
     image = Image.fromarray(array)
     if image.size == (width, height):
         return array
@@ -247,7 +255,7 @@ def _fit(array, width, height, fit):
     ratio = (max if fit == "crop" else min)(width / image.width, height / image.height)
     image = image.resize((max(1, round(image.width * ratio)), max(1, round(image.height * ratio))), Image.Resampling.LANCZOS)
     if fit == "crop":
-        left, top = (image.width - width) // 2, (image.height - height) // 2
+        left, top = int((image.width - width) * crop_x), int((image.height - height) * crop_y)
         image = image.crop((left, top, left + width, top + height))
     else:
         canvas = Image.new("RGB", (width, height))
@@ -369,7 +377,10 @@ def _fixed_frames(frames, timing, rate):
             iterator.close()
 
 
-def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", fps=24.0):
+def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", fps=24.0,
+                  blend_mode="cut", blend_duration=1.0, style="off", style_strength=0.5, style_period=2.0):
+    validate_blend(blend_mode, blend_duration)
+    style_settings = validate_style(style, style_strength, style_period)
     rows = parse_playlist(playlist)
     if fit not in ("pad", "crop", "stretch") or timing_mode not in ("source", "fixed"):
         raise ValueError("Invalid fit or timing selection")
@@ -413,27 +424,33 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
     if max(width, height) > 16384:
         raise ValueError("Resolved dimensions exceed 16384")
     timing = join_timing((clip.row["id"], clip.timing) for clip in clips)
+    windows = transition_windows(clips, blend_mode, blend_duration)
     audio_bytes = round(timing.duration * 48000) * 2 * 4
-    key = (tuple((clip.path, file_version(clip.path), clip.row["id"], clip.first, clip.stop, clip.row["mute"]) for clip in clips),
-           width, height, fit, timing_mode, str(fps) if timing_mode == "fixed" else None)
+    key = (tuple((clip.path, file_version(clip.path), clip.row["id"], clip.first, clip.stop, clip.row["mute"],
+                  clip.row.get("blend_mode", "inherit"), clip.row.get("blend_duration", 1.0)) for clip in clips),
+           width, height, fit, timing_mode, str(fps) if timing_mode == "fixed" else None,
+           blend_mode, blend_duration, style, style_strength, style_period)
     cached = _recall_media(key)
     if cached is not None:
         video, encoded_timing = cached
     else:
         # Frames stream to disk; account for joined PCM, one clip and decoder scratch.
-        required_bytes = 2 * audio_bytes + width * height * 12
+        processing_bytes = 192 if any(window["half"] for window in windows) or style != "off" else 12
+        required_bytes = 2 * audio_bytes + width * height * processing_bytes
         available_bytes = get_free_memory(torch.device("cpu"))
         if required_bytes > available_bytes * .8:
             raise ValueError(f"Joining needs about {required_bytes / 2**30:.2f} GiB of RAM for audio and frame processing; {available_bytes / 2**30:.2f} GiB is available. Reduce size/load caps.")
         audio = _playlist_audio(clips)
         encoded_timing = timing
-        frames = _frames_for_clips(clips, width, height, fit)
+        frames = (transition_frames(clips, lambda clip: _frames_for_clips([clip], width, height, fit), windows)
+                  if any(window["half"] for window in windows) else _frames_for_clips(clips, width, height, fit))
         if timing_mode == "fixed":
             if not math.isfinite(float(fps)) or not 1 <= float(fps) <= 240:
                 raise ValueError("Fixed FPS must be between 1 and 240")
             rate = Fraction(str(fps))
             frames = _fixed_frames(frames, timing, rate)
             encoded_timing = VideoTiming.constant(math.ceil(timing.duration * rate), rate)
+        frames = styled_frames(frames, encoded_timing, **style_settings)
         descriptor, path = tempfile.mkstemp(prefix="EclipseLoadVideo_", suffix=".mp4", dir=folder_paths.get_temp_directory())
         os.close(descriptor)
         try:
@@ -445,6 +462,11 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
         _remember_media(key, video, encoded_timing)
     report.append(f"Result: {width}x{height}, fit={fit}, {len(timing)} source frames, {float(timing.duration):.9f}s.")
     report.append("Frames streamed to VIDEO. Audio: first track per file, 48000 Hz stereo; missing or muted intervals are silence.")
+    for index, window in enumerate(windows):
+        if window["half"]:
+            report.append(f"Blend {index + 1}: {window['mode']}, {float(window['cut'] - window['half']):.3f}–{float(window['cut'] + window['half']):.3f}s. Edge frames hold across the cut; duration and audio stay unchanged.")
+    if style != "off":
+        report.append(f"Global style: {style}, strength {style_strength:g}, period {style_period:g}s across the complete playlist.")
     if width % 2 or height % 2:
         report.append(f"Encoded VIDEO pads edges to {width + width % 2}x{height + height % 2} for codec alignment.")
     report.append(f"VIDEO: {timing_mode}, {len(encoded_timing)} frames, {float(encoded_timing.duration):.9f}s.")

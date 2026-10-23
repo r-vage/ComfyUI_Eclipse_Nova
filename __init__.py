@@ -210,6 +210,9 @@ class EclipseExtension(ComfyExtension):
         )
         from .py.RvVideo_SaveData import RvVideo_SaveData
         from .py.RvVideo_Load import RvVideo_Load
+        from .py.RvVideo_ImageTimeline import RvVideo_ImageTimeline
+        from .py.RvPipe_IO_ImageTimeline import RvPipe_IO_ImageTimeline
+        from .py.RvImage_LoadImageTimeline import RvImage_LoadImageTimeline
         from .py.RvVideo_Split import RvVideo_Split
         from .py.RvVideo_Upscale import RvVideo_Upscale
         from .py.RvVideo_FrameConsistency import RvVideo_FrameConsistency
@@ -373,6 +376,9 @@ class EclipseExtension(ComfyExtension):
             RvVideo_TimelineLoopGate,
             RvVideo_SaveData,
             RvVideo_Load,
+            RvVideo_ImageTimeline,
+            RvPipe_IO_ImageTimeline,
+            RvImage_LoadImageTimeline,
             RvVideo_Split,
             RvVideo_Upscale,
             RvVideo_FrameConsistency,

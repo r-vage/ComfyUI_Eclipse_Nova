@@ -12,11 +12,15 @@ import folder_paths
 import torch
 from comfy_api.latest import InputImpl, Types
 
+from .video_audio import ReplacementAudioMuxer, replacement_audio
+from .video_timing import check_media_interrupt
 
-def export_video_with_metadata(video, output_path, *, crf, preset, metadata=None):
+
+def export_video_with_metadata(video, output_path, *, crf, preset, metadata=None, audio_override=None):
     # Export through the public interface to honor lazy trim/crop views. Exporters
     # can inherit source tags or JSON-quote strings, so apply authoritative tags
     # in a packet-only remux. Neither pass collects the decoded frame sequence.
+    audio = replacement_audio(audio_override) if audio_override is not None else None
     directory = os.path.dirname(os.path.abspath(output_path))
     with tempfile.TemporaryDirectory(prefix=".eclipse-video-", dir=directory) as scratch:
         encoded = os.path.join(scratch, "encoded.mp4")
@@ -32,14 +36,29 @@ def export_video_with_metadata(video, output_path, *, crf, preset, metadata=None
                 target.metadata[key] = value if isinstance(value, str) else json.dumps(value)
             streams = {}
             for stream in source.streams:
+                if audio is not None and stream.type == "audio":
+                    continue
                 output = target.add_stream_from_template(stream)
                 output.metadata.clear()
                 streams[stream.index] = output
+            soundtrack = ReplacementAudioMuxer(target, audio) if audio is not None else None
+            picture = source.streams.video[0]
+            duration = (Fraction(picture.duration) * picture.time_base
+                        if picture.duration is not None else None)
+            origin = (picture.start_time or 0) * picture.time_base
+            video_end = Fraction()
             for packet in source.demux():
-                if packet.dts is None:
+                check_media_interrupt()
+                if packet.dts is None or packet.stream.index not in streams:
                     continue
+                if soundtrack is not None and packet.stream.index == picture.index and packet.pts is not None:
+                    video_end = max(video_end, (packet.pts + (packet.duration or 0)) * packet.time_base - origin)
                 packet.stream = streams[packet.stream.index]
                 target.mux(packet)
+                if soundtrack is not None:
+                    soundtrack.write_until(min(video_end, duration) if duration is not None else video_end)
+            if soundtrack is not None:
+                soundtrack.finish(duration if duration is not None else video_end)
         os.replace(remuxed, output_path)
 
 
@@ -92,7 +111,11 @@ def preview_video_file(video):
         fd, path = tempfile.mkstemp(prefix="EclipsePreview_", suffix=".mp4", dir=folder_paths.get_temp_directory())
         os.close(fd)
         try:
-            video.save_to(path, format=Types.VideoContainer.MP4, codec=Types.VideoCodec.H264)
+            # H.264 alone permits native VIDEO to remux RGB/4:4:4 streams, which
+            # browsers can display with green/magenta colors. An explicit CRF
+            # requests a streamed YUV420 encode, also converting PCM to AAC.
+            video.save_to(path, format=Types.VideoContainer.MP4, codec=Types.VideoCodec.H264,
+                          crf=18, preset="veryfast")
             video = TemporaryVideo(path)
         except BaseException:
             TemporaryVideo._remove(path)

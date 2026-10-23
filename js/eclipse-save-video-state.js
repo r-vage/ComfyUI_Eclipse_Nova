@@ -10,6 +10,8 @@ export class SaveVideoState {
         this.config = typeof raw === 'string' ? JSON.parse(raw) : clone(raw);
         this.spec = spec; this.editor = clone(editor);
         const config = this.config;
+        if (config?.options && !Array.isArray(config.options) && typeof config.options === 'object'
+            && !Object.hasOwn(config.options, 'force_audio')) config.options.force_audio = false;
         if (!config || config.version !== 1 || Object.keys(config).length !== 2 || !config.options
             || Array.isArray(config.options) || Object.keys(config.options).length !== spec.fields.length
             || spec.fields.some(field => {

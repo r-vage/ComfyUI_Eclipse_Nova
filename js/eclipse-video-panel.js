@@ -16,7 +16,10 @@ export class VideoState {
     constructor(raw, spec, editor = {}) {
         this.config = typeof raw === 'string' ? JSON.parse(raw) : structuredClone(raw); this.spec = spec;
         const c = this.config, load = spec.kind === 'load';
-        const fields = load ? ['version', 'clips', 'width', 'height', 'fit', 'timing_mode', 'fps'] : ['version', 'fps', 'stop'];
+        if (load && c && !Array.isArray(c)) for (const [key, value] of Object.entries(spec.effect_defaults ?? {})) {
+            if (!Object.hasOwn(c, key)) c[key] = value;
+        }
+        const fields = load ? ['version', 'clips', 'width', 'height', 'fit', 'timing_mode', 'fps', ...Object.keys(spec.effect_defaults ?? {})] : ['version', 'fps', 'stop'];
         const bounded = (value, min, max) => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
         if (!c || Array.isArray(c) || Object.keys(c).length !== fields.length || fields.some(key => !Object.hasOwn(c, key))
             || c.version !== 1 || !bounded(c.fps, 1, load ? 240 : 120)) throw Error('Invalid video configuration.');
@@ -24,6 +27,9 @@ export class VideoState {
             if (!['pad', 'crop', 'stretch'].includes(c.fit) || !['source', 'fixed'].includes(c.timing_mode)
                 || ['width', 'height'].some(key => !bounded(c[key], 0, 16384) || !Number.isInteger(c[key]))
                 || !Array.isArray(c.clips) || c.clips.length > 128) throw Error('Invalid video settings or playlist.');
+            if (spec.effect_defaults && (!spec.blend_modes.includes(c.blend_mode) || !bounded(c.blend_duration, 0, 60)
+                || !spec.style_modes.includes(c.style) || !bounded(c.style_strength, 0, 1)
+                || !bounded(c.style_period, 0.2, 60))) throw Error('Invalid video blend or global style.');
             const ids = new Set(); let metadata = 0;
             for (const row of c.clips) {
                 if (!row || typeof row.id !== 'string' || !row.id || row.id.length > 128 || ids.has(row.id)
@@ -34,11 +40,14 @@ export class VideoState {
                     || ['start_frame', 'load_cap'].some(key => !bounded(row[key], 0, 2 ** 31 - 1) || !Number.isInteger(row[key]))
                     || ['enabled', 'mute', 'use_metadata'].some(key => typeof row[key] !== 'boolean')
                     || (row.use_metadata && (!row.enabled || row.file === null))) throw Error('Invalid video clip.');
+                if (spec.blend_modes && (!['inherit', ...spec.blend_modes].includes(row.blend_mode ?? 'inherit')
+                    || !bounded(row.blend_duration ?? 1, 0, 60))) throw Error('Invalid clip blend.');
                 ids.add(row.id); metadata += Number(row.use_metadata);
             }
             if (metadata > 1) throw Error('Select at most one metadata source.');
         } else if (typeof c.stop !== 'boolean') throw Error('Stop must be enabled or disabled.');
-        this.editor = { barCollapsed: editor.barCollapsed === true, sizeOpen: editor.sizeOpen === true };
+        this.editor = { barCollapsed: editor.barCollapsed === true, sizeOpen: editor.sizeOpen === true,
+            blendOpen: editor.blendOpen === true, styleOpen: editor.styleOpen === true };
     }
     value() { return JSON.stringify(this.config); }
 }
@@ -53,6 +62,7 @@ class VideoForm {
                 playlist: () => JSON.stringify({ version: 1, clips: this.config.clips }),
                 save: clips => controller.edit(state => { state.config.clips = clips; }, false),
                 options: () => this.previewOptions(), measure: () => controller.measure(),
+                effects: controller.spec,
             });
         } else {
             this.preview = attachVideoPreview(controller.node, { sourceType: 'temp' });
@@ -71,6 +81,7 @@ class VideoForm {
     previewOptions() {
         const result = { width: this.config.width, height: this.config.height, fit: this.config.fit,
             timing_mode: this.config.timing_mode, fps: this.config.fps };
+        for (const key of Object.keys(this.controller.spec.effect_defaults ?? {})) result[key] = this.config[key];
         for (const name of ['width', 'height', ...(result.timing_mode === 'fixed' ? ['fps'] : [])]) {
             if (!this.connected(name)) continue;
             const value = numericInputValue(this.controller.node, name);
@@ -89,6 +100,7 @@ class VideoForm {
         if (this.load) {
             if (this.config.timing_mode === 'fixed' && !this.state.editor.barCollapsed) this.number(bar, 'fps', 'FPS', 1, 240, 0.1);
             this.sizeSection(this.controls);
+            if (this.controller.spec.effect_defaults) this.effectSections(this.controls);
         } else if (!this.sourceTimed()) {
             const grid = element('div', 'en-panel-grid'); this.number(grid, 'fps', 'FPS', 1, 120, 0.1); this.controls.append(grid);
         } else this.controls.append(element('div', 'en-panel-note', 'Source timing and dimensions are retained.'));
@@ -140,6 +152,47 @@ class VideoForm {
             body.append(grid, fit, element('div', 'en-panel-note', '0 = automatic. Connected width/height override local values.')); section.append(body);
         }
         parent.append(section); this.syncSummaries();
+    }
+    effectSections(parent) {
+        const spec = this.controller.spec;
+        for (const [key, title, summary] of [['blend', 'Blending', this.config.blend_mode], ['style', 'Global style', this.config.style]]) {
+            const open = this.state.editor[`${key}Open`], section = element('section', 'en-panel-section');
+            section.setAttribute('aria-label', title);
+            const header = element('div', 'en-panel-section-header');
+            const toggle = button('', title, () => this.controller.edit(state => { state.editor[`${key}Open`] = !open; }));
+            toggle.className = 'en-panel-section-toggle'; toggle.setAttribute('aria-expanded', String(open));
+            toggle.append(element('span', 'en-panel-section-label', `${open ? '▾' : '▸'} ${title}`),
+                element('span', 'en-panel-summary', this.effectLabel(summary)));
+            header.append(toggle); section.append(header);
+            if (open) {
+                const body = element('div', 'en-panel-section-body'), grid = element('div', 'en-panel-grid');
+                if (key === 'blend') {
+                    this.choice(body, 'blend_mode', 'Default blend', spec.blend_modes, spec.blend_tooltips);
+                    if (this.config.blend_mode !== 'cut') this.number(grid, 'blend_duration', 'Blend seconds', 0, 60, 0.1);
+                    body.append(grid, element('div', 'en-panel-note', 'Default for clips set to Use global blend. Edge-frame fades keep clip lengths and audio timing; short clips shorten the fade.'));
+                } else {
+                    this.choice(body, 'style', 'Style', spec.style_modes);
+                    if (this.config.style !== 'off') {
+                        this.number(grid, 'style_strength', 'Style strength', 0, 1, 0.1);
+                        if (this.config.style !== 'cool_desaturated') this.number(grid, 'style_period', 'Style period (seconds)', 0.2, 60, 0.1);
+                    }
+                    body.append(grid, element('div', 'en-panel-note', spec.style_tooltip));
+                }
+                section.append(body);
+            }
+            parent.append(section);
+        }
+    }
+    effectLabel(value) { return String(value).replaceAll('_', ' ').replace(/^./, c => c.toUpperCase()); }
+    choice(parent, key, title, options, tips = {}) {
+        const label = element('label', 'en-panel-field'), select = element('select');
+        label.append(element('span', '', title)); select.setAttribute('aria-label', title);
+        for (const value of options) {
+            const option = element('option', '', this.effectLabel(value)); option.value = value; option.title = tips[value] ?? ''; select.append(option);
+        }
+        select.value = this.config[key]; select.title = tips[select.value] ?? (key === 'style' ? this.controller.spec.style_tooltip : title);
+        select.onchange = () => this.change(state => { state.config[key] = select.value; });
+        label.append(select); parent.append(label);
     }
     number(parent, key, title, min, max, step) {
         const label = element('label', 'en-panel-field'), input = element('input'), linked = this.connected(key);
