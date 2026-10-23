@@ -1,9 +1,11 @@
 # Eclipse Nova visual tour
 
-These screenshots show the current **1.0.0** panels in a running ComfyUI 0.38.0
-with frontend 1.53.10. Most use **Amber**, the yellow-gold theme used throughout
-this tour. **Neutral is the default.** The media examples use small sample
-files; model-dependent controls are shown without loading models.
+These screenshots capture real panels in running ComfyUI. The Load Video and
+Load Image Timeline scenes use ComfyUI **0.42.1** with frontend **1.55.18**;
+earlier scenes were captured with 0.38.0 and frontend 1.53.10. Most use **Amber**,
+the yellow-gold theme used throughout this tour. **Neutral is the default.**
+The media examples use small sample files; model-dependent controls are shown
+without loading models.
 
 Open an image to inspect it at full size. Each section links to the guide with
 settings, inputs and workflow examples.
@@ -12,7 +14,7 @@ settings, inputs and workflow examples.
 
 The same panel works in classic canvas and Nodes 2.0. Collapsible bars show the
 active choices, section pins keep selected groups open, and the node size bounds
-resizable text and previews. [Node designs](Node_Design.md) covers all five
+resizable text and previews. [Node designs](Node_Design.md) covers the
 bundled palettes and custom JSON themes.
 
 ![Jade String Multiline panel in classic canvas](assets/nova-design-jade.png)
@@ -94,10 +96,22 @@ adds encoding, trim and loop controls for video output.
 ## Work with audio and video
 
 [Load Video](Load_Video.md) places editable clip slots beside a player. Each clip
-has its own start, frame cap, audio and metadata choices. Source timing retains
-original timestamps; Fixed FPS resamples onto one frame grid.
+has its own trim, audio, metadata and transition choices. Shared Blending supplies
+defaults; Global style affects the complete output. Source timing retains original
+timestamps; Fixed FPS resamples onto one frame grid. Build the joined preview to
+review trims and effects together.
 
-![Load Video with a selected clip, trim settings and source preview](assets/nova-load-video.png)
+![Load Video with per-clip blends, Global style and a joined preview](assets/nova-load-video.png)
+
+[Load Image Timeline](Image_Timeline_Video.md#load-image-timeline) adds images
+directly as reorderable slots. Set each crop and outgoing blend, refresh the shared
+canvas, and optionally select one image's generation metadata. Its PIPE retains
+these choices through IO Image Timeline into the video renderer.
+
+![Load Image Timeline with ordered image slots, crop controls and Update previews](assets/nova-load-image-timeline.png)
+
+The [full image timeline tour](Image_Timeline_Video.md#load-image-timeline) also
+shows metadata selection and the connected loader → IO → renderer flow.
 
 [Load Audio](Load_Audio.md) auditions files or incoming audio and accepts start
 and duration overrides. [Lyric Captions](Lyric_Captions.md) keeps full-song

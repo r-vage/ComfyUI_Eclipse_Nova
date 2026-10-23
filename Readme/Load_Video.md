@@ -87,7 +87,7 @@ refresh the preview. The adjacent **×** stops the current execution immediately
 
 ## Visual tour
 
-![Load Video with an editable clip slot on the left and its source preview on the right](assets/nova-load-video.png)
+![Load Video with editable clip trims and blends, Global style controls and the joined preview](assets/nova-load-video.png)
 
 ### Direct video upscaling with Eclipse
 
@@ -263,6 +263,8 @@ pixels are not bit-identical: VIDEO is encoded, and a saver can encode it again.
 Use the streaming Upscale Video route for longer videos. Joined previews also
 render at the configured size.
 
-The initial scope is hard joins of up to 128 videos. It does not include
-transitions, motion interpolation, speed changes, multiple soundtrack mixing,
-remote URL downloads, or image slideshows. Original source files are unchanged.
+Playlists support up to 128 videos, with optional transitions and global styles.
+Motion interpolation, speed changes, multiple soundtrack mixing and remote URL
+downloads are not included. For still-image sequences, use
+[Load Image Timeline and Image Timeline Video](Image_Timeline_Video.md#load-image-timeline).
+Original source files are unchanged.

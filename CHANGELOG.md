@@ -2,6 +2,23 @@
 
 ## 2026-10-23
 
+### Version: 1.0.12
+
+- **Docs**
+  - Refresh the Load Video visual tour with per-clip blends, shared blending, Global style and a rendered joined preview. Remove the outdated hard-joins-only limitation.
+  - Add an annotated Load Image Timeline tour covering image slots, crop previews, per-image transitions, selected generation metadata and the connected PIPE flow into IO Image Timeline and its renderer. Link the scenes from the main visual tour and identify their capture versions.
+- **Changed files**
+  - Readme/Visual_Tour.md
+  - Readme/Load_Video.md
+  - Readme/Image_Timeline_Video.md
+  - Readme/assets/nova-load-video.png
+  - Readme/assets/nova-load-image-timeline.png
+  - Readme/assets/nova-load-image-timeline-metadata.png
+  - Readme/assets/nova-load-image-timeline-pipe.png
+  - pyproject.toml
+
+## 2026-10-23
+
 ### Version: 1.0.11
 
 - **Feat (New)**

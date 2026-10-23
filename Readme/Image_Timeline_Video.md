@@ -39,16 +39,32 @@ The **Global style** section changes the complete sequence, including a single h
 
 ## Load Image Timeline
 
+### Arrange, crop and blend
+
+![Load Image Timeline visual tour: add and reorder images, refresh dimensions, crop each image and choose its outgoing blend](assets/nova-load-image-timeline.png)
+
 Use **+ Image**, then browse the input/output image folders or upload a file. Drop one or several image files into the left-hand list to append new slots in drop order. Dropping onto the preview replaces the selected image with the first file and adds any remaining files as new slots. Drag the handles or use the arrows to reorder. The mouse wheel scrolls the file list while hovered, including at its edges, without zooming the canvas. Disable slots to keep them for later; removing a slot does not delete its file. Empty slots are ignored. Each slot loads one still frame, including animated image files.
 
 New image slots default to **Crop**, centered horizontally and vertically. Expand **Image settings** to choose Pad, Crop, Stretch or the renderer's fit setting. Crop has independent left/center/right and top/center/bottom positions. The preview uses the local canvas; connected width/height values take priority when executed. With inherited fit, the preview shows Pad until the renderer applies its choice. The slot's **Blend to next** and **Blend seconds** apply to the next enabled image. The last image's outgoing blend is unused. Choose **Use timeline setting** to inherit the renderer's blend and duration.
 
 The shared **Update previews** button refreshes the canvas for all image crops while keeping the selected image. With neither size input connected, it updates locally without queueing a workflow. When width or height is connected, one partial run resolves those inputs and loads the enabled images; downstream rendering stays idle. The size label shows whether each dimension comes from an input or the local controls. A connected input returning None falls back to its local value. Changing local dimensions or crop positions immediately updates the preview using the last retrieved input values. Click Update previews again after changing upstream dimensions. Editing crop controls or dropping files does not automatically queue the workflow. The loader is a preview output node, so it also participates in normal queues even without a downstream connection.
 
-The selected slot appears on the right. **Image metadata** reads its generation settings on demand. Enable **Use metadata** for one image and select the sampler settings, positive prompt, negative prompt and seed groups to include in the output PIPE. Choosing a different metadata source disables the previous source. Metadata is not automatically changed at each transition, and image files are never modified. Exact 64-bit seeds are preserved.
+### Select generation metadata
+
+![Load Image Timeline visual tour: choose one metadata source and select sampler, prompt and seed groups for the output PIPE](assets/nova-load-image-timeline-metadata.png)
+
+The selected slot appears on the right. **Image metadata** reads its generation settings on demand. Enable **Use metadata** for one image and select the sampler settings, positive prompt, negative prompt and seed groups to include in the output PIPE. Choosing a different metadata source disables the previous source. Metadata is not automatically changed at each transition, and image files are never modified. Exact 64-bit seeds are preserved. The screenshot uses sample metadata to demonstrate the group selection.
+
+### Keep per-image settings in the PIPE
+
+![Connected Load Image Timeline, IO Image Timeline and Image Timeline Video nodes with guidance on preserving image settings and adding audio](assets/nova-load-image-timeline-pipe.png)
+
+Connect **Load Image Timeline → pipe → IO Image Timeline → pipe → Image Timeline Video**. Add the soundtrack to the IO's **audio** input, leaving its **images** input disconnected. The renderer controls when images change; its blend settings apply only to slots set to **Use timeline setting**. Connect another IO after the renderer to extract the completed **video** for captions or saving.
 
 The loader's canvas settings determine a common output size without resizing the source images. Cropping and blending happen during rendering. Its additional **images** output contains the original ordered images; use its **pipe** output to retain per-image options. Passing the same ordered images into an IO again preserves their options. Replacing, reordering or processing the images clears inherited per-image crop/blend settings to avoid applying them to the wrong images.
 
-The report also appears in a collapsible section. The JSON plan includes image intervals and actual blend windows. Frames cover the audio through its end; the last frame can extend the video by less than one frame, with silence beyond the excerpt. The temporary video uses lossless RGB8 and retains the original soundtrack. Fitted images and blends stream to disk, retaining only the active image pair instead of a full decoded video batch. The cached VIDEO owns the temporary file.
+## Rendering and outputs
+
+The renderer's report also appears in a collapsible section. The JSON plan includes image intervals and actual blend windows. Frames cover the audio through its end; the last frame can extend the video by less than one frame, with silence beyond the excerpt. The temporary video uses lossless RGB8 and retains the original soundtrack. Fitted images and blends stream to disk, retaining only the active image pair instead of a full decoded video batch. The cached VIDEO owns the temporary file.
 
 For captions, unpack **video** with IO Image Timeline and connect it to **IO Lyric Captions → background**, together with the original audio and reviewed lyrics/timing. Use the same FPS and canvas size on both nodes. For an export without captions, connect the unpacked **video → Save Video** directly. Save Video performs the final delivery encode.
