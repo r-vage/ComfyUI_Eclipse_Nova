@@ -205,6 +205,10 @@ With **Image Selector** and **Slice & Dice**, connect the original, complete ima
 list or batch to Slice & Dice, and connect only the selector's `indices` output
 to its `indices` input. Feed the original prompt and conditioning lists into the
 matching Slice & Dice inputs. Use its selected image and text outputs downstream.
+Connect the original sampler or loader PIPE list to Slice & Dice's `pipe` input
+as well. Its `pipe` output follows the same selection, including multiple images
+generated per sampler run. Extract the save settings from this selected output,
+then combine them with the selected prompts in IO Generation Data.
 Feeding the selector's already selected images into Slice & Dice applies the
 original indices twice and can duplicate or reorder images.
 
@@ -212,14 +216,23 @@ original indices twice and can duplicate or reorder images.
 decoded images ─┬─→ Image Selector ── indices ─→ Slice & Dice
                 └──────────────── image_list ─→ Slice & Dice
 original positive/negative lists ─ pos_txt/neg_txt ─→ Slice & Dice
+original sampler/loader pipes ───────────── pipe ─→ Slice & Dice
 
 Slice & Dice: image_list ─→ image processing ─→ Save Images: images
+Slice & Dice: pipe ─→ extract selected sampler settings ─→ IO Generation Data
 Slice & Dice: pos_txt/neg_txt ─→ IO Generation Data ─→ Save Images: pipe_opt
 ```
 
 Keep both branches in the same order through any later processing. Each saved
 PNG contains its own generation parameters; embedded workflow data still contains
 the complete workflow for reloading.
+
+Do not mix selected prompts with an unsliced list of sampler settings. ComfyUI
+maps IO Generation Data over its longest input list and repeats the last value
+from shorter inputs. A larger selection can therefore hide the mismatch, while
+a smaller selection produces more metadata pipes than images. Selecting the
+settings alongside the images preserves both their counts and their association
+when confirming a different subset or disabling later detailers.
 
 A connected empty positive or negative prompt remains a blank string for each
 selected image. This includes an empty-string branch passed through Any

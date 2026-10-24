@@ -2,6 +2,19 @@
 
 ## 2026-10-24
 
+### Version: 1.0.15
+
+- **Fix**
+  - Keep generation-data pipes aligned with selected images by adding an optional PIPE input/output to IO Slice & Dice. Map each selection to its source sampler batch, preserve selection order across reruns, and reject ambiguous batch counts. Document selecting sampler settings alongside prompts to prevent mismatched save counts or metadata repeated from unrelated images.
+- **Changed files**
+  - core/selection_metadata.py
+  - py/RvPipe_IO_SliceDice.py
+  - Readme/Batch_Selection_Slice_Dice.md
+  - Readme/Save_Images.md
+  - pyproject.toml
+
+## 2026-10-24
+
 ### Version: 1.0.14
 
 - **Feat**

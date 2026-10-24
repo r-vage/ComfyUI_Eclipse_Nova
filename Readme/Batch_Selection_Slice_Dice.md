@@ -86,14 +86,25 @@ Connect the workflow as follows:
 | Load Files From Folder | `files` | IO Slice & Dice | `filenames` |
 | IO Slice & Dice | `image` | Image Preview | `images` |
 
-IO Slice & Dice accepts optional image batches, image lists, latents, positive and negative conditioning, prompt text, and filenames. Every connected value is mapped through the same ordered indices. Its main image forms are:
+IO Slice & Dice accepts optional image batches, image lists, latents, positive and negative conditioning, prompt text, filenames and generation-data pipes. Every connected value is mapped through the same ordered indices. Its main image forms are:
 
 - `image`: one stacked image batch, convenient for ordinary IMAGE inputs.
 - `image_list`: the selected items as a list for list-aware nodes.
 - `filenames`: the matching selected source paths.
 - `indices`: the original decision passed through for another branch.
+- `pipe`: generation-data records in the same order as the selected images.
 
 When only `image_list` is connected, the node also constructs the stacked `image` output. List-aware branches retain each loader result as an individual image. The stacked `image` output fits differing shapes to one batch geometry when that representation is needed.
+
+Connect the complete sampler or loader PIPE list to `pipe` before selection.
+One pipe broadcasts to every selected image. Multiple pipes can describe one
+image each or one original batch each: the node uses source batch lengths or the
+images carried by sampler pipes, including unequal batches. Metadata-only pipes
+can also describe equally sized batches when the complete image count is known.
+An ambiguous count raises an error instead of guessing. PIPE fields remain the
+original generation records; use the separate image and latent outputs for
+selected media. Extract sampler settings from the selected pipes for saving,
+so changing the selection does not leave the metadata list at its old length.
 
 ### Example consumer: Save Prompt
 

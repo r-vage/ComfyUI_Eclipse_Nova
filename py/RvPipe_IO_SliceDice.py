@@ -1,10 +1,11 @@
 import torch  # type: ignore
-
 from comfy_api.latest import io  # type: ignore
+
 from ..core import CATEGORY
-from ..core.logger import log
-from ..core.image_helpers import flatten_images, cat_and_fit_images, prepare_image_output
 from ..core.batch_helpers import conditioning_samples, split_latent
+from ..core.image_helpers import cat_and_fit_images, flatten_images, prepare_image_output
+from ..core.logger import log
+from ..core.selection_metadata import select_generation_pipes
 
 _LOG_PREFIX = "PipeSlicer"
 
@@ -19,7 +20,7 @@ class RvPipe_IO_SliceDice(io.ComfyNode):
             display_name="IO Slice & Dice",
             category=CATEGORY.MAIN.value + CATEGORY.PIPE.value,
             description=(
-                "Slice and dice any connected inputs (images, latents, conditionings, texts, filenames) "
+                "Slice and dice any connected inputs (images, latents, conditionings, texts, filenames, generation-data pipes) "
                 "based on the incoming list of indices. Also passes the indices downstream."
             ),
             inputs=[
@@ -32,6 +33,7 @@ class RvPipe_IO_SliceDice(io.ComfyNode):
                 io.String.Input("pos_txt", force_input=True, tooltip="Optional positive text.", optional=True),
                 io.String.Input("neg_txt", force_input=True, tooltip="Optional negative text.", optional=True),
                 io.String.Input("filenames", force_input=True, tooltip="Optional filename list.", optional=True),
+                io.Custom("PIPE").Input("pipe", optional=True, tooltip="Original generation-data pipes in source image order. One per image or source batch; one pipe applies to all images. Connect the full image list so batch records map correctly."),
             ],
             outputs=[
                 io.Custom("LIST").Output(
@@ -62,6 +64,7 @@ class RvPipe_IO_SliceDice(io.ComfyNode):
                 io.String.Output(
                     "filenames", is_output_list=True, tooltip="Sliced filename list."
                 ),
+                io.Custom("PIPE").Output("pipe", is_output_list=True, tooltip="Generation-data records in selected image order. Original PIPE fields remain intact; use image/image_list and latents outputs for selected media."),
             ],
             is_input_list=True,
         )
@@ -78,6 +81,7 @@ class RvPipe_IO_SliceDice(io.ComfyNode):
         pos_txt=None,
         neg_txt=None,
         filenames=None,
+        pipe=None,
     ):
         # try:
         #     with open("/mnt/data/AI/custom_nodes/comfyui_eclipse/slicer_debug.log", "a") as f:
@@ -239,8 +243,12 @@ class RvPipe_IO_SliceDice(io.ComfyNode):
                 "No valid indices found — passing empty/none outputs.",
             )
             return io.NodeOutput(
-                parsed_indices, None, [None], [None], [None], [None], [None], [None], [None]
+                parsed_indices, None, [None], [None], [None], [None], [None], [None], [None], [None]
             )
+
+        selected_pipes = select_generation_pipes(
+            pipe, parsed_indices, image_list if image_list is not None else image,
+        ) if pipe is not None else [None]
 
         # Calculate total batch size from all connected inputs to determine the expansion factor.
         sizes = []
@@ -468,4 +476,5 @@ class RvPipe_IO_SliceDice(io.ComfyNode):
             pos_txt_out,
             neg_txt_out,
             filenames_out,
+            selected_pipes,
         )
