@@ -22,6 +22,7 @@ from .lyric_animation import (
     ROTATION_AXES,
     caption_schedule,
     place_captions,
+    split_caption_lines,
 )
 from .lyric_appearance import CaptionAppearance, CaptionRaster
 from .lyric_timing import audio_data
@@ -391,6 +392,7 @@ def render_video(
     fade_out=0.5,
     min_display=0.7,
     max_words=4,
+    line_max_words=0,
     max_simultaneous=5,
     seed=42,
     time_offset=0,
@@ -404,6 +406,12 @@ def render_video(
         raise ValueError("Select a supported caption mode.")
     if mode in ROTATING_MODES and rotation_axis not in ROTATION_AXES:
         raise ValueError("Select Turning sign or Flipping card for the rotation axis.")
+    warnings = []
+    if mode not in ("floating-words", "rotating-words"):
+        if line_max_words and any(line["start"] is not None and len(line["text"].split()) > line_max_words
+                                  and not any(word["start"] is not None for word in line["words"]) for line in lines):
+            warnings.append("Lines without word timings stay whole even with Max words enabled.")
+        lines = split_caption_lines(lines, line_max_words)
     waveform, rate = audio_data(audio)
     duration = waveform.shape[-1] / rate
     if (
@@ -457,7 +465,6 @@ def render_video(
             )
             floating = FloatingOverlays(placements, layouts, fonts, colors, outline_width, appearance)
     count = math.ceil(duration * fps)
-    warnings = []
     if mode == "active-word" and any(not x["words"] for x in lines):
         warnings.append("Lines without usable word timings remain visible without word highlighting.")
     mixed = {

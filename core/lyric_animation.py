@@ -36,13 +36,13 @@ class CaptionEvent:
         return min(incoming, outgoing)
 
 
-def _word_phrases(line, min_display, max_words):
+def _timed_units(line):
     # Use exact source slices. Untimed text belongs to the closest neighboring
     # timed unit by character distance, never to an invented timestamp.
     text = line["text"]
     timed = [w for w in line["words"] if w["start"] is not None]
     if not timed:
-        return [(text, line["start"], line["end"])]
+        return []
     boundaries = [0]
     for previous, following in pairwise(timed):
         left, right = previous["char_end"], following["char_start"]
@@ -62,6 +62,14 @@ def _word_phrases(line, min_display, max_words):
     # Accepted sentence edges may extend beyond the first/last timed word.
     units[0] = (*units[0][:2], line["start"], units[0][3])
     units[-1] = (*units[-1][:3], line["end"])
+    return units
+
+
+def _word_phrases(line, min_display, max_words):
+    text = line["text"]
+    units = _timed_units(line)
+    if not units:
+        return [(text, line["start"], line["end"])]
     phrases = []
     first, last, start, end = units[0]
     for a, b, next_start, next_end in units[1:]:
@@ -76,6 +84,51 @@ def _word_phrases(line, min_display, max_words):
             phrases.append((text[first:last].strip(), start, end))
             first, last, start, end = a, b, next_start, next_end
     phrases.append((text[first:last].strip(), start, end))
+    return phrases
+
+
+def _caption_slice(line, first, last, start, end):
+    text = line["text"]
+    first += len(text[first:last]) - len(text[first:last].lstrip())
+    last = first + len(text[first:last].rstrip())
+    result = dict(line, text=text[first:last], start=start, end=end)
+    for key in ("words", "unaligned"):
+        if key in line:
+            result[key] = [
+                dict(word, text=text[max(first, word["char_start"]):min(last, word["char_end"])],
+                     char_start=max(first, word["char_start"]) - first,
+                     char_end=min(last, word["char_end"]) - first)
+                for word in line[key] if word["char_start"] < last and word["char_end"] > first
+            ]
+    return result
+
+
+def split_caption_lines(lines, max_words=0):
+    # Display-only slices: source timing/lyrics remain untouched for correction,
+    # export and reuse. Zero preserves full lines, including older workflows.
+    if type(max_words) is not int or max_words < 0:
+        raise ValueError("Max words must be a non-negative integer (0 keeps full lines).")
+    if not max_words:
+        return lines
+    phrases = []
+    for index, line in enumerate(lines):
+        text = line["text"]
+        units = _timed_units(line) if line["start"] is not None else []
+        if len(text.split()) <= max_words or len(units) < 2:
+            phrases.append(line)
+            continue
+        first, last, start, _ = units[0]
+        source = dict(line, source_line=line.get("source_line", index + 1))
+        for a, b, next_start, _ in units[1:]:
+            # A recognizer can split one written word across several tokens.
+            # Never cut such tokens or invent timing for an untimed passage.
+            boundary = text[a - 1:a].isspace() or text[a:a + 1].isspace()
+            if len(text[first:b].split()) > max_words and boundary and next_start > start:
+                phrases.append(_caption_slice(source, first, last, start, next_start))
+                first, last, start = a, b, next_start
+            else:
+                last = b
+        phrases.append(_caption_slice(source, first, last, start, line["end"]))
     return phrases
 
 

@@ -123,11 +123,13 @@ def render_captions(
     lines = shifted_lines(data, clip_duration, actual_start, timing_adjustment)
     log.msg("RenderLyricCaptions", f"Full audio: {full_duration:.3f}s; output: {clip_duration:.3f}s; sample-boundary start: {actual_start:.6f}s; analysis: {report['analysis_source']}; cache hit: {report['cache_hit']}.")
     animated = settings.get("mode", "floating-words") in ANIMATED_MODES
+    full_schedule = animated or settings.get("line_max_words", 0) > 0
     # Schedule against untouched full-song times. SRT alone uses clipped
-    # intervals; even an outgoing fade from before the trim keeps its phase.
+    # intervals; fades keep their phase and line splits keep their boundaries
+    # even when the trim starts halfway through a displayed phrase.
     video, warnings = render_video(
-        clipped, caption_lines(data) if animated else lines,
-        time_offset=actual_start - timing_adjustment if animated else 0,
+        clipped, caption_lines(data) if full_schedule else lines,
+        time_offset=actual_start - timing_adjustment if full_schedule else 0,
         background=background, **settings,
     )
     coverage = timing_coverage(data["lines"])

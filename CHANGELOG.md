@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-24
+
+### Version: 1.0.14
+
+- **Feat**
+  - Add Max words to both lyric-caption panels for Whole line, Active word, Float lines and Rotate lines. Show long lines as successive phrases using existing word timings, preserving active-word highlighting and phrase boundaries across trims. Zero keeps complete lines in existing workflows; original lyrics, SRT and timing JSON remain available for correction and reuse.
+- **Changed files**
+  - core/lyric_animation.py
+  - core/lyric_caption_configuration.py
+  - core/lyric_captions.py
+  - core/lyric_render.py
+  - js/eclipse-caption-form.js
+  - js/eclipse-caption-state.js
+  - Readme/Lyric_Captions.md
+  - pyproject.toml
+
 ## 2026-10-23
 
 ### Version: 1.0.13

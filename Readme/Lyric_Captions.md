@@ -83,6 +83,8 @@ standard canvas and Nodes 2.0.
   4096 pixels; FPS supports 1–120, including fractional rates.
 - **Text & font** provides searchable font selection, font size, color pickers,
   outline and transparency. Active-word color appears in active-word mode.
+  **Max words** splits long lines into successive timed phrases in Whole line,
+  Active word, Float lines and Rotate lines; **0** keeps the complete line.
 - **Placement**, **Animation** and **Glow** expose the settings used by the
   selected mode. Hidden controls retain their values. Pin a section to keep it
   open while editing another.
@@ -544,13 +546,38 @@ Excessive glow settings are still rejected before allocating large effect raster
 Glow is prepared once per active caption shape, reused through highlights and
 fades, and released when that caption ends.
 
+## Shorter phrases from long lines
+
+In **Text & font**, set **Max words** (`line_max_words`) to limit how much of a
+lyric line appears at once. For example, **4** divides a twelve-word line into
+three successive phrases. Each next phrase appears at its first timed word, so
+the text can keep a larger font instead of squeezing the entire sentence across
+the frame. The setting supports **0–50**; **0** is the default and keeps full lines
+in existing workflows.
+
+This applies to **Whole line**, **Active word**, **Float lines** and **Rotate
+lines** in both caption nodes. Active-word highlighting follows the word inside
+the current phrase. Rotate lines turns each phrase and changes to the next one
+at its sung onset. Float lines retains its fade and simultaneous-item settings.
+The word modes retain their separate **Words per phrase** setting under Animation,
+which groups fast words according to Minimum hold.
+
+The renderer uses existing word timings: it does not transcribe again or divide
+a sentence evenly in time. Untimed text stays attached to nearby timed words;
+an indivisible timed span or a line with only sentence timing may exceed the
+limit. No words are discarded. Phrase boundaries are set before trimming, so a
+clip starting midway through a line shows the same phrase as the full render.
+SRT, cleaned lyrics and timing JSON retain their original lines for correction
+and downstream reuse.
+
 ## Floating captions
 
 Select **Floating words** (`floating-words`) or **Floating lines**
 (`floating-lines`) in `mode`. The existing `whole-line` and `active-word` modes
 remain available. Floating words combines quickly sung words into short phrases;
 slower words can appear individually. Floating lines moves the complete original
-line. Both use the selected font, text color, outline and background.
+line, or its successive phrases when **Max words** is enabled. Both use the
+selected font, text color, outline and background.
 
 Untimed text attaches to neighboring timed phrases without changing wording or
 punctuation. When only sentence timing is available, the entire sentence appears
@@ -618,8 +645,10 @@ entire instrumental gap for the next lyric.
 Rotating words uses the same fast-word grouping and `max_words` limit as Floating
 words; set `max_words` to **1** for individual timed words. Attached untimed text
 stays intact, and missing word timing falls back to the complete recognized
-phrase. Rotating lines uses complete lines. Minimum display remains a readability
-and grouping preference, not a promise to delay a later lyric.
+phrase. Rotating lines uses complete lines by default; **Text & font → Max words**
+splits long lines into successive phrases using their word timings. Minimum
+display remains a readability and grouping preference, not a promise to delay a
+later lyric.
 
 `position`, `margin_x` and `margin_y` place a fixed rotation center using the
 largest text-and-outline bounds across the full song. Shorter words share that

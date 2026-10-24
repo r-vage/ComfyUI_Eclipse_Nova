@@ -17,6 +17,7 @@ export class CaptionState extends SeedState {
         this.spec = spec; this.editor = clone(editor);
         const c = this.config;
         if (c.parameters && spec.choices.word_timing && !Object.hasOwn(c.parameters, 'word_timing')) c.parameters.word_timing = 'whisper';
+        if (c.parameters && spec.numbers.line_max_words && !Object.hasOwn(c.parameters, 'line_max_words')) c.parameters.line_max_words = 0;
         if (!fieldsMatch(c, ['version', 'parameters', 'seed']) || c.version !== 1
             || !fieldsMatch(c.parameters, [...Object.keys(spec.numbers), ...Object.keys(spec.colors), ...Object.keys(spec.choices), 'font_file', 'enable_glow'])
             || !Object.hasOwn(spec.choices.mode, c.parameters.mode) || typeof c.parameters.enable_glow !== 'boolean'

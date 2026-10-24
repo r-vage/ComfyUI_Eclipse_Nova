@@ -17,6 +17,7 @@ NUMBERS = {
     "height": number("Height", 1280, 16, 4096, 2),
     "fps": number("FPS", 24, 1, 120, 0.1),
     "font_size": number("Font size", 80, 8, 512),
+    "line_max_words": number("Max words", 0, 0, 50),
     "margin_x": number("Margin X", 40, 0, 2048),
     "margin_y": number("Margin Y", 40, 0, 2048),
     "outline_width": number("Outline width", 3, 0, 32),
@@ -55,6 +56,7 @@ CHOICES = {
 TIPS = {
     "word_timing": WORD_TIMING_TIP,
     "font_size": "Maximum font size. Long captions shrink to fit the canvas, margins and effects.",
+    "line_max_words": "Maximum words shown from a line at once. 0 keeps the full line. Each next phrase starts at its first timed word; active-word highlighting follows it. Lines without word timings and indivisible timed spans stay intact, so they can exceed the limit.",
     "caption_transparency": "Fade text, outline, highlight and glow together. 100% hides captions; background and audio are unchanged.",
     "glow_intensity": "Glow buildup iterations; more creates denser glow.",
     "glow_range": "Maximum glow expansion distance in pixels.",
@@ -104,6 +106,7 @@ def validate_configuration(raw):
     params = config["parameters"]
     if isinstance(params, dict):
         params.setdefault("word_timing", "whisper")
+        params.setdefault("line_max_words", 0)
     require_fields(params, (*NUMBERS, *COLORS, *CHOICES, "font_file", "enable_glow"), name="Caption settings")
     for key, spec in NUMBERS.items():
         require_number(params[key], spec)

@@ -31,6 +31,10 @@ export class CaptionForm {
             font.dataset.field = 'parameters.font_file';
             const grid = this.grid(parent);
             this.number(grid, 'font_size'); this.number(grid, 'caption_transparency'); this.color(grid, 'text_color');
+            if (!this.params.mode.endsWith('-words') && this.state.spec.numbers.line_max_words) {
+                this.number(grid, 'line_max_words');
+                this.note(parent, 'Max words: 0 shows the full line. A smaller limit shows successive phrases at their word timings.');
+            }
             if (this.params.mode === 'active-word') this.color(grid, 'highlight_color');
             this.number(grid, 'outline_width'); this.color(grid, 'outline_color');
         });
@@ -133,7 +137,7 @@ export class CaptionForm {
     summary(key) {
         const p = this.params;
         if (key === 'canvas') return `${p.width} × ${p.height} · ${p.fps} FPS${['width', 'height', 'fps'].some(k => this.connected(k)) ? ' · Input overrides' : ''}`;
-        if (key === 'text') return `${p.font_file} · ${p.font_size} px`;
+        if (key === 'text') return `${p.font_file} · ${p.font_size} px${!p.mode.endsWith('-words') && p.line_max_words ? ` · Max ${p.line_max_words} words` : ''}`;
         if (key === 'placement') return `${this.state.floating ? 'Floating' : this.state.spec.choices.position[p.position]} · ${p.margin_x} / ${p.margin_y}`;
         if (key === 'animation') return `${p.fade_in} / ${p.fade_out} s · ${p.min_display} s hold`;
         if (key === 'glow') return `${p.glow_intensity} steps · ${p.glow_range} px`;
