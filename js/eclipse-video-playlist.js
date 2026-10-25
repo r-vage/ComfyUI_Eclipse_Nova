@@ -4,6 +4,8 @@ import { isConfiguringGraph, onVueModeChange } from './eclipse-widget-utils.js';
 import { markEclipseContextMenuOwner } from './eclipse-context-menu-ownership.js';
 import { createVideoBrowser, videoElement as el, videoFileKey, videoPath, videoURL } from './eclipse-video-browser.js';
 import { createVideoSlots } from './eclipse-video-slots.js';
+import { selectedVideoPreviewRows, videoOverlaySettings } from './eclipse-video-overlays.js';
+import { createSourcePositionControls } from './eclipse-video-source-position.js';
 
 const acceptsVideo = file => /\.(mp4|webm|mkv|mov|avi|m4v|mpg|mpeg|ts)$/i.test(file.name);
 const uuid = () => globalThis.crypto?.randomUUID?.() || `clip-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -13,6 +15,7 @@ export function createVideoEditor(node, binding) {
     let sourceRange = null, rangeKey = null, seekPending = false, playbackFrame = null;
     let pickerTarget = null, uploadTarget = null;
     const fileRevisions = new Map();
+    const fileRevisionKey = (id, field = 'file') => JSON.stringify([id, field]);
     const probes = new Map(), controllers = new Set();
     const root = el('div', null, 'en-video-playlist');
     root.setAttribute('aria-label', 'Video playlist editor');
@@ -24,6 +27,7 @@ export function createVideoEditor(node, binding) {
     const sourceTab = el('button', 'Source'), joinedTab = el('button', 'Joined'), dataTab = el('button', 'GenData');
     const sourceLabel = el('div', 'Select or drop a video', 'evl-source');
     const video = document.createElement('video'); video.controls = true; video.playsInline = true; video.preload = 'metadata';
+    const positionControls = createSourcePositionControls(video, (id, frame) => editRow(id, { start_frame: frame }));
     const metadata = document.createElement('pre'); metadata.hidden = true;
     const status = el('div', 'Add videos to begin. Controls are available before queueing.', 'evl-status');
     status.setAttribute('role', 'status');
@@ -32,7 +36,7 @@ export function createVideoEditor(node, binding) {
     actions.append(trimPreview, build, cancel);
     tabs.append(el('b', 'View:', 'en-panel-bar-label'), sourceTab, joinedTab, dataTab);
     tabs.classList.add('en-panel-bar');
-    right.append(tabs, sourceLabel, video, metadata, actions, status);
+    right.append(tabs, sourceLabel, video, positionControls.element, metadata, actions, status);
     root.append(right, fileInput);
 
     const presentation = () => node.properties?.eclipseVideo || {};
@@ -82,7 +86,8 @@ export function createVideoEditor(node, binding) {
             const ref = { type: file.type || 'input', subfolder: file.subfolder || '', filename: file.filename || file.name };
             added = empty || { id: uuid(), start_frame: 0, load_cap: 0, enabled: true, mute: false, use_metadata: false };
             added.file = ref;
-            fileRevisions.set(added.id, (fileRevisions.get(added.id) || 0) + 1);
+            const key = fileRevisionKey(added.id);
+            fileRevisions.set(key, (fileRevisions.get(key) || 0) + 1);
             if (!empty) next.push(added);
         }
         if (added) { present({ activeId: added.id, tab: 'source', openClips: [...new Set([...(presentation().openClips || []), added.id])] }); persist(next); }
@@ -98,21 +103,25 @@ export function createVideoEditor(node, binding) {
     sourceTab.onclick = () => setTab('source'); joinedTab.onclick = () => setTab('joined'); dataTab.onclick = () => setTab('metadata');
     function duplicateRow(id = presentation().activeId) {
         const next = rows(), row = next.find(item => item.id === id); if (!row || next.length >= 128) return;
-        const copy = { ...row, id: uuid(), use_metadata: false };
+        const copy = { ...structuredClone(row), id: uuid(), use_metadata: false };
         next.splice(next.findIndex(item => item.id === row.id) + 1, 0, copy);
         present({ activeId: copy.id }); persist(next);
     }
     function removeRow(id = presentation().activeId) {
         const row = rows().find(item => item.id === id); if (!row) return;
         const next = rows().filter(item => item.id !== row.id);
-        fileRevisions.set(id, (fileRevisions.get(id) || 0) + 1);
+        for (const field of ['file', 'mask']) {
+            const key = fileRevisionKey(id, field); fileRevisions.set(key, (fileRevisions.get(key) || 0) + 1);
+        }
         present({ activeId: id === presentation().activeId ? next[0]?.id || null : presentation().activeId,
             openClips: (presentation().openClips || []).filter(key => key !== id) }); persist(next);
     }
-    function assignFile(id, file) {
+    function assignFile(id, file, field = 'file') {
         const next = rows(), row = next.find(item => item.id === id); if (!row) return;
-        fileRevisions.set(id, (fileRevisions.get(id) || 0) + 1);
-        row.file = { type: file.type || 'input', subfolder: file.subfolder || '', filename: file.filename || file.name };
+        const key = fileRevisionKey(id, field); fileRevisions.set(key, (fileRevisions.get(key) || 0) + 1);
+        const reference = file ? { type: file.type || 'input', subfolder: file.subfolder || '', filename: file.filename || file.name } : null;
+        if (field === 'mask') row.overlay = { ...videoOverlaySettings(row, binding.effects), mask: reference };
+        else row.file = reference;
         present({ activeId: id, tab: 'source', openClips: [...new Set([...(presentation().openClips || []), id])] });
         persist(next); void probeRows();
     }
@@ -121,7 +130,8 @@ export function createVideoEditor(node, binding) {
         fit: binding.fit,
         rows, state: presentation, present, probe: file => probes.get(videoFileKey(file)), update: editRow,
         select(id) { present({ activeId: id, tab: 'source' }); render(); },
-        choose(id) { browser.close(); pickerTarget = id; present({ activeId: id, tab: 'source' }); render(); browser.open(); },
+        choose(id, field = 'file') { browser.close(); pickerTarget = { id, field }; present({ activeId: id, tab: 'source' }); render(); browser.open(); },
+        clearMask(id) { assignFile(id, null, 'mask'); },
         add() {
             const next = rows(); if (next.length >= 128) return;
             const row = { id: uuid(), file: null, start_frame: 0, load_cap: 0, enabled: true, mute: false, use_metadata: false };
@@ -178,6 +188,7 @@ export function createVideoEditor(node, binding) {
         playbackFrame = null;
         if (disposed || video.paused) return;
         checkRangeEnd();
+        positionControls.refresh();
         if (sourceRange && !video.paused) playbackFrame = requestAnimationFrame(watchPlayback);
     }
     video.addEventListener('loadedmetadata', () => { if (seekPending) seekRangeStart(); });
@@ -190,12 +201,13 @@ export function createVideoEditor(node, binding) {
     video.addEventListener('timeupdate', checkRangeEnd);
     function updatePlayer() {
         const tab = presentation().tab || 'source', row = currentRow();
+        const info = row?.file ? probes.get(videoFileKey(row.file)) : null;
+        positionControls.source(tab === 'source' ? row : null, info);
         for (const [button, value] of [[sourceTab, 'source'], [joinedTab, 'joined'], [dataTab, 'metadata']]) button.setAttribute('aria-pressed', String(tab === value));
         video.hidden = tab === 'metadata'; metadata.hidden = tab !== 'metadata';
         if (tab === 'metadata') {
             rangeKey = null; sourceRange = null; seekPending = false;
             video.pause();
-            const info = row?.file ? probes.get(videoFileKey(row.file)) : null;
             metadata.textContent = info?.parameters ? `${info.parameters.status}\n\n${JSON.stringify(info.parameters.data, null, 2)}` : 'Select a clip to inspect saved prompts and sampling settings.';
             sourceLabel.textContent = row?.file ? `${row.file.filename}${row.use_metadata ? ' • downstream GenData source' : ''}` : 'No selected file';
         } else if (tab === 'joined') {
@@ -205,8 +217,8 @@ export function createVideoEditor(node, binding) {
         } else {
             const file = row?.file;
             source(file);
-            const info = file ? probes.get(videoFileKey(file)) : null;
             applySourceRange(row, info);
+            positionControls.refresh();
             sourceLabel.textContent = file ? `${file.filename}${info?.width ? ` · ${info.width}×${info.height} · ${info.duration?.toFixed(2) || '?'} s · ${info.fps || '?'} fps` : ''}` : 'Choose a video in the selected slot';
         }
     }
@@ -241,13 +253,14 @@ export function createVideoEditor(node, binding) {
     const browser = createVideoBrowser({
         getState: () => presentation().browser || {},
         onStateChange: value => present({ browser: value }),
-        onChoose: file => assignFile(pickerTarget, file),
+        onChoose: file => assignFile(pickerTarget?.id, file, pickerTarget?.field),
         onUpload() { uploadTarget = pickerTarget; fileInput.multiple = false; fileInput.click(); },
     });
     function uploadFiles(files, target = null) {
         const selected = [...files].filter(acceptsVideo);
-        const generation = probeRevision, ticket = (fileRevisions.get(target) || 0) + 1;
-        if (target) fileRevisions.set(target, ticket);
+        const generation = probeRevision, key = target ? fileRevisionKey(target.id, target.field) : null;
+        const ticket = (fileRevisions.get(key) || 0) + 1;
+        if (target) fileRevisions.set(key, ticket);
         uploadChain = uploadChain.then(async () => {
             const failures = [];
             for (const [index, file] of selected.entries()) {
@@ -262,7 +275,7 @@ export function createVideoEditor(node, binding) {
                     if (!disposed && generation === probeRevision) {
                         const file = { type: saved.type || 'input', subfolder: saved.subfolder || '', filename: saved.name };
                         if (!target) addFiles([file]);
-                        else if (fileRevisions.get(target) === ticket) assignFile(target, file);
+                        else if (fileRevisions.get(key) === ticket) assignFile(target.id, file, target.field);
                     }
                 } catch (error) { if (!disposed && generation === probeRevision && error.name !== 'AbortError') failures.push(`${file.name}: ${error.message}`); }
                 finally { controllers.delete(controller); }
@@ -297,7 +310,7 @@ export function createVideoEditor(node, binding) {
         let payload;
         try {
             payload = binding.options();
-            payload.playlist = selectedOnly ? JSON.stringify({ version: 1, clips: [{ ...row, enabled: true, use_metadata: false }] })
+            payload.playlist = selectedOnly ? JSON.stringify({ version: 1, clips: selectedVideoPreviewRows(rows(), row) })
                 : JSON.stringify({ version: 1, clips: rows().filter(item => item.file) });
         } catch (error) { status.textContent = error.message; await releaseJob(); render(); return; }
         try {
@@ -363,12 +376,12 @@ export function createVideoEditor(node, binding) {
         for (const controller of controllers) controller.abort();
         controllers.clear(); void releaseJob(); browser.destroy(); slotEditor.destroy(); unsubscribe();
         window.removeEventListener('pagehide', pageHide);
-        stopPlaybackWatch();
+        stopPlaybackWatch(); positionControls.destroy();
         video.pause(); video.removeAttribute('src'); video.load();
     }
     return {
         element: root, controls: actions, destroy,
-        minimumHeight: () => Math.max(270, tabs.offsetHeight + actions.offsetHeight + status.offsetHeight + 160),
+        minimumHeight: () => Math.max(270, tabs.offsetHeight + positionControls.element.offsetHeight + actions.offsetHeight + status.offsetHeight + 160),
         close: () => browser.close(),
         settingsChanged() { markStale(); refreshSettings(); render(); void probeRows(); },
         restore() {

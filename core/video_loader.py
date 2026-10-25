@@ -25,6 +25,15 @@ from .image_blending import validate_blend
 from .image_effects import styled_frames, validate_style
 from .video_helpers import TemporaryVideo
 from .video_metadata import display_parameters, parse_video_parameters
+from .video_overlays import (
+    FixedOverlaySegment,
+    composite_frames,
+    fixed_overlay_segments,
+    is_overlay,
+    overlay_groups,
+    overlay_settings,
+    validate_overlay_row,
+)
 from .video_timing import (
     VideoTiming,
     check_media_interrupt,
@@ -148,6 +157,11 @@ def parse_playlist(value, *, allow_empty=False):
         for name in ("blend_mode", "blend_duration"):
             if name in row:
                 item[name] = row[name]
+        settings = validate_overlay_row(row, resolve_video_file)
+        if "role" in row:
+            item["role"] = row["role"]
+        if "overlay" in row or is_overlay(row):
+            item["overlay"] = settings
         if item["use_metadata"]:
             if empty:
                 raise ValueError("An empty video slot cannot supply generation data")
@@ -180,11 +194,11 @@ def _video_stream(container):
     return stream
 
 
-def _geometry(frame, stream):
+def _geometry(frame, stream, *, allow_alpha=False):
     if int(frame.color_trc or 0) in (16, 18):
         raise ValueError("HDR conversion is not supported; provide an SDR video")
-    if any(component.is_alpha for component in frame.format.components):
-        raise ValueError("Alpha video needs explicit compositing before loading")
+    if not allow_alpha and any(component.is_alpha for component in frame.format.components):
+        raise ValueError("Alpha video must use an Overlay slot with a Sequence target")
     rotation = round(frame.rotation / 90) % 4 if frame.rotation else 0
     if frame.rotation and not math.isclose(frame.rotation % 90, 0, abs_tol=.01):
         raise ValueError("Only quarter-turn display rotation is supported")
@@ -193,9 +207,9 @@ def _geometry(frame, stream):
     return (height, width, rotation, aspect) if rotation % 2 else (width, height, rotation, aspect)
 
 
-def _pixels(frame, stream):
-    _width, _height, rotation, aspect = _geometry(frame, stream)
-    array = frame.to_ndarray(format="rgb24")
+def _pixels(frame, stream, *, allow_alpha=False):
+    _width, _height, rotation, aspect = _geometry(frame, stream, allow_alpha=allow_alpha)
+    array = frame.to_ndarray(format="rgba" if allow_alpha else "rgb24")
     if aspect != 1:
         array = np.asarray(Image.fromarray(array).resize((max(1, round(frame.width * aspect)), frame.height), Image.Resampling.LANCZOS))
     if rotation:
@@ -203,14 +217,14 @@ def _pixels(frame, stream):
     return np.ascontiguousarray(array)
 
 
-def probe_video(source):
+def probe_video(source, *, allow_alpha=False):
     # Header + one displayed frame only; exact counts are resolved at execution.
     with _open(source) as container:
         stream = _video_stream(container)
         first = next(container.decode(stream), None)
         if first is None:
             raise ValueError("Video contains no decodable frames")
-        width, height, rotation, _aspect = _geometry(first, stream)
+        width, height, rotation, _aspect = _geometry(first, stream, allow_alpha=allow_alpha)
         sound = next(iter(container.streams.audio), None)
         duration = float(stream.duration * stream.time_base) if stream.duration is not None else (container.duration / av.time_base if container.duration else None)
         result = {"width": width, "height": height, "rotation": rotation * 90,
@@ -218,6 +232,7 @@ def probe_video(source):
                   "fps": str(stream.average_rate) if stream.average_rate else None,
                   "codec": stream.codec_context.name, "container": container.format.name,
                   "pixel_format": first.format.name, "bit_depth": max(part.bits for part in first.format.components),
+                  "has_alpha": any(part.is_alpha for part in first.format.components),
                   "color_transfer": int(first.color_trc or 0), "sample_aspect_ratio": str(stream.sample_aspect_ratio or 1),
                   "first_timestamp": float(first.pts * first.time_base) if first.pts is not None else None,
                   "audio": bool(sound), "sample_rate": sound.rate if sound else None,
@@ -235,7 +250,7 @@ class FrameScan:
     time_base: Fraction
 
 
-def scan_video(source):
+def scan_video(source, *, allow_alpha=False):
     times, durations = [], []
     dimensions = None
     with _open(source) as container:
@@ -250,7 +265,7 @@ def scan_video(source):
             position = frame.pts * frame.time_base
             if times and position <= times[-1]:
                 raise ValueError("Video timestamps must be strictly increasing")
-            geometry = _geometry(frame, stream)[:2]
+            geometry = _geometry(frame, stream, allow_alpha=allow_alpha)[:2]
             if dimensions is not None and dimensions != geometry:
                 raise ValueError("Video changes dimensions mid-stream")
             dimensions = geometry
@@ -270,8 +285,8 @@ def scan_video(source):
 
 
 @lru_cache(maxsize=16)
-def _cached_scan(path, version):
-    return scan_video(path)
+def _cached_scan(path, version, allow_alpha=False):
+    return scan_video(path, allow_alpha=allow_alpha)
 
 
 def _fit(array, width, height, fit, *, crop_x=0.5, crop_y=0.5):
@@ -286,7 +301,7 @@ def _fit(array, width, height, fit, *, crop_x=0.5, crop_y=0.5):
         left, top = int((image.width - width) * crop_x), int((image.height - height) * crop_y)
         image = image.crop((left, top, left + width, top + height))
     else:
-        canvas = Image.new("RGB", (width, height))
+        canvas = Image.new(image.mode, (width, height))
         canvas.paste(image, ((width - image.width) // 2, (height - image.height) // 2))
         image = canvas
     return np.asarray(image)
@@ -374,7 +389,7 @@ class ClipRange:
         return VideoTiming(self.scan.durations[self.first:self.stop])
 
 
-def _frames_for_clips(clips, width, height, fit):
+def _frames_for_clips(clips, width, height, fit, *, alpha=False):
     for clip in clips:
         with _open(clip.path) as container:
             stream = _video_stream(container)
@@ -383,7 +398,7 @@ def _frames_for_clips(clips, width, height, fit):
                 if index >= clip.stop:
                     break
                 if index >= clip.first:
-                    yield _fit(_pixels(frame, stream), width, height, fit)
+                    yield _fit(_pixels(frame, stream, allow_alpha=alpha), width, height, fit)
 
 
 def _fixed_frames(frames, timing, rate):
@@ -410,8 +425,11 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
     validate_blend(blend_mode, blend_duration)
     style_settings = validate_style(style, style_strength, style_period)
     rows = parse_playlist(playlist)
+    groups = overlay_groups(rows)
     if fit not in ("pad", "crop", "stretch") or timing_mode not in ("source", "fixed"):
         raise ValueError("Invalid fit or timing selection")
+    if timing_mode == "fixed" and (not math.isfinite(float(fps)) or not 1 <= float(fps) <= 240):
+        raise ValueError("Fixed FPS must be between 1 and 240")
     if any(type(value) is not int or not 0 <= value <= 16384 for value in (width, height)):
         raise ValueError("Width and height must be between 0 and 16384")
     media_progress(0, stage="Reading videos")
@@ -423,8 +441,8 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
             report.append("Disabled; not decoded.")
             continue
         try:
-            scan = _cached_scan(path, file_version(path))
-            info = probe_video(path)
+            scan = _cached_scan(path, file_version(path), is_overlay(row))
+            info = probe_video(path, allow_alpha=is_overlay(row))
         except (OSError, ValueError, av.error.FFmpegError) as error:
             raise ValueError(f"{row['file']['filename']}: {error}") from error
         first = row["start_frame"]
@@ -432,6 +450,8 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
         if first >= len(scan.times):
             raise ValueError(f"{row['file']['filename']}: start frame {first} is beyond the last frame")
         clip = ClipRange(row, path, scan, first, stop, info)
+        if is_overlay(row) and overlay_settings(row)["mode"] == "alpha" and not info["has_alpha"]:
+            raise ValueError(f"{row['file']['filename']}: no decoded alpha channel. Use Remove black, Screen, Opacity or a mask video.")
         clips.append(clip)
         parameters = parse_video_parameters(info["parameters"]["raw"])
         parameters["status"] = info["parameters"]["status"]
@@ -443,6 +463,22 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
         report.append("Original A1111 text (resource fields are not reused):\n" + (parameters["raw"] or "(none)"))
     if not clips:
         raise ValueError("Add and enable at least one video")
+    all_clips = clips
+    by_id = {clip.row["id"]: clip for clip in all_clips}
+    clips = [clip for clip in all_clips if not is_overlay(clip.row)]
+    layers = {identity: [by_id[row["id"]] for row in group] for identity, group in groups.items()}
+    masks = {}
+    for layer in all_clips:
+        if not is_overlay(layer.row):
+            continue
+        settings = overlay_settings(layer.row)
+        if settings["mode"] == "mask":
+            mask_path = resolve_video_file(settings["mask"])
+            mask_scan = _cached_scan(mask_path, file_version(mask_path), True)
+            masks[layer.row["id"]] = ClipRange({}, mask_path, mask_scan, 0, len(mask_scan.times), {})
+        report.append(f"Overlay: {layer.row['file']['filename']} over {by_id[settings['target']].row['file']['filename']}; "
+                      f"mode={settings['mode']}, opacity={settings['opacity']:g}, offset={settings['offset']:g}s. "
+                      "Base timing/audio retained; overlay ends at its EOF or base end.")
     source_width, source_height = clips[0].scan.width, clips[0].scan.height
     if width == height == 0:
         width, height = source_width, source_height
@@ -456,7 +492,10 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
     windows = transition_windows(clips, blend_mode, blend_duration)
     audio_bytes = round(timing.duration * 48000) * 2 * 4
     key = (tuple((clip.path, file_version(clip.path), clip.row["id"], clip.first, clip.stop, clip.row["mute"],
-                  clip.row.get("blend_mode", "inherit"), clip.row.get("blend_duration", 1.0)) for clip in clips),
+                  clip.row.get("blend_mode", "inherit"), clip.row.get("blend_duration", 1.0),
+                  is_overlay(clip.row), json.dumps(overlay_settings(clip.row), sort_keys=True) if is_overlay(clip.row) else None)
+                 for clip in all_clips),
+           tuple((identity, mask.path, file_version(mask.path)) for identity, mask in masks.items()),
            width, height, fit, timing_mode, str(fps) if timing_mode == "fixed" else None,
            blend_mode, blend_duration, style, style_strength, style_period)
     with _media_build_lock(key):
@@ -469,18 +508,45 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
         else:
             # Frames stream to disk; account for joined PCM, one clip and decoder scratch.
             processing_bytes = 192 if any(window["half"] for window in windows) or style != "off" else 12
-            required_bytes = 2 * audio_bytes + width * height * processing_bytes
+            extra_decode = 0
+            if any(layers.values()):
+                counts = [len(layers[clip.row["id"]]) for clip in clips]
+                sizes = [sum(layer.scan.width * layer.scan.height * 8
+                             + (masks[layer.row['id']].scan.width * masks[layer.row['id']].scan.height * 8
+                                if layer.row['id'] in masks else 0) for layer in layers[clip.row["id"]])
+                         for clip in clips]
+                peak_layers, extra_decode = max(counts), max(sizes)
+                # A transition preloads the next composited segment's edge.
+                if any(window["half"] for window in windows):
+                    peak_layers = sum(sorted(counts, reverse=True)[:2])
+                    extra_decode = sum(sorted(sizes, reverse=True)[:2])
+                processing_bytes = max(processing_bytes, 128 + 8 * peak_layers)
+            required_bytes = 2 * audio_bytes + width * height * processing_bytes + extra_decode
             available_bytes = get_free_memory(torch.device("cpu"))
             if required_bytes > available_bytes * .8:
                 raise ValueError(f"Joining needs about {required_bytes / 2**30:.2f} GiB of RAM for audio and frame processing; {available_bytes / 2**30:.2f} GiB is available. Reduce size/load caps.")
             media_progress(0, stage="Preparing audio")
             audio = _playlist_audio(clips)
             encoded_timing = timing
-            frames = (transition_frames(clips, lambda clip: _frames_for_clips([clip], width, height, fit), windows)
-                      if any(window["half"] for window in windows) else _frames_for_clips(clips, width, height, fit))
-            if timing_mode == "fixed":
-                if not math.isfinite(float(fps)) or not 1 <= float(fps) <= 240:
-                    raise ValueError("Fixed FPS must be between 1 and 240")
+            render_clips, render_windows = clips, windows
+            fixed_overlays = timing_mode == "fixed" and any(layers.values())
+            if fixed_overlays:
+                render_clips = fixed_overlay_segments(clips, Fraction(str(fps)))
+                render_windows = transition_windows(render_clips, blend_mode, blend_duration)
+                encoded_timing = join_timing((clip.row["id"], clip.timing) for clip in render_clips)
+
+            def reader(clip, *, alpha=False):
+                return _frames_for_clips([clip], width, height, fit, alpha=alpha)
+
+            def composed_reader(clip):
+                group = layers[clip.row["id"]]
+                if isinstance(clip, FixedOverlaySegment):
+                    return composite_frames(clip.base, group, masks, reader, output_timing=clip.timing, start=clip.offset)
+                return composite_frames(clip, group, masks, reader) if group else reader(clip)
+
+            # Apply layers to each segment before blending into the next segment.
+            frames = transition_frames(render_clips, composed_reader, render_windows)
+            if timing_mode == "fixed" and not fixed_overlays:
                 rate = Fraction(str(fps))
                 frames = _fixed_frames(frames, timing, rate)
                 encoded_timing = VideoTiming.constant(math.ceil(timing.duration * rate), rate)
@@ -595,7 +661,7 @@ def video_thumbnail(path):
         frame = next(container.decode(stream), None)
         if frame is None:
             raise ValueError("Video has no poster frame")
-        poster = Image.fromarray(_pixels(frame, stream))
+        poster = Image.fromarray(_pixels(frame, stream, allow_alpha=True))
         poster.thumbnail((240, 160), Image.Resampling.LANCZOS)
         buffer = python_io.BytesIO()
         poster.save(buffer, "WEBP", quality=80)

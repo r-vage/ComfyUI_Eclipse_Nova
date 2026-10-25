@@ -9,6 +9,13 @@ from ..core.image_blending import BLEND_MODES, BLEND_TOOLTIPS
 from ..core.image_effects import STYLE_MODES, STYLE_TOOLTIP
 from ..core.video_helpers import preview_video_file
 from ..core.video_loader import file_version, load_playlist, resolve_video_file
+from ..core.video_overlays import (
+    OVERLAY_DEFAULTS,
+    OVERLAY_MODES,
+    is_overlay,
+    overlay_groups,
+    overlay_settings,
+)
 from ..core.video_panel_configuration import (
     EFFECT_DEFAULTS,
     LOAD_WIDGET,
@@ -25,17 +32,18 @@ class RvVideo_Load(io.ComfyNode):
         return io.Schema(
             node_id="Load Video [Eclipse Nova]", display_name="Load Video",
             category=CATEGORY.MAIN.value + CATEGORY.VIDEO.value,
-            description="Trim and join an ordered video playlist with synchronized audio. Connected width, height and FPS override local values; Source timing retains every original frame duration.",
+            description="Trim and join an ordered video playlist with synchronized audio. Overlay slots composite video or lyrics over a selected sequence clip without extending its duration or duplicating audio. Connected width, height and FPS override local values; Source timing retains every base frame duration.",
             inputs=[
                 io.Int.Input("width", optional=True, force_input=True, min=0, max=16384,
-                             tooltip="Override local width. Zero keeps automatic sizing from the first enabled clip."),
+                             tooltip="Override local width. Zero keeps automatic sizing from the first enabled Sequence clip."),
                 io.Int.Input("height", optional=True, force_input=True, min=0, max=16384,
-                             tooltip="Override local height. One zero dimension follows the first clip's aspect ratio."),
+                             tooltip="Override local height. One zero dimension follows the first Sequence clip's aspect ratio."),
                 io.Float.Input("fps", optional=True, force_input=True, min=1.0, max=240.0,
                                tooltip="Override local FPS in Fixed timing mode. Source timing keeps its original timestamps."),
                 io.String.Input("configuration", socketless=True, default=json.dumps(default_load()),
                                 extra_dict={"widgetType": LOAD_WIDGET, "editorSpec": {
                                     "kind": "load", "effect_defaults": EFFECT_DEFAULTS,
+                                    "overlay_defaults": OVERLAY_DEFAULTS, "overlay_modes": OVERLAY_MODES,
                                     "blend_modes": ["cut", *BLEND_MODES], "blend_tooltips": BLEND_TOOLTIPS,
                                     "style_modes": list(STYLE_MODES), "style_tooltip": STYLE_TOOLTIP}}),
             ],
@@ -50,6 +58,7 @@ class RvVideo_Load(io.ComfyNode):
             resolve_load(config, width, height, fps)
             if not any(row["enabled"] and row["file"] is not None for row in config["clips"]):
                 return "Add and enable at least one video."
+            overlay_groups(config["clips"])
         except (TypeError, ValueError, OSError) as error:
             return str(error)
         return True
@@ -57,8 +66,15 @@ class RvVideo_Load(io.ComfyNode):
     @classmethod
     def fingerprint_inputs(cls, configuration, **_inputs):
         config = validate_load(configuration)
-        return tuple((row["id"], file_version(resolve_video_file(row["file"])))
-                     for row in config["clips"] if row["enabled"] and row["file"] is not None)
+        versions = []
+        for row in config["clips"]:
+            if not row["enabled"] or row["file"] is None:
+                continue
+            versions.append((row["id"], "video", file_version(resolve_video_file(row["file"]))))
+            settings = overlay_settings(row)
+            if is_overlay(row) and settings["mode"] == "mask" and settings["mask"]:
+                versions.append((row["id"], "mask", file_version(resolve_video_file(settings["mask"]))))
+        return tuple(versions)
 
     @classmethod
     def execute(cls, configuration, width=None, height=None, fps=None):

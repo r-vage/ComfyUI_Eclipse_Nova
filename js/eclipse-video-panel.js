@@ -5,6 +5,7 @@ import { button, element, ensurePanelStyle } from './eclipse-panel-controls.js';
 import { runActions } from './eclipse-panel-run.js';
 import { numericInputValue } from './eclipse-linked-numbers.js';
 import { createVideoEditor } from './eclipse-video-playlist.js';
+import { validateVideoOverlay } from './eclipse-video-overlays.js';
 import { attachVideoPreview, setVideoPreviewSource, stopVideoPreview } from './eclipse-video-preview-common.js';
 import { isConfiguringGraph, fitNodeToWidgets } from './eclipse-widget-utils.js';
 
@@ -42,6 +43,7 @@ export class VideoState {
                     || (row.use_metadata && (!row.enabled || row.file === null))) throw Error('Invalid video clip.');
                 if (spec.blend_modes && (!['inherit', ...spec.blend_modes].includes(row.blend_mode ?? 'inherit')
                     || !bounded(row.blend_duration ?? 1, 0, 60))) throw Error('Invalid clip blend.');
+                validateVideoOverlay(row, spec, bounded);
                 ids.add(row.id); metadata += Number(row.use_metadata);
             }
             if (metadata > 1) throw Error('Select at most one metadata source.');

@@ -112,6 +112,12 @@
 .en-video-slots .evs-trim { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .en-video-slots .evs-trim label { display: flex; flex-direction: column; gap: 3px; font-size: 10px; color: var(--en-bar-text); text-transform: uppercase; }
 .en-video-slots .evs-trim input { font-size: 12px; }
+.en-video-slots .evs-overlay-controls { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.en-video-slots .evs-overlay-controls .en-panel-bar { padding: 3px; }
+.en-video-slots .evs-overlay-controls [hidden] { display: none; }
+.en-video-slots .evs-overlay-fields select { width: 100%; min-width: 0; }
+.en-video-slots .evs-mask-row { display: flex; gap: 5px; min-width: 0; }
+.en-video-slots .evs-mask-row .evs-file { overflow: hidden; }
 .en-video-panel select { width: 100%; min-width: 0; min-height: 28px; padding: 4px 6px; border: 1px solid var(--en-select-border); border-radius: 4px; background: var(--en-select-bg); color: var(--en-select-text); color-scheme: var(--en-color-scheme); font: inherit; }
 .en-video-panel select option { background: var(--en-menu-bg); color: var(--en-text); }
 .en-video-slots .evs-options { display: flex; align-items: center; gap: 5px; }
@@ -132,6 +138,12 @@
 .en-video-playlist pre { overflow: auto; margin: 0; padding: 6px; white-space: pre-wrap; font: 11px monospace; user-select: text; }
 .en-video-playlist .evl-actions { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
 .en-video-playlist .evl-actions button { flex: 1 1 110px; font-size: 11px; min-height: 28px; padding: 3px 5px; }
+.en-video-playlist .evl-position { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; min-width: 0; }
+.en-video-playlist .evl-position-label { font-size: 11px; color: var(--en-muted); font-variant-numeric: tabular-nums; }
+.en-video-playlist .evl-position-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.en-video-playlist .evl-position-controls label { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--en-muted); }
+.en-video-playlist .evl-position-controls input { width: 80px; min-width: 0; padding: 3px 5px; font-size: 11px; }
+.en-video-playlist .evl-position-controls button { min-height: 26px; padding: 3px 6px; font-size: 11px; }
 .en-video-playlist [hidden] { display: none !important; }
 .en-video-playlist.evl-dragover { outline: 2px dashed var(--en-accent); }
 .eclipse-video-browser.en-video-browser { background: var(--en-node-bg); color: var(--en-text); border-color: var(--en-control-border); box-shadow: var(--en-dialog-shadow); }

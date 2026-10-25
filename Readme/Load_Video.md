@@ -2,7 +2,8 @@
 
 **Load Video** builds an ordered playlist with a player inside the node. Trim each
 clip by its original frame numbers and join its audio with the same cuts into
-native VIDEO. Find these nodes under **Eclipse Nova → Video**.
+native VIDEO. Individual slots can also overlay video or lyrics on a selected
+sequence clip. Find these nodes under **Eclipse Nova → Video**.
 
 ## Panel and inputs
 
@@ -71,7 +72,7 @@ deleted preview, or a server restart can require rebuilding.
 
 The **Blending** section sets the default transition and duration for all clips.
 Each clip's **Blend to next** can inherit that global setting or override it;
-the last enabled clip has no outgoing transition. Crossfades, wipes, dissolve,
+these apply to Sequence slots, and the last sequence clip has no outgoing transition. Crossfades, wipes, dissolve,
 Morph, ghost zoom, flash/light leak, block glitch, zoom blur and dip to black
 share the same engine as [Image Timeline Video](Image_Timeline_Video.md).
 Cut is the default, and zero seconds also keeps a hard cut.
@@ -162,13 +163,66 @@ flowchart LR
    preview to the selected start; playback stops at the cap. This quick preview
    uses the clip's reported FPS. Use **Preview selected trim** for frame-exact
    review of variable-frame-rate sources.
+   Below the Source player, a **frame/time readout** shows the current position.
+   Scrub with the player's seek bar, or enter **Seconds** and press Enter to jump
+   directly. **−1f / +1f** step backward/forward at the source FPS; **Set start
+   here** copies the preview position into this slot's Start frame and leaves its
+   Load cap unchanged. Seeking alone does not change the saved trim or build a
+   video. For example, at 25 FPS, `36` seconds selects frame `900`.
+   The **≈** marks an FPS-based frame estimate; variable-frame-rate clips still
+   need the exact trim preview for verification. These controls are shown only
+   for **Source**, so a position in Joined output cannot change a source trim.
 4. Use **Include**, **Mute**, **Duplicate**, **Remove**, the arrow buttons, or drag
    rows to arrange the join. Disabled clips contribute neither frames nor audio.
 
 For example, start `20`, cap `100` retains source frames `[20, 120)`. Every clip
-has independent values, and its audio uses that exact time interval. Missing
+has independent values; Sequence audio uses that exact time interval. Missing
 audio, leading/trailing audio gaps, and muted clips become silence. The first
 audio track is normalized to **48 kHz stereo**, without changing its tempo.
+
+## Overlay a video or rendered lyrics
+
+Each slot has **Sequence / Overlay** buttons. Sequence is the default and keeps
+the existing playlist behavior. For lyrics on a singing video:
+
+1. Load the singing video in a Sequence slot.
+2. Add the lyrics video in another slot, select **Overlay**, and choose the
+   singing clip as its **Overlay target**.
+3. For bright lyrics on black, start with **Remove black** or **Screen** and
+   opacity `1`. Use **Build joined preview** to inspect the composition.
+
+Overlay settings belong to that slot. The target is stored by its stable clip
+identity, so reordering does not attach the layer to a different clip. Removing
+or disabling a target requires choosing another enabled Sequence target before
+running. Up to eight overlays can target one sequence clip; later overlay slots
+are composited on top of earlier ones.
+
+- **Opacity** blends the entire picture. Lower values produce a double exposure.
+- **Screen** leaves the base unchanged where the overlay is black and adds bright
+  details/glow elsewhere. The appearance depends on the underlying picture.
+- **Remove black** makes dark overlay pixels transparent. **Black threshold**
+  removes dark pixels and compression noise; **Black softness** controls the
+  transition into opaque text. These use `0.01` increments. Black outlines or
+  shadows flattened into a black background cannot be recovered perfectly.
+- **Alpha** uses the source video's decoded transparency and reports an error if
+  none is present. Ordinary rendered lyrics MP4s have no alpha channel.
+- **Mask video** lets you browse/upload a separate mask: white reveals the
+  overlay, black hides it, and gray partly reveals it. Its time zero matches the
+  untrimmed overlay; trimming the overlay also advances the mask in seconds.
+
+**Start frame / Load cap** trim the overlay source. **Offset seconds** positions
+that trimmed content relative to the start of its target: positive delays it,
+negative skips its beginning. Frames and masks follow timestamps, so their FPS
+can differ. Source timing uses the base frame clock; Fixed FPS samples layers on
+the output clock. Overlay and mask EOF make the layer disappear; it does not
+loop, hold its final frame, or extend the target's duration.
+
+The base supplies audio; overlay and mask audio are ignored. Shared output size
+and fit apply to the layers, with transparent padding. Layers are composited
+before transitions between sequence clips and the final Global style. **Preview
+selected trim** includes a selected overlay's base and its enabled sibling layers;
+**Source** still shows the original file. Preview progress, cancellation and
+reuse also cover overlays and changed mask files.
 
 The editor exists immediately when the node is added. Playlist slots, trims,
 metadata choice, active source, and browser preferences are serialized
@@ -181,7 +235,7 @@ change options or previews, and the saved size is restored with the workflow.
 
 ## Global size and timing
 
-`width` and `height` apply to every clip. Both `0` use the first included clip's
+`width` and `height` apply to every clip. Both `0` use the first included Sequence clip's
 displayed size. With one dimension `0`, it follows that clip's aspect ratio.
 `pad` fits inside the size with black borders; `crop` fills and center-crops;
 `stretch` fills both dimensions directly. Encoded VIDEO pads an odd dimension by
@@ -283,8 +337,9 @@ be reused when only the metadata choice changes.
 Extracting images with a component node requires a complete batch in RAM:
 approximately `frames × width × height × 3 × 4` bytes before downstream upscaling.
 
-Loading decodes SDR frames to 8-bit RGB. HDR and alpha inputs require
-explicit conversion/compositing first. Source timing is preserved, but compressed
+Loading decodes SDR frames to 8-bit RGB; Overlay slots can decode alpha and
+composite it into the final RGB output. HDR still requires explicit conversion
+first. Source timing is preserved, but compressed
 pixels are not bit-identical: VIDEO is encoded, and a saver can encode it again.
 Use the streaming Upscale Video route for longer videos. Joined previews also
 render at the configured size.

@@ -1,6 +1,7 @@
 /** Per-clip slot controls for the Nova video panel. Copyright (c) 2026 r-vage. Apache-2.0. */
 import { button, element } from './eclipse-panel-controls.js';
 import { captureScrollableWheelInVue } from './eclipse-widget-utils.js';
+import { createVideoOverlayControls, isVideoOverlay } from './eclipse-video-overlays.js';
 
 const blendLabel = value => value === 'inherit' ? 'Use global blend'
     : value.replaceAll('_', ' ').replace(/^./, c => c.toUpperCase());
@@ -82,7 +83,12 @@ export function createVideoSlots(actions) {
         }
         const duplicate = button('⧉', 'Duplicate clip', () => actions.duplicate(id)); duplicate.className = 'evs-duplicate';
         toggles.append(bar, duplicate);
-        const details = element('div', 'evs-detail'); fields.append(trim, blend, toggles, details); card.append(top, summary, fields);
+        const overlay = actions.effects?.overlay_modes ? createVideoOverlayControls({ id, rowFor, rows: actions.rows,
+            spec: actions.effects, update: actions.update, chooseMask: () => actions.choose(id, 'mask'),
+            clearMask: () => actions.clearMask(id) }) : null;
+        const details = element('div', 'evs-detail');
+        if (overlay) fields.append(overlay.element);
+        fields.append(trim, blend, toggles, details); card.append(top, summary, fields);
         card.onclick = event => { if (!event.target.closest('button,input,select,label')) actions.select(id); };
         card.onkeydown = event => {
             if (event.altKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
@@ -103,7 +109,7 @@ export function createVideoSlots(actions) {
             const source = event.dataTransfer.getData('text/eclipse-video');
             if (source) { event.preventDefault(); event.stopPropagation(); card.classList.remove('evs-drop'); actions.reorder(source, id); }
         };
-        return { card, include, file, filename, up, down, disclosure, remove, summary, fields, inputs, flags, duplicate, details };
+        return { card, include, file, filename, up, down, disclosure, remove, summary, fields, inputs, flags, duplicate, details, overlay, blend };
     }
     function render() {
         const rows = actions.rows(), ids = new Set(rows.map(row => row.id));
@@ -124,7 +130,10 @@ export function createVideoSlots(actions) {
             view.file.title = row.file ? `${row.file.type}/${row.file.subfolder}/${row.file.filename}` : 'Browse or upload a video for this slot';
             view.disclosure.textContent = open ? '▾' : '▸'; view.disclosure.setAttribute('aria-expanded', String(open)); view.disclosure.disabled = !row.file;
             view.up.disabled = index === 0; view.down.disabled = index === rows.length - 1; view.duplicate.disabled = rows.length >= 128;
-            view.summary.textContent = row.file ? `${fitLabel} · ${blendLabel(row.blend_mode ?? 'inherit')} · Start ${row.start_frame} · cap ${row.load_cap || 'all'}${seconds == null ? '' : ` · ${seconds.toFixed(2)}s`}${row.mute ? ' · muted' : ''}${row.use_metadata ? ' · GenData' : ''}${info?.error ? ' · unavailable' : ''}` : 'Empty · choose a file to set its trim';
+            const overlay = isVideoOverlay(row);
+            const composition = overlay && view.overlay ? view.overlay.summary() : blendLabel(row.blend_mode ?? 'inherit');
+            view.summary.textContent = row.file ? `${fitLabel} · ${composition} · Start ${row.start_frame} · cap ${row.load_cap || 'all'}${seconds == null ? '' : ` · ${seconds.toFixed(2)}s`}${row.mute && !overlay ? ' · muted' : ''}${row.use_metadata ? ' · GenData' : ''}${info?.error ? ' · unavailable' : ''}` : 'Empty · choose a file to set its trim';
+            view.overlay?.render(); view.blend.hidden = overlay; view.flags.mute.hidden = overlay;
             view.fields.hidden = !open;
             for (const [key, input] of Object.entries(view.inputs)) {
                 if (key === 'start_frame' || key === 'load_cap') input.setAttribute('aria-label', key === 'start_frame' ? 'Start frame' : 'Load cap');
@@ -141,8 +150,9 @@ export function createVideoSlots(actions) {
                 ? `${info.fps} FPS · ${info.duration.toFixed(2)}s source${seconds == null ? '' : ` · ${seconds.toFixed(2)}s selected`}` : 'Reading source details…';
         }
         count.textContent = `${rows.length} / 128 slots`; add.disabled = rows.length >= 128;
-        const included = rows.filter(row => row.enabled && row.file), lengths = included.map(row => duration(row, actions.probe(row.file)));
-        total.textContent = `${included.length} clips included${included.length && lengths.every(n => n != null) ? ` · ${lengths.reduce((a, b) => a + b, 0).toFixed(2)}s selected` : ''}`;
+        const included = rows.filter(row => row.enabled && row.file), bases = included.filter(row => !isVideoOverlay(row));
+        const lengths = bases.map(row => duration(row, actions.probe(row.file))), overlays = included.length - bases.length;
+        total.textContent = `${bases.length} clips included${overlays ? ` · ${overlays} overlays` : ''}${bases.length && lengths.every(n => n != null) ? ` · ${lengths.reduce((a, b) => a + b, 0).toFixed(2)}s selected` : ''}`;
     }
     return { element: root, footer, render, destroy: releaseScroll };
 }

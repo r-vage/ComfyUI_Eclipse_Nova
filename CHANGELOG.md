@@ -2,6 +2,27 @@
 
 ## 2026-10-25
 
+### Version: 1.0.17
+
+- **Feat**
+  - Add per-slot video overlays to Load Video with stable target selection, opacity, time offsets, Screen blending, black-background removal, embedded alpha and separate mask videos. Preserve the base clip's duration and soundtrack, align different frame rates, and include layers in previews, progress and cache reuse. Existing slots remain sequential.
+  - Add a source frame/time readout, direct seconds seeking, frame stepping and Set start here to Load Video. Choose trims visually without queueing or rebuilding, retain each slot's load cap, and identify FPS-based frame estimates for variable-rate sources.
+- **Changed files**
+  - core/video_overlays.py
+  - core/video_loader.py
+  - core/server_endpoints.py
+  - py/RvVideo_Load.py
+  - js/eclipse-video-overlays.js
+  - js/eclipse-video-source-position.js
+  - js/eclipse-video-slots.js
+  - js/eclipse-video-playlist.js
+  - js/eclipse-video-panel.js
+  - js/eclipse-panel.css
+  - Readme/Load_Video.md
+  - pyproject.toml
+
+## 2026-10-25
+
 ### Version: 1.0.16
 
 - **Fix**

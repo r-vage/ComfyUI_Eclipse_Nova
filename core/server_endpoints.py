@@ -1155,7 +1155,7 @@ class LoadVideoEndpoints:
 
         @lru_cache(maxsize=64)
         def probe(path, version):
-            return probe_video(path)
+            return probe_video(path, allow_alpha=True)
 
         def reference(request):
             return {name: request.query.get(name, default) for name, default in
