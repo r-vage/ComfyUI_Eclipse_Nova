@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-10-25
+
+### Version: 1.0.16
+
+- **Fix**
+  - Refine Load Video and Load Image Timeline layouts with compact borderless controls, easier dragging, consistent spacing and thinner focus borders. Keep video slot summaries visible with fit and per-clip blend modes, remove misleading filename arrows, and adapt the video browser grid to thumbnail aspect ratios.
+  - Show Load Video preview-build progress while retaining native progress for queued builds, completing only after file finalization. Reuse matching previews, avoid duplicate simultaneous encodes, and clear cancelled or failed progress without stale responses replacing queued output.
+- **Changed files**
+  - js/eclipse-video-slots.js
+  - js/eclipse-video-panel.js
+  - js/eclipse-video-playlist.js
+  - js/eclipse-video-browser.js
+  - js/eclipse-panel.css
+  - js/eclipse-image-timeline-form.js
+  - js/eclipse-image-timeline.css
+  - core/video_timing.py
+  - core/video_loader.py
+  - core/server_endpoints.py
+  - Readme/Load_Video.md
+  - pyproject.toml
+
 ## 2026-10-24
 
 ### Version: 1.0.15

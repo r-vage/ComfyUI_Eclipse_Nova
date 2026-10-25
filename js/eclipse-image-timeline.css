@@ -15,10 +15,17 @@
 .en-image-timeline .eit-slot { border: 1px solid var(--en-divider); border-radius: 5px; margin-bottom: 6px; padding: 5px; }
 .en-image-timeline .eit-slot[aria-current="true"], .en-image-timeline .eit-drop { border-color: var(--en-accent); }
 .en-image-timeline .eit-disabled { opacity: .6; }
-.en-image-timeline .eit-top { display: flex; align-items: center; gap: 3px; min-width: 0; }
-.en-image-timeline .eit-top button { padding: 3px; min-width: 20px; min-height: 26px; }
-.en-image-timeline .eit-top .eit-file { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-.en-image-timeline .eit-drag { cursor: grab; }
+.en-image-timeline .eit-top { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.en-image-timeline .eit-top button:not(.eit-file) { flex-shrink: 0; border: 0; background: transparent; padding: 0; }
+.en-image-timeline .eit-top .eit-file { flex: 1; min-width: 0; height: 29px; padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; border-color: var(--en-input-border); background: var(--en-input-bg); color: var(--en-text); }
+.en-image-timeline .eit-drag { width: 24px; height: 29px; cursor: grab; user-select: none; color: var(--en-muted-accent); }
+.en-image-timeline .eit-drag:active { cursor: grabbing; }
+.en-image-timeline .eit-enable { width: 18px; font-size: 16px; color: var(--en-success); }
+.en-image-timeline .eit-enable[aria-pressed="false"], .en-image-timeline .eit-remove { color: var(--en-danger); }
+.en-image-timeline .eit-remove { width: 17px; font-size: 18px; }
+.en-image-timeline .eit-disclosure { width: 16px; color: var(--en-bar-text); }
+.en-image-timeline .eit-order { display: flex; flex-direction: column; flex: 0 0 12px; }
+.en-image-timeline .eit-order button { font-size: 10px; height: 13px; line-height: 1; color: var(--en-muted); }
 .en-image-timeline .eit-summary { width: 100%; text-align: left; color: var(--en-muted); border: 0; background: transparent; font-size: 11px; overflow-wrap: anywhere; }
 .en-image-timeline .eit-fields { padding: 6px 0 0; }
 .en-image-timeline .eit-slot-actions { margin: 7px 0 0; display: flex; flex-wrap: wrap; }

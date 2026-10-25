@@ -1,8 +1,10 @@
 /** Searchable video file picker for playlist slots. Copyright (c) 2026 r-vage. MIT License. */
 import { api } from './comfy/index.js';
 import { markEclipseContextMenuOwner } from './eclipse-context-menu-ownership.js';
+import { chooseImageBrowserGridLayout } from './eclipse-image-browser.js';
 
 export const videoFileKey = (file) => JSON.stringify([file.type, file.subfolder || '', file.filename]);
+const posterKey = file => `${videoFileKey(file)}:${file.modified}:${file.size}`;
 export const videoPath = (route, file) => `${route}?${new URLSearchParams({
     type: file.type, subfolder: file.subfolder || '', filename: file.filename,
 })}`;
@@ -25,7 +27,7 @@ function styleBrowser() {
 .eclipse-video-browser header,.eclipse-video-browser footer{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0 10px}
 .eclipse-video-browser header strong{flex:1}.eclipse-video-browser button,.eclipse-video-browser input,.eclipse-video-browser select{font:inherit;border:1px solid #6668;border-radius:5px;background:var(--comfy-input-bg,#333);color:inherit;padding:6px}.eclipse-video-browser button{cursor:pointer}.eclipse-video-browser button:disabled{opacity:.5;cursor:default}
 .eclipse-video-browser input[type=search]{min-width:100px;flex:1}.eclipse-video-browser .evb-scroll{flex:1;min-height:80px;overflow:auto;position:relative}.eclipse-video-browser .evb-space{position:relative;width:100%}
-.eclipse-video-browser .evb-tile{position:absolute;box-sizing:border-box;padding:5px;display:flex;flex-direction:column;gap:4px;border:1px solid transparent;overflow:hidden}.eclipse-video-browser .evb-tile:focus-within{border-color:#88afff}.eclipse-video-browser .evb-preview{flex:1;min-height:0;padding:0;overflow:hidden;display:flex;flex-direction:column;text-align:left;width:100%}.eclipse-video-browser .evb-preview img{width:100%;height:92px;object-fit:contain;background:#131417}.eclipse-video-browser .evb-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;padding:3px;box-sizing:border-box}.eclipse-video-browser .evb-list .evb-tile{flex-direction:row}.eclipse-video-browser .evb-list .evb-preview{flex-direction:row;align-items:center}.eclipse-video-browser .evb-list .evb-preview img{width:74px;height:48px}.eclipse-video-browser .evb-status{flex:1;font-size:12px;opacity:.85}`;
+.eclipse-video-browser .evb-tile{position:absolute;box-sizing:border-box;padding:5px;display:flex;flex-direction:column;gap:4px;border:1px solid transparent;overflow:hidden}.eclipse-video-browser .evb-tile:focus-within{border-color:#88afff}.eclipse-video-browser .evb-preview{flex:1;min-height:0;padding:0;overflow:hidden;display:flex;flex-direction:column;text-align:left;width:100%}.eclipse-video-browser .evb-preview img{width:100%;height:0;min-height:0;flex:1;object-fit:contain;background:#131417}.eclipse-video-browser .evb-name{flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;padding:3px;box-sizing:border-box}.eclipse-video-browser .evb-list .evb-tile{flex-direction:row}.eclipse-video-browser .evb-list .evb-preview{flex-direction:row;align-items:center}.eclipse-video-browser .evb-list .evb-preview img{width:74px;height:48px;flex:none}.eclipse-video-browser .evb-list .evb-name{min-width:0;flex:1}.eclipse-video-browser .evb-status{flex:1;font-size:12px;opacity:.85}`;
     style.textContent += '\n.eclipse-video-browser .evb-list .evb-tile{padding-bottom:22px}.eclipse-video-browser .evb-list .evb-detail{position:absolute;bottom:5px;left:86px;right:5px}';
     document.head.append(style);
 }
@@ -36,6 +38,8 @@ export function createVideoBrowser({ getState, onStateChange, onChoose, onUpload
     let destroyed = false, generation = 0, frame = 0, observer;
     const controllers = new Set();
     const posters = new Map();
+    // Retain small dimension records when the bounded poster cache evicts images.
+    const aspects = new Map();
     const pendingLoads = new Set();
     let activeLoads = 0;
     const work = [];
@@ -52,7 +56,13 @@ export function createVideoBrowser({ getState, onStateChange, onChoose, onUpload
         } finally { controllers.delete(controller); }
     };
     function drawSoon() {
-        if (!frame) frame = requestAnimationFrame(() => { frame = 0; draw(); });
+        if (root && !destroyed && !frame) frame = requestAnimationFrame(() => { frame = 0; draw(); });
+    }
+    function recordAspect(key, width, height) {
+        const aspect = width / height;
+        if (!(width > 0 && height > 0 && Number.isFinite(aspect)) || aspects.get(key) === aspect) return;
+        aspects.set(key, aspect);
+        drawSoon();
     }
     function loadPoster(file, key) {
         if (posters.has(key) || pendingLoads.has(key)) return;
@@ -71,6 +81,7 @@ export function createVideoBrowser({ getState, onStateChange, onChoose, onUpload
                 const probe = await api.fetchApi(videoPath('/eclipse-nova/load_video/probe', file), { signal: controller.signal });
                 if (probe.ok && !controller.signal.aborted) {
                     const info = await probe.json();
+                    recordAspect(key, info.width, info.height);
                     poster.detail = `${info.width}×${info.height} · ${info.duration?.toFixed(2) || '?'} s · ${info.fps || '?'} fps${info.audio ? ' · audio' : ''}`;
                     updateTile(key, poster);
                 }
@@ -121,23 +132,29 @@ export function createVideoBrowser({ getState, onStateChange, onChoose, onUpload
         if (!root || destroyed) return;
         const settings = state();
         const focused = spacer.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null;
-        const columns = settings.layout === 'list' ? 1 : Math.max(1, Math.floor(scroll.clientWidth / 165));
-        const cellHeight = settings.layout === 'list' ? 82 : 178;
+        const knownAspects = filtered.map(file => aspects.get(posterKey(file))).filter(value => value > 0);
+        const averageAspect = knownAspects.length ? knownAspects.reduce((sum, value) => sum + value, 0) / knownAspects.length : 1;
+        const { columns, rowHeight: cellHeight, itemWidth, gap, pad } = settings.layout === 'list'
+            ? { columns: 1, rowHeight: 82, itemWidth: scroll.clientWidth, gap: 0, pad: 0 }
+            : chooseImageBrowserGridLayout(filtered.length, scroll.clientWidth, scroll.clientHeight, averageAspect);
         const firstRow = Math.max(0, Math.floor(scroll.scrollTop / cellHeight) - 1);
         const lastRow = Math.ceil((scroll.scrollTop + scroll.clientHeight) / cellHeight) + 1;
-        spacer.style.height = `${Math.ceil(filtered.length / columns) * cellHeight}px`;
+        spacer.style.height = `${pad * 2 + Math.ceil(filtered.length / columns) * cellHeight}px`;
         spacer.classList.toggle('evb-list', settings.layout === 'list');
         spacer.replaceChildren();
         for (let index = firstRow * columns; index < Math.min(filtered.length, lastRow * columns); index++) {
             const file = filtered[index], key = videoFileKey(file);
-            const cacheKey = `${key}:${file.modified}:${file.size}`;
+            const cacheKey = posterKey(file);
             const tile = videoElement('div', null, 'evb-tile');
             tile.dataset.cacheKey = cacheKey; tile.dataset.filename = file.filename;
-            Object.assign(tile.style, { left: `${index % columns * 100 / columns}%`, top: `${Math.floor(index / columns) * cellHeight}px`, width: `${100 / columns}%`, height: `${cellHeight}px` });
+            Object.assign(tile.style, { left: `${pad + index % columns * (itemWidth + gap)}px`, top: `${pad + Math.floor(index / columns) * cellHeight}px`, width: `${itemWidth}px`, height: `${cellHeight - gap}px` });
             const preview = videoElement('button', null, 'evb-preview');
             preview.type = 'button'; preview.title = `Choose ${file.subfolder ? file.subfolder + '/' : ''}${file.filename}`;
             preview.dataset.focusKey = `preview:${key}`;
             const image = document.createElement('img'); image.alt = '';
+            image.addEventListener('load', () => {
+                if (image.isConnected && !aspects.has(cacheKey)) recordAspect(cacheKey, image.naturalWidth, image.naturalHeight);
+            }, { once: true });
             const cached = posters.get(cacheKey);
             if (cached?.url) image.src = cached.url;
             else loadPoster(file, cacheKey);
@@ -151,7 +168,7 @@ export function createVideoBrowser({ getState, onStateChange, onChoose, onUpload
                 if (delta === undefined) return;
                 event.preventDefault();
                 const target = Math.max(0, Math.min(filtered.length - 1, index + delta));
-                const top = Math.floor(target / columns) * cellHeight;
+                const top = pad + Math.floor(target / columns) * cellHeight;
                 if (top < scroll.scrollTop || top + cellHeight > scroll.scrollTop + scroll.clientHeight) scroll.scrollTop = top;
                 draw();
                 const targetKey = `preview:${videoFileKey(filtered[target])}`;
@@ -168,6 +185,8 @@ export function createVideoBrowser({ getState, onStateChange, onChoose, onUpload
             const data = await fetchJSON(`/eclipse-nova/load_video/list?type=${state().source}`);
             if (revision !== generation || !root) return;
             files = data.files || [];
+            const currentKeys = new Set(files.map(posterKey));
+            for (const key of aspects.keys()) if (!currentKeys.has(key)) aspects.delete(key);
             status.dataset.busy = 'false';
             filter();
             if (data.truncated) status.textContent += ' (first 10,000)';
@@ -230,5 +249,6 @@ export function createVideoBrowser({ getState, onStateChange, onChoose, onUpload
         destroyed = true; close();
         for (const poster of posters.values()) if (poster.url) URL.revokeObjectURL(poster.url);
         posters.clear();
+        aspects.clear();
     } };
 }

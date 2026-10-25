@@ -1142,7 +1142,7 @@ class LoadVideoEndpoints:
             resolve_video_file,
             video_thumbnail,
         )
-        from .video_timing import media_cancellation
+        from .video_timing import media_cancellation, media_progress_callback
 
         routes = PromptServer.instance.routes
         workers = asyncio.Semaphore(2)
@@ -1232,11 +1232,13 @@ class LoadVideoEndpoints:
 
             def process():
                 token = media_cancellation.set(job["cancel"])
+                progress_token = media_progress_callback.set(lambda progress: job.update(progress=progress))
                 try:
                     return load_playlist(payload["playlist"],
                                          **{name: payload[name] for name in ("width", "height", "fit", "timing_mode", "fps",
                                                                            "blend_mode", "blend_duration", "style", "style_strength", "style_period") if name in payload})[0]
                 finally:
+                    media_progress_callback.reset(progress_token)
                     media_cancellation.reset(token)
 
             try:
@@ -1274,7 +1276,8 @@ class LoadVideoEndpoints:
             job = jobs.get(request.match_info["identity"])
             if job is None:
                 return web.json_response({"error": "Preview expired"}, status=404)
-            return web.json_response({key: job[key] for key in ("status", "result", "error") if key in job})
+            return web.json_response({key: job[key] for key in ("status", "result", "error", "progress") if key in job},
+                                     headers={"Cache-Control": "no-store"})
 
         @routes.delete("/eclipse-nova/load_video/preview/{identity}")
         async def cancel_video_preview(request):

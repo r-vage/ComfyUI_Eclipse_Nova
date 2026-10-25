@@ -15,6 +15,7 @@ from comfy.utils import ProgressBar
 
 TIMING_TYPE = "ECLIPSE_VIDEO_TIMING"
 media_cancellation = ContextVar("eclipse_video_cancellation", default=None)
+media_progress_callback = ContextVar("eclipse_video_progress_callback", default=None)
 
 
 def check_media_interrupt():
@@ -26,9 +27,31 @@ def check_media_interrupt():
     throw_exception_if_processing_interrupted()
 
 
-def media_progress(total):
-    # Explicit browser preview jobs must not update a queued node's progress bar.
-    return ProgressBar(total) if total and media_cancellation.get() is None else None
+class _PreviewProgress:
+    def __init__(self, total, stage, callback):
+        self.total = total or 0
+        self.stage = stage
+        self.callback = callback
+        self.update_absolute(0)
+
+    def update_absolute(self, value, total=None):
+        if total is not None:
+            self.total = total
+        self.callback({"value": min(value, self.total) if self.total else value,
+                       "max": self.total, "stage": self.stage})
+
+
+def media_progress(total, *, stage="Processing video"):
+    # Preview jobs report only to their own status endpoint. Native progress
+    # belongs to the executing ComfyUI node, never to an unrelated background job.
+    callback = media_progress_callback.get()
+    if callback is not None:
+        return _PreviewProgress(total, stage, callback)
+    if total and media_cancellation.get() is None:
+        progress = ProgressBar(total)
+        progress.update_absolute(0)
+        return progress
+    return None
 
 
 @dataclass(frozen=True)
@@ -157,7 +180,7 @@ def encode_timed_video(frames, timing, audio, path, *, width, height,
                 container.mux(packet)
 
         position = Fraction()
-        progress = media_progress(len(timing))
+        progress = media_progress(len(timing) + 1, stage="Building video")
         for index, duration in enumerate(timing.durations):
             check_media_interrupt()
             try:
@@ -189,3 +212,6 @@ def encode_timed_video(frames, timing, audio, path, *, width, height,
         if close:
             close()
         container.close()
+    # The final step includes encoder flushing, audio muxing and container close.
+    if progress:
+        progress.update_absolute(len(timing) + 1)

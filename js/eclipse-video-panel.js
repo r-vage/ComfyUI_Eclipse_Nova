@@ -58,11 +58,16 @@ class VideoForm {
         this.controls = element('div', 'en-panel-content'); this.controls.style.flex = '0 0 auto';
         if (this.load) this.controls.classList.add('en-video-global');
         if (this.load) {
+            this.buildProgress = element('progress', 'en-video-build-progress');
+            this.buildProgress.max = 1; this.buildProgress.hidden = true;
+            this.buildProgress.setAttribute('aria-label', 'Video build progress');
             this.playlist = createVideoEditor(controller.node, {
                 playlist: () => JSON.stringify({ version: 1, clips: this.config.clips }),
                 save: clips => controller.edit(state => { state.config.clips = clips; }, false),
                 options: () => this.previewOptions(), measure: () => controller.measure(),
+                fit: () => this.config.fit,
                 effects: controller.spec,
+                progress: value => this.showBuildProgress(value),
             });
         } else {
             this.preview = attachVideoPreview(controller.node, { sourceType: 'temp' });
@@ -72,6 +77,15 @@ class VideoForm {
     }
     get config() { return this.controller.state.config; }
     get state() { return this.controller.state; }
+    showBuildProgress(progress) {
+        this.buildProgress.hidden = !progress;
+        if (!progress) return;
+        if (Number.isFinite(progress.max) && progress.max > 0 && Number.isFinite(progress.value)) {
+            this.buildProgress.value = Math.max(0, Math.min(1, progress.value / progress.max));
+        } else this.buildProgress.removeAttribute('value');
+        const label = `${progress.stage || 'Building preview'}${this.buildProgress.hasAttribute('value') ? ` · ${Math.floor(this.buildProgress.value * 100)}%` : ''}`;
+        this.buildProgress.setAttribute('aria-valuetext', label); this.buildProgress.title = label;
+    }
     connected(name) { return this.controller.node.inputs?.find(input => input.name === name)?.link != null; }
     sourceTimed() {
         const node = this.controller.node, slot = node.inputs?.findIndex(input => input.name === 'images');
@@ -105,6 +119,7 @@ class VideoForm {
             const grid = element('div', 'en-panel-grid'); this.number(grid, 'fps', 'FPS', 1, 120, 0.1); this.controls.append(grid);
         } else this.controls.append(element('div', 'en-panel-note', 'Source timing and dimensions are retained.'));
         const content = element('div', 'en-panel-content'); content.append(this.controls, this.load ? this.playlist.element : this.preview);
+        if (this.load) content.prepend(this.buildProgress);
         root.replaceChildren(content); this.controller.measure();
     }
     bar(parent) {

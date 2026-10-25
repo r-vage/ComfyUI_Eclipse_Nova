@@ -118,6 +118,7 @@ export function createVideoEditor(node, binding) {
     }
     const slotEditor = createVideoSlots({
         effects: binding.effects,
+        fit: binding.fit,
         rows, state: presentation, present, probe: file => probes.get(videoFileKey(file)), update: editRow,
         select(id) { present({ activeId: id, tab: 'source' }); render(); },
         choose(id) { browser.close(); pickerTarget = id; present({ activeId: id, tab: 'source' }); render(); browser.open(); },
@@ -276,6 +277,7 @@ export function createVideoEditor(node, binding) {
     async function releaseJob() {
         if (poll) clearTimeout(poll); poll = null;
         const previous = job; job = null; jobRunning = false; cancel.hidden = true;
+        binding.progress?.(null);
         if (previous) { try { await api.fetchApi(`/eclipse-nova/load_video/preview/${previous}`, { method: 'DELETE', keepalive: true }); } catch { /* server expiry also cleans abandoned jobs */ } }
     }
     function markStale() {
@@ -284,16 +286,20 @@ export function createVideoEditor(node, binding) {
         status.textContent = 'Settings saved. Queue to join videos, or build a viewing preview.';
     }
     async function buildPreview(selectedOnly) {
+        if (disposed || jobRunning) return;
         const row = currentRow(); if (selectedOnly && !row?.file) return;
-        await releaseJob();
+        const released = releaseJob();
         const requestedRevision = ++revision;
+        status.textContent = 'Building preview…'; jobRunning = true; cancel.hidden = false;
+        binding.progress?.({ stage: 'Preparing preview', value: 0, max: 0 }); render();
+        await released;
+        if (disposed || requestedRevision !== revision) return;
         let payload;
         try {
             payload = binding.options();
             payload.playlist = selectedOnly ? JSON.stringify({ version: 1, clips: [{ ...row, enabled: true, use_metadata: false }] })
                 : JSON.stringify({ version: 1, clips: rows().filter(item => item.file) });
-        } catch (error) { status.textContent = error.message; return; }
-        status.textContent = 'Building preview…'; jobRunning = true; cancel.hidden = false; render();
+        } catch (error) { status.textContent = error.message; await releaseJob(); render(); return; }
         try {
             const response = await api.fetchApi('/eclipse-nova/load_video/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await response.json();
@@ -309,10 +315,22 @@ export function createVideoEditor(node, binding) {
                     if (!response.ok || data.status === 'error') throw new Error(data.error || 'Preview failed');
                     if (data.status === 'complete') {
                         joined = data.result; joinedStale = false; jobRunning = false; cancel.hidden = true;
+                        binding.progress?.(null);
                         status.textContent = selectedOnly ? 'Selected trim preview ready.' : 'Joined preview ready.';
                         present({ tab: 'joined' }); render();
-                    } else poll = setTimeout(check, 500);
-                } catch (error) { status.textContent = error.message; await releaseJob(); render(); }
+                    } else {
+                        if (data.progress) {
+                            binding.progress?.(data.progress);
+                            const { stage, value, max } = data.progress;
+                            const percent = Number.isFinite(value) && max > 0 ? ` ${Math.floor(Math.max(0, Math.min(1, value / max)) * 100)}%` : '';
+                            status.textContent = `${stage || 'Building preview'}…${percent}`;
+                        }
+                        poll = setTimeout(check, 500);
+                    }
+                } catch (error) {
+                    if (disposed || requestedRevision !== revision) return;
+                    status.textContent = error.message; await releaseJob(); render();
+                }
             }
             void check();
         } catch (error) { if (!disposed && requestedRevision === revision) { status.textContent = error.message; await releaseJob(); render(); } }
@@ -360,6 +378,7 @@ export function createVideoEditor(node, binding) {
             refreshSettings(); render(); void probeRows();
         },
         executed(message) {
+            revision++;
             void releaseJob(); joined = message?.eclipse_video?.[0] || null; joinedStale = false;
             report = message?.eclipse_report?.[0] || '';
             status.textContent = joined ? 'Joined output ready.' : 'Joined preview unavailable.';

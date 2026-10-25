@@ -8,6 +8,7 @@ import tempfile
 import threading
 import weakref
 from collections import OrderedDict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from fractions import Fraction
 from functools import lru_cache
@@ -38,6 +39,33 @@ MAX_CLIPS = 128
 MAX_REPORT = 262144
 _media_cache = OrderedDict()
 _media_cache_lock = threading.Lock()
+_media_builds = {}
+
+
+@contextmanager
+def _media_build_lock(key):
+    # A preview request and a queued execution can request the same encode at
+    # once. Serialize only identical builds; each waiter keeps its own cancel state.
+    with _media_cache_lock:
+        entry = _media_builds.setdefault(key, {"lock": threading.Lock(), "users": 0})
+        entry["users"] += 1
+    acquired = False
+    try:
+        acquired = entry["lock"].acquire(blocking=False)
+        if not acquired:
+            media_progress(0, stage="Waiting for matching video")
+        while not acquired:
+            check_media_interrupt()
+            acquired = entry["lock"].acquire(timeout=0.1)
+        check_media_interrupt()
+        yield
+    finally:
+        if acquired:
+            entry["lock"].release()
+        with _media_cache_lock:
+            entry["users"] -= 1
+            if not entry["users"]:
+                del _media_builds[key]
 
 
 def _recall_media(key):
@@ -47,7 +75,7 @@ def _recall_media(key):
             return None
         reference, encoded_timing = entry
         video = reference()
-        if video is None:
+        if video is None or not os.path.isfile(video.get_stream_source()):
             del _media_cache[key]
             return None
         _media_cache.move_to_end(key)
@@ -213,7 +241,7 @@ def scan_video(source):
     with _open(source) as container:
         stream = _video_stream(container)
         time_base = stream.time_base
-        progress = media_progress(stream.frames)
+        progress = media_progress(stream.frames, stage="Reading video frames")
         end = (stream.start_time or 0) * stream.time_base + stream.duration * stream.time_base if stream.duration is not None else None
         for frame in container.decode(stream):
             check_media_interrupt()
@@ -386,6 +414,7 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
         raise ValueError("Invalid fit or timing selection")
     if any(type(value) is not int or not 0 <= value <= 16384 for value in (width, height)):
         raise ValueError("Width and height must be between 0 and 16384")
+    media_progress(0, stage="Reading videos")
     clips, report, generation_data = [], [], None
     for index, row in enumerate(rows):
         path = resolve_video_file(row["file"])
@@ -430,36 +459,41 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
                   clip.row.get("blend_mode", "inherit"), clip.row.get("blend_duration", 1.0)) for clip in clips),
            width, height, fit, timing_mode, str(fps) if timing_mode == "fixed" else None,
            blend_mode, blend_duration, style, style_strength, style_period)
-    cached = _recall_media(key)
-    if cached is not None:
-        video, encoded_timing = cached
-    else:
-        # Frames stream to disk; account for joined PCM, one clip and decoder scratch.
-        processing_bytes = 192 if any(window["half"] for window in windows) or style != "off" else 12
-        required_bytes = 2 * audio_bytes + width * height * processing_bytes
-        available_bytes = get_free_memory(torch.device("cpu"))
-        if required_bytes > available_bytes * .8:
-            raise ValueError(f"Joining needs about {required_bytes / 2**30:.2f} GiB of RAM for audio and frame processing; {available_bytes / 2**30:.2f} GiB is available. Reduce size/load caps.")
-        audio = _playlist_audio(clips)
-        encoded_timing = timing
-        frames = (transition_frames(clips, lambda clip: _frames_for_clips([clip], width, height, fit), windows)
-                  if any(window["half"] for window in windows) else _frames_for_clips(clips, width, height, fit))
-        if timing_mode == "fixed":
-            if not math.isfinite(float(fps)) or not 1 <= float(fps) <= 240:
-                raise ValueError("Fixed FPS must be between 1 and 240")
-            rate = Fraction(str(fps))
-            frames = _fixed_frames(frames, timing, rate)
-            encoded_timing = VideoTiming.constant(math.ceil(timing.duration * rate), rate)
-        frames = styled_frames(frames, encoded_timing, **style_settings)
-        descriptor, path = tempfile.mkstemp(prefix="EclipseLoadVideo_", suffix=".mp4", dir=folder_paths.get_temp_directory())
-        os.close(descriptor)
-        try:
-            encode_timed_video(frames, encoded_timing, audio, path, width=width, height=height, crf=18, preset="veryfast")
-            video = TemporaryVideo(path)
-        except BaseException:
-            os.unlink(path)
-            raise
-        _remember_media(key, video, encoded_timing)
+    with _media_build_lock(key):
+        cached = _recall_media(key)
+        if cached is not None:
+            video, encoded_timing = cached
+            progress = media_progress(1, stage="Reusing built video")
+            if progress:
+                progress.update_absolute(1)
+        else:
+            # Frames stream to disk; account for joined PCM, one clip and decoder scratch.
+            processing_bytes = 192 if any(window["half"] for window in windows) or style != "off" else 12
+            required_bytes = 2 * audio_bytes + width * height * processing_bytes
+            available_bytes = get_free_memory(torch.device("cpu"))
+            if required_bytes > available_bytes * .8:
+                raise ValueError(f"Joining needs about {required_bytes / 2**30:.2f} GiB of RAM for audio and frame processing; {available_bytes / 2**30:.2f} GiB is available. Reduce size/load caps.")
+            media_progress(0, stage="Preparing audio")
+            audio = _playlist_audio(clips)
+            encoded_timing = timing
+            frames = (transition_frames(clips, lambda clip: _frames_for_clips([clip], width, height, fit), windows)
+                      if any(window["half"] for window in windows) else _frames_for_clips(clips, width, height, fit))
+            if timing_mode == "fixed":
+                if not math.isfinite(float(fps)) or not 1 <= float(fps) <= 240:
+                    raise ValueError("Fixed FPS must be between 1 and 240")
+                rate = Fraction(str(fps))
+                frames = _fixed_frames(frames, timing, rate)
+                encoded_timing = VideoTiming.constant(math.ceil(timing.duration * rate), rate)
+            frames = styled_frames(frames, encoded_timing, **style_settings)
+            descriptor, path = tempfile.mkstemp(prefix="EclipseLoadVideo_", suffix=".mp4", dir=folder_paths.get_temp_directory())
+            os.close(descriptor)
+            try:
+                encode_timed_video(frames, encoded_timing, audio, path, width=width, height=height, crf=18, preset="veryfast")
+                video = TemporaryVideo(path)
+            except BaseException:
+                os.unlink(path)
+                raise
+            _remember_media(key, video, encoded_timing)
     report.append(f"Result: {width}x{height}, fit={fit}, {len(timing)} source frames, {float(timing.duration):.9f}s.")
     report.append("Frames streamed to VIDEO. Audio: first track per file, 48000 Hz stereo; missing or muted intervals are silence.")
     for index, window in enumerate(windows):

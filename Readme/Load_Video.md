@@ -21,15 +21,29 @@ The playlist occupies the **left column**, with the shared player on the **right
 Click **+ Video** to add an empty slot, then its filename field to browse Input /
 Output or upload a local video. Each slot has its own include toggle, ordering
 arrows, remove button and collapsible settings for **Start frame**, **Load cap**,
-**Mute**, **Use metadata**, **Blend to next**, **Blend seconds** and duplication. Drag a row header to reorder it. Only
+**Mute**, **Use metadata**, **Blend to next**, **Blend seconds** and duplication.
+Drag the **⠿ handle** at the left to reorder a clip, even when its settings are
+collapsed. The adjacent up/down arrows also move clips; a focused handle supports
+**Alt + Up / Down**. Each clip keeps its trim, blend and metadata choices when moved. Only
 one included clip can supply generation data. Empty slots remain in the workflow
 but are ignored during preview generation and execution; at least one filled,
 enabled slot is required to run.
+
+Clip summaries stay visible when settings are expanded and show the shared
+**Crop / Pad / Stretch** output fit, that clip's **Blend to next** choice, trim
+and duration. Inherited blending shows **Use global blend**; explicit choices
+show their mode, such as **Morph**. Labels update immediately when these settings
+change. Slot padding matches Load Image Timeline.
 
 Dropping multiple local videos fills empty slots first, then adds more slots, up
 to 128. The file browser also allows reusing a video with different trims. A
 slot's upload follows that slot when reordered; selecting another file while the
 upload finishes keeps the newer selection.
+
+The filename button opens a resizable video browser. Its thumbnail grid uses the
+same aspect-aware layout as the image browser, adapting to portrait or landscape
+clips and the available window space. Posters keep their proportions; List view
+remains available for compact browsing.
 
 Hover the clip list to scroll it independently of the player without zooming the
 canvas, including at the top and bottom of the list. Resize the node to change the
@@ -42,6 +56,18 @@ between the selected clip, rendered result and that clip's saved metadata.
 primitives when their values are available before execution. For inputs computed
 by other nodes, queue the workflow to build the output using their resolved
 values. These explicit preview actions do not run the workflow themselves.
+
+Preview builds show a progress bar across the top of the panel, with the current
+stage and percentage below the player. Queued builds use ComfyUI's native node
+progress bar. Completion includes finalizing the video file; cancelling a
+preview clears its progress without interrupting an unrelated queued build.
+
+Queueing after **Build joined preview** reuses the built video when the source
+files, enabled clips, trims, audio, size, timing, blends and style still match.
+If an identical build is already running, the second request waits and reuses
+its result instead of encoding another copy. Metadata selection alone does not
+require a new encode. Reuse is temporary: changed media settings, an expired or
+deleted preview, or a server restart can require rebuilding.
 
 The **Blending** section sets the default transition and duration for all clips.
 Each clip's **Blend to next** can inherit that global setting or override it;

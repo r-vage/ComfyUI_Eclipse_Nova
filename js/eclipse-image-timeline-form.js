@@ -154,15 +154,17 @@ export class ImageTimelineForm {
             const from = event.dataTransfer.getData('text/eclipse-image-timeline');
             if (from) { event.preventDefault(); event.stopPropagation(); card.classList.remove('eit-drop'); this.edit(state => state.move(from, id)); }
         };
-        const include = button('', 'Include image', () => this.update(id, { enabled: !rowFor().enabled }));
+        const include = button('', 'Include image', () => this.update(id, { enabled: !rowFor().enabled })); include.className = 'eit-enable';
         const choose = button('', 'Choose image', () => this.select(id, true)); choose.className = 'eit-file';
+        const order = element('span', 'eit-order');
         const up = button('↑', 'Move image up', () => this.edit(state => state.move(id, -1)));
         const down = button('↓', 'Move image down', () => this.edit(state => state.move(id, 1)));
-        const remove = button('×', 'Remove image slot', () => this.edit(state => state.remove(id)));
+        order.append(up, down);
+        const remove = button('×', 'Remove image slot', () => this.edit(state => state.remove(id))); remove.className = 'eit-remove';
         const toggle = button('', 'Image settings', () => {
             this.controller.edit(state => { const open = state.editor.open ??= {}; open[id] = !open[id]; state.editor.activeId = id; }, false);
-        });
-        top.append(drag, include, choose, up, down, toggle, remove);
+        }); toggle.className = 'eit-disclosure';
+        top.append(drag, include, choose, order, toggle, remove);
         const summary = button('', 'Preview image', () => this.select(id)); summary.className = 'eit-summary';
         const body = element('div', 'eit-fields'), grid = element('div', 'en-panel-grid'), inputs = {};
         for (const [key, label, options] of [
