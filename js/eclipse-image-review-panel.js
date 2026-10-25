@@ -86,6 +86,7 @@ class ComparerForm {
     constructor(controller) {
         this.controller = controller;
         this.images = { a: [], b: [] }; this.selected = { a: null, b: null };
+        this.requests = { a: 0, b: 0 }; this.loaded = { a: false, b: false };
         this.preview = element('div', 'en-comparer-preview');
         this.preview.setAttribute('aria-label', 'Image comparison');
         this.preview.tabIndex = 0;
@@ -97,12 +98,6 @@ class ComparerForm {
         this.dimA = element('span', 'en-comparer-dimension en-comparer-dimension-a');
         this.dimB = element('span', 'en-comparer-dimension en-comparer-dimension-b');
         this.preview.append(this.placeholder, this.imgB, this.imgA, this.slider, this.dimA, this.dimB);
-        this.imgA.onload = () => { this.dimA.textContent = `A: ${this.imgA.naturalWidth} × ${this.imgA.naturalHeight}`; };
-        this.imgB.onload = () => { this.dimB.textContent = `B: ${this.imgB.naturalWidth} × ${this.imgB.naturalHeight}`; };
-        for (const img of [this.imgA, this.imgB]) img.onerror = () => {
-            img.hidden = true; this.placeholder.hidden = false;
-            this.placeholder.textContent = 'Preview expired. Run workflow to reload images.';
-        };
         this.position = 50; this.over = false; this.down = false;
         this.preview.onpointerenter = () => { this.over = true; this.applyMode(); };
         this.preview.onpointermove = event => {
@@ -153,10 +148,37 @@ class ComparerForm {
     }
     get count() { return Math.max(this.images.a.length, this.images.b.length); }
     feed(output) {
+        this.placeholder.textContent = 'Run workflow to compare images';
         this.images = { a: output.a_images || [], b: output.b_images || [] };
         const pair = Math.max(0, Math.min(this.count - 1, this.controller.state.editor.pair));
         if (pair !== this.controller.state.editor.pair) this.controller.edit(state => { state.editor.pair = pair; }, false);
         this.selectPair(this.controller.state.editor.pair);
+    }
+    expire() {
+        this.images = { a: [], b: [] };
+        this.controller.edit(state => {
+            state.editor.pair = 0;
+            delete this.controller.node.properties.eclipseComparerImages;
+        }, false);
+        this.selectPair(0);
+        this.placeholder.textContent = 'Preview expired. Run workflow to reload images.';
+    }
+    loadImage(side, data) {
+        const img = side === 'a' ? this.imgA : this.imgB, dim = side === 'a' ? this.dimA : this.dimB;
+        const url = data ? imageURL(data) : null;
+        if (url && img.getAttribute('src') === url) return;
+        const request = ++this.requests[side];
+        this.loaded[side] = false; dim.textContent = '';
+        if (!url) { img.removeAttribute('src'); return; }
+        img.src = url;
+        // A previous pair's late load/error must not invalidate a newer result.
+        const current = () => !this.destroyed && this.requests[side] === request;
+        img.decode().then(() => {
+            if (!current()) return;
+            this.loaded[side] = true;
+            dim.textContent = `${side.toUpperCase()}: ${img.naturalWidth} × ${img.naturalHeight}`;
+            this.applyMode();
+        }, () => { if (current()) this.expire(); });
     }
     selectPair(index, track = false) {
         const pair = Math.max(0, Math.min(this.count - 1, index));
@@ -164,21 +186,16 @@ class ComparerForm {
         this.pair = pair;
         for (const side of ['a', 'b']) {
             const data = this.images[side][pair] || this.images[side][0] || null;
-            const img = side === 'a' ? this.imgA : this.imgB, dim = side === 'a' ? this.dimA : this.dimB;
             this.selected[side] = data;
-            if (data) {
-                const url = imageURL(data);
-                if (img.getAttribute('src') !== url) { dim.textContent = ''; img.src = url; }
-            } else { img.removeAttribute('src'); dim.textContent = ''; }
-            img.hidden = !data;
+            this.loadImage(side, data);
         }
         this.placeholder.hidden = this.count > 0;
         this.applyMode(); this.renderNavigator();
     }
     applyMode() {
-        const both = Boolean(this.selected.a && this.selected.b), slide = this.controller.state.editor.mode === 'Slide';
-        this.imgA.hidden = !this.selected.a || (!slide && both && this.down);
-        this.imgB.hidden = !this.selected.b;
+        const both = this.loaded.a && this.loaded.b, slide = this.controller.state.editor.mode === 'Slide';
+        this.imgA.hidden = !this.loaded.a || (!slide && both && this.down);
+        this.imgB.hidden = !this.loaded.b;
         this.imgA.style.clipPath = slide && both && this.over ? `inset(0 ${100 - this.position}% 0 0)` : '';
         this.slider.hidden = !(slide && both && this.over);
         this.slider.style.left = `${this.position}%`;
@@ -202,6 +219,7 @@ class ComparerForm {
     syncSummaries() {}
     dispose() {}
     destroy() {
+        this.destroyed = true;
         this.observer.disconnect();
         for (const img of [this.imgA, this.imgB]) { img.onload = img.onerror = null; img.removeAttribute('src'); }
     }

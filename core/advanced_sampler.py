@@ -9,6 +9,10 @@ from .sampler_extras import prepare_extras, qwen_sigmas
 from .sampler_preview import prepare_callback
 
 
+def second_stage_denoise(parameters):
+    return parameters['second_denoise'] if parameters['second_start'] == 0 else 1.0
+
+
 def sample_stages(*, parameters, model, samples, seed, steps, cfg, sampler_name,
                   scheduler, denoise, batch_index, noise_mask, preview_mode, positive, negative, model_2=None):
     primary_model = model
@@ -34,8 +38,10 @@ def sample_stages(*, parameters, model, samples, seed, steps, cfg, sampler_name,
             model = prepare_extras(parameters, model_2)
             callback = prepare_callback(model, stage['steps']) if preview_mode != 'None' else None
         if index and parameters['latent_upscale']:
-            if samples.ndim != 4 or samples.is_nested:
-                raise ValueError('Between-stage latent upscale currently supports image latents only.')
+            # Krea2/Qwen Image use a single-frame Wan latent even for still images.
+            # ComfyUI's spatial upscale preserves that frame axis and the batch.
+            if samples.is_nested or not (samples.ndim == 4 or (samples.ndim == 5 and samples.shape[2] == 1)):
+                raise ValueError('Between-stage latent upscale requires 4D image latents or 5D latents with one frame; multi-frame and nested latents are not supported.')
             factor = parameters['upscale_factor']
             samples = comfy.utils.common_upscale(samples, round(samples.shape[-1] * factor),
                                                  round(samples.shape[-2] * factor), parameters['upscale_method'], 'disabled')
@@ -45,13 +51,16 @@ def sample_stages(*, parameters, model, samples, seed, steps, cfg, sampler_name,
         advanced = parameters['two_stage']
         if advanced and not 0 <= stage['start'] < min(stage['end'], stage['steps']):
             raise ValueError(f'Stage {index + 1}: start must be below stop and total steps (including pipe settings).')
+        effective_denoise = (second_stage_denoise(parameters) if index else 1.0) if advanced else denoise
+        if effective_denoise <= 0:
+            continue
         add_noise = stage['add_noise'] if advanced else True
         noise = comfy.sample.prepare_noise(samples, stage_seed, batch_index) if add_noise else torch.zeros_like(samples, device='cpu')
-        sigmas = qwen_sigmas(parameters, samples, stage['steps'], 1.0 if advanced else denoise) if parameters['qwen_schedule'] else None
+        sigmas = qwen_sigmas(parameters, samples, stage['steps'], effective_denoise) if parameters['qwen_schedule'] else None
         if parameters['detail_daemon']:
             base = comfy.samplers.KSampler(model, steps=stage['steps'], device=model.load_device,
                                            sampler=stage['sampler_name'], scheduler=stage['scheduler'],
-                                           denoise=1.0 if advanced else denoise, model_options=model.model_options)
+                                           denoise=effective_denoise, model_options=model.model_options)
             schedule = (sigmas if sigmas is not None else base.sigmas).clone()
             if advanced:
                 if stage['end'] < len(schedule) - 1:
@@ -68,7 +77,7 @@ def sample_stages(*, parameters, model, samples, seed, steps, cfg, sampler_name,
         samples = comfy.sample.sample(
             model, noise, stage['steps'], stage['cfg'], stage['sampler_name'], stage['scheduler'],
             positive, negative, samples,
-            denoise=1.0 if advanced else denoise, disable_noise=not add_noise,
+            denoise=effective_denoise, disable_noise=not add_noise,
             start_step=stage['start'] if advanced else None,
             last_step=stage['end'] if advanced else None,
             force_full_denoise=not stage['leftover'] if advanced else False,

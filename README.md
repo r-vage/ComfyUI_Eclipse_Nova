@@ -53,9 +53,9 @@ Neutral Amethyst and Neutral Amber** for lighter backgrounds and titles with
 colored controls. Themes are editable JSON files; add your own
 under `themes/custom/` and reload them from settings. Bundled themes are extracted
 once from `.defaults/themes/`; edits and deletions in `themes/` survive updates.
-The selected design applies to Nova backgrounds and automatic titles, including
-saved workflows, and preserves custom title colors. **Theme regular nodes** and
-**Theme groups** are separate Appearance options, both off by default. Turning
+The selected design styles panel controls and untouched node defaults, preserving
+custom title and background colors across workflow reloads. **Theme regular nodes**
+and **Theme groups** are separate Appearance options, both off by default. Turning
 either off restores the previous colors. Preferences are stored in this pack’s
 `config.json`. The optional **Link Nova themes** button keeps installed SmartLLM
 Nova and Smart Model Loader Nova packs on Eclipse's theme, so future selections

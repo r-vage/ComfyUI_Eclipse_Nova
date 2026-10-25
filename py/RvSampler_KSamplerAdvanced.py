@@ -6,7 +6,7 @@ from functools import partial
 from comfy_api.latest import io
 
 from ..core import CATEGORY
-from ..core.advanced_sampler import sample_stages
+from ..core.advanced_sampler import sample_stages, second_stage_denoise
 from ..core.common import get_workflow_node
 from ..core.sampler_configuration import (
     WIDGET_TYPE,
@@ -27,7 +27,7 @@ class RvSampler_KSamplerAdvanced(io.ComfyNode):
             node_id="Eclipse KSampler Advanced [Eclipse Nova]",
             display_name="Eclipse KSampler Advanced",
             category=CATEGORY.MAIN.value + CATEGORY.SAMPLER.value,
-            description="Standard or two-stage sampling with independent step ranges and noise controls. Stage 2 uses model_2 from the PIPE when supplied, otherwise reuses model_1, independently of Use pipe settings. Optional latent upscale runs between stages; only the final latent is decoded. Use pipe settings overrides supplied settings for both stages, upscale, decode and preview. Stage 2 uses its explicit seed when supplied, otherwise base plus offset. Optional Qwen schedule, DiT skip guidance and Detail Daemon sections always use local controls and apply to both stages; Detail Daemon is built in and needs no additional custom node.",
+            description="Standard or two-stage sampling with independent step ranges and noise controls. Stage 2 Denoise applies when its Start step is 0; otherwise it is ignored for schedule continuation. Stage 2 uses model_2 from the PIPE when supplied, otherwise reuses model_1, independently of Use pipe settings. Optional latent upscale runs between stages; only the final latent is decoded. Use pipe settings overrides supplied settings for both stages, upscale, decode and preview. Stage 2 uses its explicit seed when supplied, otherwise base plus offset. Optional Qwen schedule, DiT skip guidance and Detail Daemon sections always use local controls and apply to both stages; Detail Daemon is built in and needs no additional custom node.",
             inputs=[
                 io.Custom("PIPE").Input("pipe"),
                 io.String.Input("configuration", socketless=True,
@@ -111,6 +111,6 @@ class RvSampler_KSamplerAdvanced(io.ComfyNode):
         if values["two_stage"]:
             out_pipe.update({key: values["second_" + key] for key in ("steps", "cfg", "sampler_name", "scheduler")})
             out_pipe["seed"] = out_pipe["second_seed"]
-            out_pipe["denoise"] = 1.0
+            out_pipe["denoise"] = second_stage_denoise(values)
         record_automatic_execution(local_seed and config["seed"]["policy"] == "random")
         return io.NodeOutput(result.result[0], ui=result.ui)

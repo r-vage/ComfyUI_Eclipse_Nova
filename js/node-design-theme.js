@@ -1,32 +1,32 @@
 /** Local theme catalog and event-driven application; no cross-pack state. */
 export function createNodeDesign({ app, api, settingId, category, route, prefix, dataset,
-    suffix, notice, nodeCategory = () => null, colorTitlesOnCreate = false, scopeControls = false, onDesignApplied }) {
+    suffix, notice, scopeControls = false, onDesignApplied }) {
     const defaultDesign = 'neutral';
     let designs = {}, active = null, saved = defaultDesign, ready = false, synchronizing = false;
     let revision = 0, pending = Promise.resolve();
     const decoratedTypes = new WeakSet();
     const decoratedGraphs = new WeakSet();
     const decoratedNodes = new WeakSet();
-    const titleKey = `${dataset}Title`, restoreKey = `${dataset}Restore`;
+    const titleKey = `${dataset}Title`, backgroundKey = `${dataset}Background`, restoreKey = `${dataset}Restore`;
     const scopes = { theme_regular_nodes: false, theme_groups: false };
     const normalize = value => typeof value === 'string' ? value.toLowerCase().replace(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/, '#$1$1$2$2$3$3') : value;
     const ownedId = node => [node.comfyClass, node.type, node.constructor?.type]
         .find(id => typeof id === 'string' && id.endsWith(suffix));
 
-    function applyTitle(node, kind, created) {
+    const isDefaultColor = (field, value) => value != null && normalize(value) === normalize(
+        globalThis.LiteGraph?.[field === 'color' ? 'NODE_DEFAULT_COLOR' : 'NODE_DEFAULT_BGCOLOR']);
+
+    function applyNodeColor(node, field, key, value, created) {
         const properties = node.properties ??= {};
-        const current = normalize(node.color), previous = properties[titleKey];
-        // Once a title is tracked, a different color is an explicit override, even
-        // when it matches another theme. Persist this distinction with the workflow.
+        const current = normalize(node[field]);
+        const previous = properties[key] !== undefined ? properties[key] : properties[restoreKey]?.applied?.[field];
+        // Only untouched defaults follow the theme. Saved colors without a marker
+        // are user choices, even if they happen to match a theme or category color.
         const automatic = !current || (previous !== undefined
             ? previous !== null && current === normalize(previous)
-            : (created && colorTitlesOnCreate) || current === normalize(globalThis.LiteGraph?.NODE_DEFAULT_COLOR)
-                || Object.values(designs).some(design => current === normalize(design.node.title)
-                    || (kind && current === normalize(design.node.category_titles[kind]))));
-        const title = kind === 'pipe' || kind === 'router'
-            ? active.node.category_titles[kind] : active.node.title;
-        properties[titleKey] = automatic ? title : null;
-        if (automatic) node.color = title;
+            : created && isDefaultColor(field, current));
+        properties[key] = automatic ? value : null;
+        if (automatic) node[field] = value;
         return automatic;
     }
 
@@ -51,11 +51,11 @@ export function createNodeDesign({ app, api, settingId, category, route, prefix,
             if (!info || (!ownedId(this) && !scopes.theme_regular_nodes && !info.properties?.[restoreKey])) return result;
             // LiteGraph merges properties, so constructor-applied theme markers
             // otherwise survive even when the saved workflow never contained them.
-            for (const key of [titleKey, restoreKey]) {
+            for (const key of [titleKey, backgroundKey, restoreKey]) {
                 if (!Object.hasOwn(info.properties ?? {}, key)) delete this.properties?.[key];
             }
             for (const field of ['color', 'bgcolor']) {
-                if (info[field] == null) this[field] = initial[field];
+                if (info[field] == null) this[field] = isDefaultColor(field, initial[field]) ? undefined : initial[field];
             }
             applyNodeDesign(this);
             return result;
@@ -68,7 +68,9 @@ export function createNodeDesign({ app, api, settingId, category, route, prefix,
         if (!id && !scopes.theme_regular_nodes) {
             if (scopeControls && node.properties?.[restoreKey]) {
                 restoreColors(node, node.properties, ['color', 'bgcolor']);
-                if (node.properties[titleKey] !== null) delete node.properties[titleKey];
+                for (const key of [titleKey, backgroundKey]) {
+                    if (node.properties[key] !== null) delete node.properties[key];
+                }
             }
             return false;
         }
@@ -80,14 +82,15 @@ export function createNodeDesign({ app, api, settingId, category, route, prefix,
                 original: { color: node.color ?? null, bgcolor: node.bgcolor ?? null }, applied: {},
             };
         }
-        const kind = id ? nodeCategory(id) : null;
-        const automatic = applyTitle(node, kind, !!id && created);
-        if (id && created && colorTitlesOnCreate) node.shape = 'default';
-        node.bgcolor = kind === 'pipe' || kind === 'router' ? active.node.routing_background : active.node.background;
-        if (state) {
-            state.applied.bgcolor = node.bgcolor;
-            if (automatic) state.applied.color = node.color;
-            else delete state.applied.color;
+        for (const [field, key, value] of [
+            ['color', titleKey, active.node.title],
+            ['bgcolor', backgroundKey, active.node.background],
+        ]) {
+            const automatic = applyNodeColor(node, field, key, value, created);
+            if (state) {
+                if (automatic) state.applied[field] = node[field];
+                else delete state.applied[field];
+            }
         }
         return true;
     }
@@ -129,7 +132,7 @@ export function createNodeDesign({ app, api, settingId, category, route, prefix,
         prototype.add = function (item, ...args) {
             const result = original.call(this, item, ...args);
             if (item instanceof Group && item.graph === this) applyGroupDesign(item);
-            else if (item?.graph === this && scopes.theme_regular_nodes) applyNodeDesign(item);
+            else if (item?.graph === this && scopes.theme_regular_nodes) applyNodeDesign(item, true);
             return result;
         };
     }
@@ -144,7 +147,7 @@ export function createNodeDesign({ app, api, settingId, category, route, prefix,
             const original = prototype.onAdded;
             prototype.onAdded = function (...args) {
                 const result = original?.apply(this, args);
-                applyNodeDesign(this);
+                applyNodeDesign(this, true);
                 return result;
             };
         }
@@ -210,7 +213,7 @@ export function createNodeDesign({ app, api, settingId, category, route, prefix,
         settings.addSetting({
             id: settingId, category: [...category, 'NodeDesign'], name: 'Node design',
             type: 'combo', defaultValue: saved, options: options(), sortOrder: 500,
-            tooltip: 'Theme from this repo’s themes folder. Selecting or reloading applies its background and automatic title colors, including in subgraphs. Custom title colors are preserved.',
+            tooltip: 'Theme from this repo’s themes folder. Styles panel controls and untouched node defaults, including in subgraphs. Saved and custom title/background colors are preserved.',
             onChange(value) {
                 if (!ready || synchronizing) return;
                 if (!Object.hasOwn(designs, value)) return showSaved();
@@ -237,7 +240,7 @@ export function createNodeDesign({ app, api, settingId, category, route, prefix,
         });
         if (scopeControls) {
             for (const [key, id, name, tooltip] of [
-                ['theme_regular_nodes', 'RegularNodes', 'Theme regular nodes', 'Apply the selected background and automatic title color to other nodes too. Custom titles stay unchanged. Turning this off restores their previous colors.'],
+                ['theme_regular_nodes', 'RegularNodes', 'Theme regular nodes', 'Apply the theme to untouched defaults on other nodes too. Custom titles and backgrounds stay unchanged. Turning this off restores their previous colors.'],
                 ['theme_groups', 'Groups', 'Theme groups', 'Match group colors to the selected design: RGB 60 with dark themes, RGB 80 with Neutral. Turning this off restores their previous colors.'],
             ]) {
                 const scopeId = `${settingId}.${id}`;

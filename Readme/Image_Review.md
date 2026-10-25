@@ -16,6 +16,9 @@ and the partial run ends at this node.
 - Click images to select or deselect them. Numbered badges show their output order.
 - Shift+click selects a range. **All** or Ctrl/Cmd+A selects everything; Escape clears the selection.
 - Double-click an image to open a larger preview. Left/Right or A/D moves through images; Space, S or Enter toggles selection. Escape closes the larger preview.
+- Right-click a thumbnail or the larger preview for image actions. Open, Save,
+  Copy, Clipspace and Mask Editor use the original full-resolution image. The
+  grid itself still loads thumbnails capped at 1024 pixels on the longest side.
 - **Layout** chooses an automatic grid or one to six images per row. Large grids scroll inside the node. Resizing the node changes the available preview area.
 - **Confirm** sends the selected indices and requeues the workflow. Supported upstream dynamic seed and file-index providers are fixed to the values used for the displayed images.
 - **Discard** clears the decision and disables Auto confirm; the next queue pauses for selection again.
@@ -24,6 +27,11 @@ and the partial run ends at this node.
 The **images** output is a batch in selection order. Mixed-size images are resized to the first selected image's dimensions. **indices** contains the corresponding zero-based indices.
 
 Selection drafts, order, layout and node size survive workflow reloads while the same backend session and preview files are available. Reloading never confirms or queues work. Changed upstream inputs, deleted previews or a restarted backend require another run to rebuild the grid.
+
+Originals are cached with the thumbnails in ComfyUI's temporary directory,
+including alpha and workflow metadata. Confirming a selection reuses those files;
+removing the node or replacing the grid removes them. Images already within the preview
+size limit share one file for the preview and image actions.
 
 ## Image Comparer
 
@@ -43,3 +51,7 @@ Pairs use matching indices. If one side is shorter, its first image is reused fo
 Original image tensors, batch grouping, dimensions and alpha channels pass through unchanged. The selected output side is part of the API configuration, so it also works without workflow metadata. Right-click offers **Open Image A/B** and **Save Image A/B** for the displayed pair.
 
 Mode, output choice, pair position, collapsed bar and node size are saved with the workflow. Temporary previews can be restored while their files remain available; run the workflow again if they have expired.
+
+If a restored preview is missing, the comparer clears its saved image references,
+pair numbers and image actions, and shows **Preview expired**. Mode, output choice
+and node size stay unchanged. A new execution fills the comparison again.

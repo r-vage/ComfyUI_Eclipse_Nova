@@ -30,6 +30,9 @@ export class SamplerState extends SeedState {
     constructor(raw, spec, editor = {}) {
         super();
         this.config = parseConfiguration(raw); this.spec = spec; this.editor = clone(editor);
+        if (spec.profile === 'advanced' && spec.fields.second_denoise && !Object.hasOwn(this.config.parameters, 'second_denoise')) {
+            this.config.parameters.second_denoise = clone(spec.fields.second_denoise.default);
+        }
         for (const [key, field] of Object.entries(spec.fields)) {
             if (field.optional && !Object.hasOwn(this.config.parameters, key)) this.config.parameters[key] = clone(field.default);
         }

@@ -181,9 +181,11 @@ def batch_latents(latents: list[dict]) -> dict:
         if sample.ndim != reference.ndim or sample.shape[1] != reference.shape[1]:
             raise ValueError("Latent channel counts and ranks must match.")
         if sample.shape[2:] != reference.shape[2:]:
-            if reference.ndim == 5:
+            if reference.ndim == 5 and (reference.shape[2] != 1 or sample.shape[2] != 1):
                 raise ValueError("Video latent temporal and spatial dimensions must match.")
-            sample = comfy.utils.common_upscale(sample, reference.shape[-1], reference.shape[-2], "lanczos", "center")
+            # Image latents may retain a singleton frame axis. Resize spatially
+            # without PIL's channel restrictions or clipping signed latent values.
+            sample = comfy.utils.common_upscale(sample, reference.shape[-1], reference.shape[-2], "bicubic", "center")
         prepared.append(sample)
     result = {**shared[0], "samples": _cat(prepared, "Latent samples")}
     if any("batch_index" in latent for latent in latents):
@@ -205,7 +207,10 @@ def batch_latents(latents: list[dict]) -> dict:
                 if first_mask.ndim == 3:
                     mask = mask[:, 0]
             elif mask.shape[2:] != first_mask.shape[2:]:
-                mask = torch.nn.functional.interpolate(mask, size=first_mask.shape[2:], mode="trilinear")
+                if reference.shape[2] == mask.shape[2] == first_mask.shape[2] == 1:
+                    mask = comfy.utils.common_upscale(mask, first_mask.shape[-1], first_mask.shape[-2], "bilinear", "center")
+                else:
+                    mask = torch.nn.functional.interpolate(mask, size=first_mask.shape[2:], mode="trilinear")
             prepared_masks.append(mask)
         result["noise_mask"] = _cat(prepared_masks, "Latent noise_mask")
     return result

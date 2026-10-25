@@ -105,6 +105,7 @@ export class SamplerForm {
                 if (key === 'second_scheduler' && p.qwen_schedule) { control.disabled = true; control.title = 'Qwen schedule supplies sigmas for Stage 2 at its actual resolution.'; }
             }
             for (const key of ['second_steps', 'second_cfg']) this.number(numbers, key);
+            this.number(numbers, 'second_denoise', 'en-panel-field', p.second_start !== 0);
             group.append(selectors, numbers); this.stageRange(group, true);
         });
         for (const [key, enabled, title, prefix] of [
@@ -192,7 +193,7 @@ export class SamplerForm {
         const p = this.state.config.parameters;
         if (this.state.spec.profile === 'advanced') {
             if (key === 'sampler' && p.two_stage) return `${p.sampler_name} · ${p.start_step}–${p.end_step} / ${p.steps}`;
-            if (key === 'stage2') return `${p.second_sampler_name} · ${p.second_start}–${p.second_end} / ${p.second_steps}`;
+            if (key === 'stage2') return `${p.second_sampler_name} · ${p.second_start}–${p.second_end} / ${p.second_steps}${p.second_start === 0 ? ` · ${p.second_denoise} denoise` : ''}`;
             if (key === 'qwen') return `${p.qwen_dynamic ? 'Dynamic' : 'Fixed'} · terminal ${p.qwen_terminal}`;
             if (key === 'dit') return `Double ${p.dit_double_layers || 'none'} · single ${p.dit_single_layers || 'none'}`;
             if (key === 'detail') return `${p.detail_amount} · ${p.detail_start}–${p.detail_end}`;
@@ -209,6 +210,8 @@ export class SamplerForm {
         return `Blend ${p.feather} · noise ${p.noise_mask_feather}`;
     }
     syncSummaries() {
+        const denoise = this.controller.root.querySelector('[data-field="second_denoise"]');
+        if (denoise) denoise.disabled = this.state.config.parameters.second_start !== 0;
         for (const label of this.controller.root.querySelectorAll('[data-section-summary]')) {
             label.textContent = label.title = this.summary(label.dataset.sectionSummary);
         }

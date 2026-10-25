@@ -2,6 +2,37 @@
 
 ## 2026-10-25
 
+### Version: 1.0.19
+
+- **Fix**
+  - Remove type-based node recoloring, including forced black colors on Float and routing nodes. Preserve custom titles and backgrounds across theme changes and workflow reloads, including in subgraphs, while keeping themed controls and untouched defaults.
+  - Support Krea2 and Qwen Image single-frame latents in the advanced sampler's between-stage upscale, preserving batch, channel and frame dimensions.
+  - Support a lower-denoise second pass in Eclipse KSampler Advanced, including IO KSampler control and generation metadata. Apply Stage 2 Denoise when Start step is zero, retain full-schedule continuation otherwise, and preserve existing configurations and socket indices.
+  - Let To Batch resize single-frame 5D latents while preserving latent values and channel counts. Keep noise masks aligned with the spatial crop and retain validation for mismatched video latents.
+  - Use full-resolution originals for Image Selector's Open, Save, Copy, Clipspace and Mask Editor actions while keeping lightweight canvas thumbnails. Preserve original alpha and workflow metadata, reuse files after confirmation, and clean them up with the grid.
+  - Clear Image Comparer's saved previews, pair numbers and image actions when temporary images expire. Keep its settings and size, prevent late image errors from clearing newer results, and restore navigation on the next execution.
+- **Changed files**
+  - core/advanced_sampler.py
+  - core/batch_helpers.py
+  - core/image_selection.py
+  - core/sampler_configuration.py
+  - js/eclipse-image-selector.js
+  - js/eclipse-image-review-panel.js
+  - js/eclipse-node-design.js
+  - js/eclipse-sampler-form.js
+  - js/eclipse-sampler-state.js
+  - js/eclipse-selector-image-actions.js
+  - js/node-design-theme.js
+  - py/RvSampler_KSamplerAdvanced.py
+  - README.md
+  - Readme/Advanced_Sampler.md
+  - Readme/Image_Review.md
+  - Readme/README.md
+  - Readme/Node_Design.md
+  - pyproject.toml
+
+## 2026-10-25
+
 ### Version: 1.0.18
 
 - **Fix**

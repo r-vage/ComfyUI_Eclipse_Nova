@@ -18,6 +18,7 @@
 import { app, api } from './comfy/index.js';
 import { showEclipseToast } from './eclipse-notifications.js';
 import { validSeed } from './eclipse-panel-seed.js';
+import { SelectorImageActions } from './eclipse-selector-image-actions.js';
 import {
     findSetterByName,
     getGraphAncestors,
@@ -329,11 +330,12 @@ function _updateSelectorSnapshot(node, changes, track = false) {
 }
 
 function _disposeSelectorUI(node) {
+    node._eclipseSelectorImageActions?.dispose();
     node._eclipseSelectorResizeObserver?.disconnect();
     node._eclipseSelectorModeUnsubscribe?.();
     node._eclipseSelectorPointerEnterCleanup?.();
     for (const name of ['ResizeObserver', 'ModeUnsubscribe', 'PointerEnterCleanup',
-        'RefreshLayout', 'Dropdown', 'SetAutoSelection', 'Grid']) delete node[`_eclipseSelector${name}`];
+        'RefreshLayout', 'Dropdown', 'SetAutoSelection', 'Grid', 'ImageActions']) delete node[`_eclipseSelector${name}`];
 }
 
 function _expireSelectorSnapshot(node) {
@@ -745,7 +747,7 @@ async function _confirmSelectorSelection(node, indices) {
 
 function _buildSelectorUI(node, container, imageData, totalCount, initialSelection = []) {
     const gridKey = JSON.stringify([node.properties?.[SELECTOR_SNAPSHOT]?.generation, totalCount,
-        imageData.map(image => [image.filename, image.subfolder || '', image.type || 'temp'])]);
+        imageData.map(image => [image.filename, image.subfolder || '', image.type || 'temp', image.original])]);
     const mounted = node._eclipseSelectorGrid;
     if (mounted?.container === container && mounted.key === gridKey && mounted.grid.parentElement === container) {
         // Confirm and cached executions return the same full grid. Update the
@@ -754,6 +756,7 @@ function _buildSelectorUI(node, container, imageData, totalCount, initialSelecti
         return;
     }
     _disposeSelectorUI(node);
+    const imageActions = node._eclipseSelectorImageActions = new SelectorImageActions(node, imageData[0]);
     container.innerHTML = '';
     container.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;' +
         'background:#1a1a1a;display:flex;flex-direction:column;border-radius:4px;';
@@ -863,6 +866,7 @@ function _buildSelectorUI(node, container, imageData, totalCount, initialSelecti
         imageWrapper.appendChild(largeImg);
 
         let currentIdx = initialIdx;
+        imageActions.bind(imageWrapper, () => imageData[currentIdx]);
 
         const getUrl = (idx) => {
             const data = imageData[idx];
@@ -874,6 +878,7 @@ function _buildSelectorUI(node, container, imageData, totalCount, initialSelecti
         };
 
         function updateOverlay() {
+            imageActions.selected = imageData[currentIdx];
             largeImg.src = getUrl(currentIdx);
             overlayStatus.textContent = `Image ${currentIdx + 1} of ${imageData.length}`;
 
@@ -1033,6 +1038,7 @@ function _buildSelectorUI(node, container, imageData, totalCount, initialSelecti
             `&subfolder=${encodeURIComponent(data.subfolder || '')}`
         );
         const cell = document.createElement('div');
+        imageActions.bind(cell, () => data);
         cell.className = 'eclipse-sel-cell';
         cell.setAttribute('role', 'option');
         cell.setAttribute('aria-label', `Image ${i + 1}`);
@@ -1052,6 +1058,7 @@ function _buildSelectorUI(node, container, imageData, totalCount, initialSelecti
         grid.appendChild(cell);
 
         cell.addEventListener('click', (e) => {
+            imageActions.selected = data;
             if (e.shiftKey && lastClickedIdx !== null) {
                 // Shift+click: range selection from lastClickedIdx to i
                 const lo = Math.min(lastClickedIdx, i);
@@ -1535,6 +1542,13 @@ app.registerExtension({
 
     async beforeRegisterNodeDef(nodeType, nodeData, _app) {
         if (nodeData.name !== NODE_NAME) return;
+
+        const originalMenu = nodeType.prototype.getExtraMenuOptions;
+        nodeType.prototype.getExtraMenuOptions = function (canvas, options) {
+            return this._eclipseSelectorImageActions
+                ? this._eclipseSelectorImageActions.options(originalMenu, canvas, options)
+                : originalMenu?.apply(this, arguments);
+        };
 
         const origOnNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {

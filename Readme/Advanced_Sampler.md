@@ -25,6 +25,8 @@ boolean. The existing `steps`, `cfg`, `sampler_name`, `scheduler`, `denoise`
 and `seed` fields control standard sampling or Stage 1. Only Stage 2 has separate
 `second_*` settings; there is no duplicate Stage 1 set. On sampler output, basic
 fields describe the final stage; `sampling_stages` retains the full configuration.
+`second_denoise` is appended to IO KSampler's sockets, keeping existing connection
+indices unchanged. Older sampler configurations default this value to 1.0.
 Connecting a new base seed or offset clears an inherited
 Stage 2 seed unless a new Stage 2 seed is supplied at the same time.
 
@@ -63,11 +65,19 @@ KSampler nodes after this socket reordering.
 - **Two-stage off:** standard sampling with the usual steps, CFG, sampler,
   scheduler and denoise controls.
 - **Two-stage on:** each stage has its own total steps, sampler, scheduler, CFG,
-  start/stop steps, Add noise and Keep leftover noise. Denoise is internally 1.0,
-  matching ComfyUI's KSampler Advanced. Stage 1 passes its latent directly to Stage 2.
-- **Latent upscale:** independent and off by default. When enabled in two-stage
+  start/stop steps, Add noise and Keep leftover noise. Stage 1 uses denoise 1.0,
+  matching ComfyUI's KSampler Advanced, and passes its latent to Stage 2.
+- **Stage 2 Denoise:** when Stage 2 starts at step 0, choose its denoise strength
+  just like a standard KSampler. The control uses increments of 0.01. When Start
+  step is above 0, the control is disabled and ignored: denoise stays 1.0 so the
+  start/stop range selects the full schedule. Its saved value is retained.
+  Denoise 0 skips Stage 2 sampling; any enabled latent upscale still applies.
+- **Latent upscale:** independent and on by default. When enabled in two-stage
   mode, resize between the stages using the selected method and factor. This
-  option supports image latents only.
+  option supports ordinary 4D image latents and 5D single-frame image latents,
+  including Krea2 and Qwen Image. Only width and height change; the batch,
+  channels and single-frame dimension are preserved. Multi-frame video and
+  nested latents remain unsupported by this option.
 
 The defaults match the configured Eclipse KSampler Advanced in the Moody Moss
 workflow: Stage 1 uses 16 steps, CFG 3, er_sde/simple and range 0–12;
@@ -107,7 +117,8 @@ button for its explanation. These three sections always use their local controls
 - **Qwen schedule:** internally constructs Qwen Image 2.1 sigmas, replacing both
   scheduler dropdowns while enabled. Uses each stage's steps and actual 64-channel
   image latent dimensions, recalculating after latent upscale. Standard mode uses
-  the local denoise fraction once; two-stage mode uses the start/stop ranges.
+  the resolved denoise fraction once. Two-stage mode uses the start/stop ranges
+  and also applies Stage 2 Denoise when that stage starts at 0.
   Dynamic shifting interpolates between token-count anchors, with exponential or
   linear transformation. Fixed shift applies when dynamic shifting is disabled.
   Terminal sigma controls the final positive level before zero; 0 disables stretching.
@@ -149,3 +160,28 @@ and Jonseed for the ComfyUI port.
 Use a Stage 2 seed offset of **88**. Bicubic latent upscale at **2×** is enabled by default to reproduce the workflow's resolution increase; disable it to retain the input resolution. Without upscaling, both
 stages operate at the input resolution. Sampler availability depends on the local
 ComfyUI installation.
+
+## Full render followed by a lower-denoise upscale pass
+
+To reproduce **KSampler Advanced → Upscale Latent By → KSampler**, enable
+Two-stage and Latent upscale, using bicubic at **1.5×** with these settings:
+
+| Setting | Stage 1 | Stage 2 |
+|---|---|---|
+| Steps | 8 | 4 |
+| Start / Stop | 0 / 8 | 0 / 4 |
+| Sampler | er_sde | euler_ancestral |
+| Scheduler | beta | beta |
+| CFG | 1 | 1 |
+| Denoise | 1 (internal) | 0.39 |
+| Add noise | On | On |
+| Keep leftover noise | Off | Off |
+
+Use seed offset **0** if both native samplers shared the same seed. Optional
+Qwen schedule, DiT guidance and Detail Daemon must be off to reproduce the
+unpatched samplers. With **Use pipe settings** enabled, supplied PIPE values
+take priority, so check that they match these settings too.
+
+ComfyUI calculates `int(4 / 0.39) = 10` schedule steps and keeps the last four.
+For this recipe, 4 steps with denoise 0.39 uses the same sigmas as 10 steps with
+start 6 and stop 10. The new control expresses that lower-denoise pass directly.

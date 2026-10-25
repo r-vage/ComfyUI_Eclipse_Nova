@@ -23,19 +23,19 @@ can select them together. With Eclipse’s **Theme groups** enabled, their
 group color is Neutral’s `#505050`.
 
 Each gray RGB value applies to all three channels. Automatic titles use a +20
-offset from the bundled theme's background. Custom title colors stay unchanged;
-pipe and routing bodies remain black.
+offset from the bundled theme's background. Custom title and background colors
+stay unchanged. Node types no longer force category colors or black backgrounds.
 
 The palettes are JSON files in `themes/`. They style panels, searchable menus and editor windows.
-All nodes owned by this pack use the selected node background; nodes with native
-ComfyUI controls keep those native controls.
+Nodes with untouched theme defaults follow the selected background and title;
+nodes with native ComfyUI controls keep those native controls.
 
 **Theme regular nodes** and **Theme groups** are separate options in the same
 Appearance settings, both off by default. Enable the first to apply the background
-and automatic title colors to other nodes. Enable the second to match group
-colors to the theme. Both apply immediately, including inside subgraphs. Turning
+and automatic title colors to untouched defaults on other nodes. Enable the second
+to match group colors to the theme. Both apply immediately, including inside subgraphs. Turning
 an option off restores the previous colors, including after saving and loading
-the workflow; manual title overrides remain intact.
+the workflow; manual title and background overrides remain intact.
 
 **Link Nova themes → Link themes** keeps installed SmartLLM Nova and Smart Model
 Loader Nova packs on Eclipse's selected theme. It applies the current selection
@@ -68,13 +68,16 @@ The same String Multiline editor is shown in both renderers. The remaining
 
 ## Existing workflows and colors
 
-Selecting or reloading a design replaces **all saved/custom node backgrounds**
-in this pack, including nodes inside subgraphs. Loading a workflow also applies
-the current design. Manual background changes are temporary until one of those
-actions happens. Custom title colors are preserved; automatic titles follow the
-theme. Workflows without a saved title color or automatic-color marker also use
-the current theme, including older automatic gray and category titles. Node
-values, connections, collapsed sections and outputs are unchanged.
+Selecting or reloading a design updates panel controls and untouched theme
+defaults. **Custom node titles and backgrounds are preserved**, including inside
+subgraphs and after workflow reload. Float, routing and pipe nodes are no longer
+recolored according to their type.
+
+Saved colors without an automatic-theme marker are kept as they are, including
+black and colors that happen to match a bundled palette. Existing black nodes
+can be recolored normally. Nodes without saved colors use their constructor or
+theme defaults. Node values, connections, collapsed sections and outputs are
+unchanged.
 
 The chosen theme ID is saved as `node_design` in this repo's private `config.json`.
 The two optional scopes are saved as `theme_regular_nodes` and `theme_groups`.
@@ -122,8 +125,8 @@ or enable **Link Nova themes**. Theme files remain local to each pack.
 | --- | --- |
 | `node.background` | Node body and panel/dialog surface |
 | `node.title` | Default automatic title color |
-| `node.routing_background` | Eclipse Nova pipe/routing body color; black in bundled themes |
-| `node.category_titles` | Category palette retained in the shared file format; automatic Eclipse titles use `node.title` |
+| `node.routing_background` | Retained for shared theme-file compatibility; Eclipse does not force routing backgrounds |
+| `node.category_titles` | Retained for shared theme-file compatibility; Eclipse does not apply category colors |
 | `tokens.accent` | Main control accent |
 | `tokens.control-*` | Button backgrounds and borders |
 | `tokens.input-*`, `tokens.select-*` | Text fields and selectors |

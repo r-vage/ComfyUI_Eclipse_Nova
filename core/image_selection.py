@@ -124,8 +124,8 @@ def _compute_signature(image_list: list) -> str:
     return digest.hexdigest()
 
 
-def _save_previews(image_list: list, prompt, extra_pnginfo, uid: str, *, output=False) -> list:
-    # Save each [1,H,W,C] tensor to temp dir. Returns list of {filename, subfolder, type}.
+def _save_previews(image_list: list, prompt, extra_pnginfo, uid: str, *, output=False, originals=None) -> list:
+    # Each [1,H,W,C] tensor gets a preview descriptor and a full-resolution original reference.
     import shutil
 
     metadata = PngInfo()
@@ -155,10 +155,21 @@ def _save_previews(image_list: list, prompt, extra_pnginfo, uid: str, *, output=
     pbar = comfy.utils.ProgressBar(len(image_list))
     for idx, img_t in enumerate(image_list):
         pil = tensor2pil(img_t)
+        ts = int(time.time() * 1000) % 100000000
+        fname = f"preview_{idx:05}_{ts}.png"
+        preview = {"filename": fname, "subfolder": subfolder, "type": "temp"}
+        original = originals[idx] if originals is not None else dict(preview)
 
-        # Scale down preview to max 1024px to save browser memory/VRAM and disk space
+        # Scale down canvas previews to max 1024px to save browser memory/VRAM.
         max_size = 1024
         if pil.width > max_size or pil.height > max_size:
+            if originals is None:
+                # Keep one full-resolution file for image actions after tensor
+                # caches are released. Confirmed-output previews reuse this file.
+                original = {"filename": fname, "subfolder": f"{subfolder}/original", "type": "temp"}
+                original_folder = os.path.join(_temp_dir, original["subfolder"])
+                os.makedirs(original_folder, exist_ok=True)
+                pil.save(os.path.join(original_folder, fname), pnginfo=metadata, compress_level=1)
             if pil.width > pil.height:
                 new_w = max_size
                 new_h = int(pil.height * (max_size / pil.width))
@@ -172,10 +183,8 @@ def _save_previews(image_list: list, prompt, extra_pnginfo, uid: str, *, output=
                 method = Image.LANCZOS
             pil = pil.resize((new_w, new_h), method)
 
-        ts = int(time.time() * 1000) % 100000000
-        fname = f"preview_{idx:05}_{ts}.png"
         pil.save(os.path.join(full_folder, fname), pnginfo=metadata, compress_level=1)
-        results.append({"filename": fname, "subfolder": subfolder, "type": "temp"})
+        results.append({**preview, "original": original})
         pbar.update(1)
 
     return results
@@ -316,7 +325,8 @@ def select_images(images, *, unique_id, prompt=None, extra_pnginfo=None, auto_co
             if uid not in _stored_ui_images:
                 _stored_ui_images[uid] = _save_previews(image_list, prompt, extra_pnginfo, uid)
             _stored_signatures[uid] = current_sig
-            ui_images = _save_previews(selected_list, prompt, extra_pnginfo, uid, output=True)
+            originals = [_stored_ui_images[uid][i].get("original", _stored_ui_images[uid][i]) for i in valid]
+            ui_images = _save_previews(selected_list, prompt, extra_pnginfo, uid, output=True, originals=originals)
             _stored_images.pop(uid, None)  # Free stored images tensor cache
 
             count = len(selected_list)

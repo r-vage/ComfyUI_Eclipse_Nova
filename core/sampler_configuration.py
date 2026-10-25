@@ -69,6 +69,9 @@ def advanced_editor_spec():
     fields["upscale_factor"] = {"label": "Scale factor", "default": 2.0, "min": 1, "max": 8, "step": 0.1}
     fields["upscale_method"] = {"label": "Method", "default": "bicubic", "options": ["nearest-exact", "bilinear", "area", "bicubic", "bislerp"]}
     fields.update(extra_fields())
+    # Append to keep every existing IO KSampler socket index stable.
+    fields["second_denoise"] = {"label": "Denoise", "default": 1.0, "min": 0, "max": 1, "step": 0.01,
+                                "tooltip": "Stage 2 denoise strength when Start step is 0, like a standard KSampler. Ignored when Start step is above 0 so continuation uses the full schedule. 0 skips Stage 2 sampling; any latent upscale still applies."}
     return {"profile": "advanced", "fields": fields, "seedDefault": "42"}
 
 
@@ -125,6 +128,7 @@ def validate_configuration(raw, profile):
         raise ValueError("Unknown sampler parameter.")
     if profile == "advanced":
         values.setdefault("second_seed", "")
+        values.setdefault("second_denoise", 1.0)
         for key, field in fields.items():
             if field.get("optional"):
                 values.setdefault(key, field["default"])

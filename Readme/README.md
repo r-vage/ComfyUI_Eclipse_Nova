@@ -113,8 +113,9 @@ does not provide the original Eclipse node IDs or install its companions.
 ## Quick answers
 
 **Change the colors:** open **Settings → Eclipse Nova → Appearance → Node design**.
-A selected theme replaces Nova node backgrounds, including saved custom
-backgrounds; custom title colors remain. See [Node designs](Node_Design.md).
+A selected theme styles controls and untouched node defaults. Saved custom titles
+and backgrounds remain, including on Float and routing nodes.
+See [Node designs](Node_Design.md).
 
 **Edit prompt/style files:** use this pack’s `prompts/`, `styles/`, `wildcards/`
 and `patterns/` folders. Refresh the relevant node after editing. User-modified
