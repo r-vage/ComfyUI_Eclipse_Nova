@@ -2,6 +2,19 @@
 
 ## 2026-10-25
 
+### Version: 1.0.18
+
+- **Fix**
+  - Make Load Image Timeline's images output a single batch at the resolved canvas size, applying each enabled slot's fit and crop alignment without blending or video effects. Preserve slot order and alpha, while keeping original images and per-image settings in the PIPE for timeline rendering.
+- **Changed files**
+  - core/image_timeline_loader.py
+  - core/image_timeline_video.py
+  - py/RvImage_LoadImageTimeline.py
+  - Readme/Image_Timeline_Video.md
+  - pyproject.toml
+
+## 2026-10-25
+
 ### Version: 1.0.17
 
 - **Feat**

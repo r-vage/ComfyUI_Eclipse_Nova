@@ -61,7 +61,9 @@ The selected slot appears on the right. **Image metadata** reads its generation 
 
 Connect **Load Image Timeline → pipe → IO Image Timeline → pipe → Image Timeline Video**. Add the soundtrack to the IO's **audio** input, leaving its **images** input disconnected. The renderer controls when images change; its blend settings apply only to slots set to **Use timeline setting**. Connect another IO after the renderer to extract the completed **video** for captions or saving.
 
-The loader's canvas settings determine a common output size without resizing the source images. Cropping and blending happen during rendering. Its additional **images** output contains the original ordered images; use its **pipe** output to retain per-image options. Passing the same ordered images into an IO again preserves their options. Replacing, reordering or processing the images clears inherited per-image crop/blend settings to avoid applying them to the wrong images.
+The **images** output supplies one batch of enabled, nonempty slots in their displayed order. Each image is resized to the resolved canvas width/height using its own Pad, Crop or Stretch choice and crop alignment. **Use timeline setting** uses Pad on this output, matching the loader preview. It contains one still per slot, without blends, transitions or video styling. Alpha is preserved; RGB images receive opaque alpha when batched with RGBA images. Use this output for image previews, MiniMax/WAN planners or other image-processing nodes.
+
+The **pipe** output retains the original images together with their per-image settings, so Image Timeline Video can frame them at its final dimensions and apply the selected blends during rendering. Leave the IO's images input disconnected to use this route. Forwarding the same original PIPE images through an IO preserves their options; supplying the loader's resized images output, or otherwise replacing, reordering or processing the images, clears inherited crop/blend settings to avoid applying them twice or to different images.
 
 ## Rendering and outputs
 

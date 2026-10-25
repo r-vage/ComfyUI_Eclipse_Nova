@@ -29,7 +29,10 @@ class RvImage_LoadImageTimeline(io.ComfyNode):
                     io.String.Input("configuration", socketless=True, default=json.dumps(default_configuration()),
                                     extra_dict={"widgetType": WIDGET_TYPE, "editorSpec": {
                                         "blend_modes": ["inherit", "cut", *BLEND_MODES], "blend_tooltips": BLEND_TOOLTIPS}})],
-            outputs=[io.Custom("PIPE").Output("pipe"), io.Image.Output("images", is_output_list=True), io.String.Output("report")],
+            outputs=[io.Custom("PIPE").Output("pipe", tooltip="Original images and per-slot settings for Image Timeline Video."),
+                     io.Image.Output("images", is_output_list=True,
+                                     tooltip="One batch of enabled images at the resolved canvas size, with per-slot fit/crop and no blending. Inherited fit uses Pad here. Alpha is preserved; RGB images become opaque when mixed with RGBA."),
+                     io.String.Output("report")],
         )
 
     @classmethod

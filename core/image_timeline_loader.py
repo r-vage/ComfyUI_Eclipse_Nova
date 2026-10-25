@@ -2,16 +2,17 @@
 import json
 import math
 
+import torch
 from PIL import Image, ImageOps
 
-from .image_helpers import pil2tensor
+from .image_helpers import pil2tensor, prepare_image_output
 from .image_loading import file_fingerprint, source_image_path
 from .image_metadata import (
     GENERATION_GROUPS,
     extract_image_metadata,
     selected_generation_metadata,
 )
-from .image_timeline_video import image_options, output_dimensions
+from .image_timeline_video import fit_timeline_image, image_options, output_dimensions
 from .video_timing import check_media_interrupt
 
 WIDGET_TYPE = "ECLIPSE_NOVA_IMAGE_TIMELINE_LOAD"
@@ -102,10 +103,21 @@ def load_images(configuration, width=None, height=None):
     width, height = output_dimensions(width if width is not None else config["width"],
                                       height if height is not None else config["height"],
                                       images[0].shape[2], images[0].shape[1])
+    # The PIPE retains originals for later framing. The IMAGE socket supplies
+    # one uniform batch so downstream planners see every slot in one execution.
+    channels = max(image.shape[-1] for image in images)
+    batch = torch.empty((len(images), height, width, channels), dtype=torch.float32)
+    for index, (image, option) in enumerate(zip(images, settings)):
+        picture = Image.fromarray(fit_timeline_image(image, width, height, option, preserve_alpha=True))
+        fitted = pil2tensor(picture)[0]
+        batch[index, ..., :3] = fitted[..., :3]
+        if channels == 4:
+            batch[index, ..., 3] = fitted[..., 3] if fitted.shape[-1] == 4 else 1.0
     report = f"{len(images)} images; canvas {width} × {height}. Per-slot blends lead into the next enabled image; the last blend is unused."
+    report += "\nImages output: one resized/cropped batch without blending. PIPE retains the original images and slot settings."
     if metadata_source:
         report += f"\nMetadata: {metadata_source['filename']}; fields: {', '.join(metadata) or 'none available/selected'}."
     output = {**metadata, "images": images, "image_timeline_slots": settings,
               "image_timeline_sources": source_info, "width": width, "height": height,
               "image_timeline_metadata_source": metadata_source}
-    return output, images, report
+    return output, prepare_image_output(batch, was_batch=True), report

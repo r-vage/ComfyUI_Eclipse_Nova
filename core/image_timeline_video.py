@@ -178,6 +178,21 @@ def output_dimensions(width, height, source_w, source_h):
     return width, height
 
 
+def fit_timeline_image(image, width, height, option, fit="pad", *, preserve_alpha=False):
+    # Shared still-image framing; no transition, animation or global style.
+    check_media_interrupt()
+    if not torch.isfinite(image).all().item():
+        raise ValueError("Image pixels must be finite.")
+    picture = tensor2pil(image.to(dtype=torch.float32))
+    if picture.mode == "RGBA" and not preserve_alpha:
+        picture = Image.alpha_composite(Image.new("RGBA", picture.size, (0, 0, 0, 255)), picture)
+    mode = "RGBA" if preserve_alpha and picture.mode == "RGBA" else "RGB"
+    chosen_fit = option.get("fit", "inherit")
+    return _fit(np.asarray(picture.convert(mode)), width, height, fit if chosen_fit == "inherit" else chosen_fit,
+                crop_x={"left": 0, "center": .5, "right": 1}[option.get("crop_x", "center")],
+                crop_y={"top": 0, "center": .5, "bottom": 1}[option.get("crop_y", "center")])
+
+
 def render_image_video(images, audio, *, width=0, height=0, fit="pad", blend_mode="cut", blend_duration=1.0,
                        slot_settings=None, style="off", style_strength=0.5, style_period=2.0, **settings):
     style_settings = validate_style(style, style_strength, style_period)
@@ -204,24 +219,12 @@ def render_image_video(images, audio, *, width=0, height=0, fit="pad", blend_mod
     if has_blends:
         plan["notes"].append("Blends are centered on the planned cuts. Short image intervals limit their length without moving the audio clock.")
 
-    def fitted(image, option):
-        check_media_interrupt()
-        if not torch.isfinite(image).all().item():
-            raise ValueError("Image pixels must be finite.")
-        picture = tensor2pil(image.to(dtype=torch.float32))
-        if picture.mode == "RGBA":
-            picture = Image.alpha_composite(Image.new("RGBA", picture.size, (0, 0, 0, 255)), picture)
-        chosen_fit = option.get("fit", "inherit")
-        return _fit(np.asarray(picture.convert("RGB")), width, height, fit if chosen_fit == "inherit" else chosen_fit,
-                    crop_x={"left": 0, "center": .5, "right": 1}[option.get("crop_x", "center")],
-                    crop_y={"top": 0, "center": .5, "bottom": 1}[option.get("crop_y", "center")])
-
     def frames():
-        current, position = fitted(selected[0], options[0]), 0
+        current, position = fit_timeline_image(selected[0], width, height, options[0], fit), 0
         for window in windows:
             for _ in range(position, window["start_frame"]):
                 yield current
-            upcoming = fitted(selected[window["image_index"]], options[window["image_index"]])
+            upcoming = fit_timeline_image(selected[window["image_index"]], width, height, options[window["image_index"]], fit)
             count = window["end_frame"] - window["start_frame"]
             if count:
                 source = torch.from_numpy(current.copy()).unsqueeze(0).float() / 255
