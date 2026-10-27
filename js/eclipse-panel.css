@@ -230,7 +230,7 @@
 .en-panel-text-bounded { contain: size; }
 .en-panel-text-layout { overflow: auto; }
 .en-panel-text-layout > * { flex: 0 0 auto; }
-.en-panel-text-layout textarea { flex: 1 1 0; height: 0 !important; min-height: 64px; contain: size; resize: vertical; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.en-panel-text-layout textarea { flex: 1 1 0; height: 0 !important; min-height: var(--en-text-min-height, 64px); contain: size; resize: vertical; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .en-panel-text-layout textarea[wrap="off"] { white-space: pre; overflow-wrap: normal; }
 /* Share the space left after controls, headers and notes. At very small sizes
    the controls scroll inside the panel instead of enlarging the outer node. */

@@ -1,5 +1,64 @@
 # Changelog
 
+## 2026-10-27
+
+### Version: 1.0.20
+
+- **Feat (New)**
+  - Add Detailer (Advanced), an integrated image/pipe detailer, and a compact IO Detailer compatible with IO KSampler. Use external SEGS/boxes or internal YOLO, with one model selector scanning both bbox/segm folders and automatic detection of the checkpoint's type. Include detection-label filtering, per-image region selection, independent SAM2 and edge refinement, and grow/blur. Review selected boxes and final masks in separate collapsible previews with independent Stop controls; requeue unchanged to continue without consuming sampling seeds or caching partial image outputs. Keep reviews and completed results independent for each node, including copies with identical inputs. Support standard YOLO architectures, including nested YOLO9/11/12 blocks and older checkpoints retaining training-loss or Dill-serialized module state, with restricted loading and clear diagnostics for classification or unsupported files. Use ComfyUI’s configured default accelerator or CPU, retaining saved device selections and correct model offloading. Release detection/matting models before diffusion detailing; expose prepared masks/SEGS through the pipe while preserving initial generation metadata. Accept externally encoded positive/negative conditioning lists for labeled SEGS, preserving text-encoder weighting and guidance, plus shared or category-specific denoise values through the existing IO input. Combine paired regions within each category and let internal YOLO use the first conditioning pair and denoise value. Retain the original Detailer.
+- **Fix**
+  - Standardize compute-device choices on Default and CPU, retaining older workflow selections. Use ComfyUI's configured accelerator consistently for placement and memory reservations in transcription and Qwen word timing; use CPU for Whisper on unsupported accelerator backends. Keep image resize, mask crop and video upscale aligned with the same device policy.
+  - Keep both detailers stable when live or review previews update during execution. Release temporary height when sections collapse or review previews shrink, while retaining the user's width, chosen height and independently resized review previews across workflow reloads.
+  - Allow String Multiline's Text and Result fields to shrink to one visible line, retaining scrolling, adjustable space sharing and saved node sizes.
+- **Refactor**
+  - Keep SEGS detailer previews focused on live sampling, removing the separate final-image preview and temporary image writes. Preserve completed image outputs and the integrated detection/segmentation review sections.
+- **Changed files**
+  - core/devices.py
+  - core/operation_panel.py
+  - core/operation_panel_layouts.py
+  - core/resize_configuration.py
+  - core/lyric_caption_configuration.py
+  - core/lyric_alignment.py
+  - core/lyric_qwen.py
+  - core/image_crop_by_mask.py
+  - core/image_resize.py
+  - core/media_tool_configuration.py
+  - core/video_upscale.py
+  - js/eclipse-operation-state.js
+  - js/eclipse-caption-state.js
+  - js/eclipse-media-tool-state.js
+  - js/eclipse-resize-state.js
+  - js/eclipse-resize-form.js
+  - core/detailer_configuration.py
+  - core/detailer_matting.py
+  - core/detailer_models.py
+  - core/detailer_pipe.py
+  - core/detailer_conditioning.py
+  - core/detailer_regions.py
+  - core/detailer_review.py
+  - core/sampler_configuration.py
+  - core/seg_masks.py
+  - js/eclipse-detailer-form.js
+  - js/eclipse-detailer-preview.js
+  - js/eclipse-detailer-review.js
+  - js/eclipse-multiline-panel.js
+  - js/eclipse-panel-text-layout.js
+  - js/eclipse-panel.css
+  - js/eclipse-sampler-form.js
+  - js/eclipse-sampler-queue.js
+  - js/eclipse-sampler-state.js
+  - js/eclipse-sampler.js
+  - py/RvMask_ToSEGS.py
+  - py/RvPipe_IO_Detailer.py
+  - py/RvSampler_DetailerForEach.py
+  - py/RvSampler_DetailerIntegrated.py
+  - requirements-detailer.txt
+  - pyproject.toml
+  - README.md
+  - Readme/Integrated_Detailer.md
+  - Readme/README.md
+  - Readme/Sampler.md
+
 ## 2026-10-25
 
 ### Version: 1.0.19

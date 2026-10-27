@@ -14,6 +14,9 @@ MAX_SEED = 2**64 - 1
 
 
 def editor_spec(profile):
+    if profile == "detailer_auto":
+        from .detailer_configuration import integrated_spec
+        return integrated_spec(detailer_editor_spec())
     if profile == "advanced":
         return advanced_editor_spec()
     if profile == "detailer":
@@ -124,6 +127,9 @@ def validate_configuration(raw, profile):
         raise ValueError("Unknown sampler configuration field.")
     values = config.get("parameters")
     fields = editor_spec(profile)["fields"]
+    if profile == "detailer_auto" and isinstance(values, dict):
+        from .detailer_configuration import upgrade_parameters
+        upgrade_parameters(values, fields)
     if not isinstance(values, dict) or set(values) - fields.keys():
         raise ValueError("Unknown sampler parameter.")
     if profile == "advanced":
@@ -145,6 +151,9 @@ def validate_configuration(raw, profile):
         if field.get("seed"):
             if not isinstance(value, str) or (value != "" and (not re.fullmatch(r"0|[1-9][0-9]{0,19}", value) or int(value) > MAX_SEED)):
                 raise ValueError(f"{field['label']} must be empty or an unsigned 64-bit decimal value.")
+        elif field.get("free_text") or field.get("model_file"):
+            if not isinstance(value, str) or len(value) > 4096 or '\x00' in value:
+                raise ValueError(f"{field['label']} must be text of at most 4096 characters.")
         elif field.get("text"):
             if not isinstance(value, str) or len(value) > 4096 or not re.fullmatch(r"\s*(?:[0-9]{1,4}(?:\s*,\s*[0-9]{1,4})*)?\s*", value):
                 raise ValueError(f"{field['label']} must be comma-separated layer indices (0–9999), or empty.")
@@ -166,6 +175,9 @@ def validate_configuration(raw, profile):
         for start, end, steps in [("start_step", "end_step", "steps"), ("second_start", "second_end", "second_steps")]:
             if not 0 <= values[start] < min(values[end], values[steps]):
                 raise ValueError("Each stage needs start < stop and start < total steps.")
+    if profile == "detailer_auto":
+        from .detailer_configuration import validate_integrated
+        validate_integrated(values)
     seed = config.get("seed")
     if "seed" in config:
         if not isinstance(seed, dict) or set(seed) != {"value", "policy"}:

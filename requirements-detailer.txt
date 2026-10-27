@@ -1,0 +1,7 @@
+# Optional integrated Detailer backends. Install in the ComfyUI environment.
+# No other ComfyUI custom-node pack is required for these backends.
+torch>=2.6
+ultralytics>=8.3,<9
+SAM-2 @ git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4
+transformers>=4.47,<6
+pymatting>=1.1.12,<2

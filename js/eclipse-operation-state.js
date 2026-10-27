@@ -12,6 +12,7 @@ export class OperationState {
         this.config = typeof raw === 'string' ? JSON.parse(raw) : clone(raw);
         this.spec = clone(spec); this.editor = clone(editor);
         const c = this.config;
+        if (c?.parameters && spec.fields.device && ['auto', 'cuda', 'gpu', 'mps'].includes(c.parameters.device)) c.parameters.device = 'default';
         if (spec.kind === 'image_timeline' && c?.version === 1 && c.kind === spec.kind
             && c.parameters && typeof c.parameters === 'object' && !Array.isArray(c.parameters)) {
             for (const key of ['style', 'style_strength', 'style_period']) {

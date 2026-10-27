@@ -281,8 +281,10 @@ def upscale_video(video, model_name, batch_size=2, resize_to="model", resize_wid
                   resize_height=1080, device="auto", tile_size=512):
     if not isinstance(batch_size, int) or not 1 <= batch_size <= 64:
         raise ValueError("Batch size must be between 1 and 64")
-    if device not in ("auto", "cpu") or not isinstance(tile_size, int) or not 64 <= tile_size <= 2048:
-        raise ValueError("Choose auto/CPU device and a tile size between 64 and 2048")
+    from .devices import device_selection
+    device = device_selection(device)
+    if not isinstance(tile_size, int) or not 64 <= tile_size <= 2048:
+        raise ValueError("Choose a tile size between 64 and 2048")
     kind, model_path = resolve_model(model_name)
     check_media_interrupt()
     source = video_frame_source(video)

@@ -4,8 +4,9 @@ export { MAX_SEED, validSeed, randomSeed, nextSeed } from './eclipse-panel-seed.
 export const SETTINGS_ID = 'Smart Sampler Settings [Eclipse Nova]';
 export const SAMPLER_ID = 'Eclipse KSampler (Kargim) [Eclipse Nova]';
 export const DETAILER_ID = 'Detailer (SEGS/pipe) [Eclipse Nova]';
+export const INTEGRATED_DETAILER_ID = 'Detailer (Advanced) [Eclipse Nova]';
 export const ADVANCED_ID = 'Eclipse KSampler Advanced [Eclipse Nova]';
-export const NODE_IDS = new Set([SETTINGS_ID, SAMPLER_ID, DETAILER_ID, ADVANCED_ID]);
+export const NODE_IDS = new Set([SETTINGS_ID, SAMPLER_ID, DETAILER_ID, INTEGRATED_DETAILER_ID, ADVANCED_ID]);
 export const WIDGET_TYPE = 'ECLIPSE_NOVA_SAMPLER_CONFIGURATION';
 export const EDITOR_KEY = 'eclipseSamplerV2';
 export const clone = value => JSON.parse(JSON.stringify(value));
@@ -18,7 +19,7 @@ const keysFor = key => key === 'noise' ? ['sigmas_denoise', 'noise_strength'] : 
 
 export function parseConfiguration(raw) {
     const config = typeof raw === 'string' ? JSON.parse(raw) : clone(raw);
-    if (config?.version !== 1 || !['settings', 'sampler', 'detailer', 'advanced'].includes(config.profile)
+    if (config?.version !== 1 || !['settings', 'sampler', 'detailer', 'detailer_auto', 'advanced'].includes(config.profile)
         || !config.parameters || Array.isArray(config.parameters) || typeof config.parameters !== 'object'
         || Object.keys(config).some(key => !['version', 'profile', 'parameters', 'seed'].includes(key))) {
         throw Error('Unsupported sampler configuration. Expected version 1.');
@@ -30,6 +31,27 @@ export class SamplerState extends SeedState {
     constructor(raw, spec, editor = {}) {
         super();
         this.config = parseConfiguration(raw); this.spec = spec; this.editor = clone(editor);
+        if (spec.profile === 'detailer_auto' && ['auto', 'cuda'].includes(this.config.parameters.detection_device)) {
+            this.config.parameters.detection_device = 'default';
+        }
+        if (spec.profile === 'detailer_auto' && ['BBox', 'Segm'].includes(this.config.parameters.detection_mode)) {
+            const p = this.config.parameters, segm = p.detection_mode === 'Segm';
+            p.yolo_model = segm ? `segm/${p.yolo_segm_model ?? 'person_yolov8m-seg.pt'}` : `bbox/${p.yolo_model ?? 'face_yolov8m.pt'}`;
+            delete p.detection_mode; delete p.yolo_segm_model;
+        }
+        if (spec.profile === 'detailer_auto' && ['YOLO', 'SAM2', 'SEGS'].includes(this.config.parameters.detection_mode)) {
+            const p = this.config.parameters, sam = p.detection_mode === 'SAM2';
+            delete p.cache_model; delete p.detection_mode; p.sam2_enabled = sam;
+            p.yolo_model = `bbox/${p.yolo_model ?? 'face_yolov8m.pt'}`; delete p.yolo_segm_model;
+            p.refine_edges = sam && p.detail_method !== 'None'; p.detection = p.labels ?? 'all'; delete p.labels;
+            p.crop_factor = p[sam ? 'sam_crop_factor' : 'yolo_crop_factor'] ?? 2.2;
+            p.drop_size = p[sam ? 'sam_drop_size' : 'yolo_drop_size'] ?? 1;
+            for (const key of ['sam_crop_factor', 'yolo_crop_factor', 'sam_drop_size', 'yolo_drop_size']) delete p[key];
+            if (p.detail_method === 'None') p.detail_method = 'ViTMatte';
+            if (!sam) Object.assign(p, { mask_grow: 0, mask_blur: 0, invert_mask: false, combined: false, bbox_fill: false, contour_fill: false });
+            else p.selection = 'All';
+            for (const [key, field] of Object.entries(spec.fields)) if (!Object.hasOwn(p, key)) p[key] = clone(field.default);
+        }
         if (spec.profile === 'advanced' && spec.fields.second_denoise && !Object.hasOwn(this.config.parameters, 'second_denoise')) {
             this.config.parameters.second_denoise = clone(spec.fields.second_denoise.default);
         }
@@ -46,7 +68,7 @@ export class SamplerState extends SeedState {
     toggleSection(key) {
         this.editor.sections ??= {};
         const open = !this.sectionOpen(key);
-        if (open) for (const other of ['sampler', 'stage2', 'upscale', 'qwen', 'dit', 'detail', 'sizing', 'mask', 'seed']) {
+        if (open) for (const other of ['detection', 'selection', 'sam', 'refinement', 'regions', 'detection_preview', 'segmentation_preview', 'sampler', 'stage2', 'upscale', 'qwen', 'dit', 'detail', 'sizing', 'mask', 'seed']) {
             if (other !== key && !this.editor.pins?.[other]) this.editor.sections[other] = false;
         }
         this.editor.sections[key] = open;

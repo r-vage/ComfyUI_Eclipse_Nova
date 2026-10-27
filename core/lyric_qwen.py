@@ -131,6 +131,8 @@ def aligner(device):
     import comfy.model_management as mm
     import torch
 
+    from .devices import resolve_device
+
     mm.throw_exception_if_processing_interrupted()
     try:
         from transformers import AutoModelForTokenClassification, AutoProcessor
@@ -139,16 +141,14 @@ def aligner(device):
         )
     except ImportError as error:
         raise RuntimeError("Qwen3 word timing requires the optional requirements-qwen.txt dependencies. Restart ComfyUI after installing them.") from error
-    target = "cuda" if device == "auto" and torch.cuda.is_available() else ("cpu" if device == "auto" else device)
-    if target not in ("cpu", "cuda") or (target == "cuda" and not torch.cuda.is_available()):
-        raise ValueError("Qwen3 requires an available CPU or CUDA device.")
+    target = resolve_device(device)
     root = ensure_model()
-    dtype = torch.float32 if target == "cpu" else (torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16)
+    dtype = (torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16) if target.type == 'cuda' else torch.float32
     model = processor = None
     try:
-        if target == "cuda":
+        if target.type != 'cpu':
             # Leave room for the longest supported phrase window as well as weights.
-            mm.free_memory(5 * 1024**3, torch.device("cuda", torch.cuda.current_device()))
+            mm.free_memory(5 * 1024**3, target)
         processor = AutoProcessor.from_pretrained(root, local_files_only=True, trust_remote_code=False)
         model = AutoModelForTokenClassification.from_pretrained(
             root, local_files_only=True, trust_remote_code=False, dtype=dtype, attn_implementation="sdpa",
@@ -171,7 +171,7 @@ def aligner(device):
     finally:
         model = processor = None
         gc.collect()
-        if target == "cuda":
+        if target.type != 'cpu':
             mm.soft_empty_cache()
 
 

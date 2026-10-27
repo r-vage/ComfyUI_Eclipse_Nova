@@ -38,6 +38,8 @@ The final preview fills the remaining node space and resizes with the node in cl
 
 ## Detailer (SEGS/pipe)
 
+The new [Advanced Detailer](Integrated_Detailer.md) uses image/pipe sockets with IO Detailer or IO KSampler. It accepts external detections or internal YOLO, automatically detecting the checkpoint's detection or segmentation type from one model selector spanning both folders. It can then apply SAM2 and edge refinement. The existing SEGS-input node below remains available.
+
 ![Detailer with its pipe inputs, Options bar and Sampler, Sizing, Mask and Seed sections](assets/nova-detailer.png)
 
 Connect an **image**, **SEGS** and a **BASIC_PIPE** containing the model, CLIP, VAE and positive/negative conditioning. An optional scheduler-function input is also available. The node supports per-frame segment selection and coordinate scaling. Its image, SEGS and BASIC_PIPE outputs are lists.
@@ -55,9 +57,9 @@ Controls are grouped into four collapsible sections. Each header summarizes its 
 
 The **Options** bar enables pipe-setting priority, noise masking, forced inpainting, inpaint-model processing, tiled encoding, tiled decoding and preview independently.
 
-**Preview** shows intermediate sampling followed by the final full detailed images. It shows or hides the current preview immediately, without another queue; enabling it again restores the available preview. Turning it off also disables preview generation for subsequent runs while keeping all image outputs.
+**Preview** shows live sampling of the current region and fills the available node space in both renderers. It shows or hides the live frame immediately, without another queue. Turning it off also disables preview generation for subsequent runs. The live preview clears when sampling finishes; the detailer does not create a separate final-image preview.
 
-Completed batches and image lists appear in Eclipse's grid in output order, including images of different sizes. Click a thumbnail to enlarge it, click the enlarged image to advance through the batch, and use **Close preview** to return to the grid. The preview fills the available node space in both renderers. Images with no matching segments still appear in the final preview. Final images use ComfyUI's temporary preview storage; saving files permanently remains a downstream action.
+Completed images remain available through the outputs in their original order and dimensions. Images with no matching segments pass through unchanged. Connect a downstream preview or save node to inspect the completed images.
 
 ## Seed controls
 

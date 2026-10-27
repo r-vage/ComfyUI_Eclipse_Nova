@@ -25,7 +25,10 @@ export function installQueueHook(api, app, controllers) {
             const before = JSON.parse(node.inputs.configuration);
             // The server knows whether a pipe contains a seed. It resolves and
             // reports the effective seed when pipe priority is selected.
-            if (!before.seed || (['sampler', 'detailer', 'advanced'].includes(before.profile) && before.parameters.allow_overwrite)) continue;
+            if (!before.seed || (['sampler', 'detailer', 'detailer_auto', 'advanced'].includes(before.profile) && before.parameters.allow_overwrite)) continue;
+            // An intermediate review can interrupt before sampling starts.
+            // Advance this seed only after the server returns the final result.
+            if (before.profile === 'detailer_auto' && (before.parameters.stop_detection || before.parameters.stop_segmentation)) continue;
             const config = queueConfiguration(node.inputs.configuration);
             const seed = clone(config.seed); config.seed.policy = 'fixed';
             const raw = JSON.stringify(config);

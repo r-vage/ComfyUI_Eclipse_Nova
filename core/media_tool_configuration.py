@@ -3,9 +3,9 @@ import copy
 import json
 import re
 
+from .devices import DEVICE_OPTIONS, device_selection
 from .image_conversion import _STYLE_OPTIONS
 from .image_crop_by_mask import (
-    DEVICE_OPTIONS,
     DIVISIBILITY_OPTIONS,
     MIRROR_OPTIONS,
     RESCALE_ALGORITHMS,
@@ -20,7 +20,7 @@ DEFAULTS = {
                 "background_color": "#000000", "style": "none"},
     "crop": {"rotation": 0, "mirror": "none", "mask_blur": 0, "mask_threshold": 0.1,
              "context_expand": 1.0, "target_width": 512, "target_height": 512,
-             "divisible_by": "32", "rescale_algorithm": "bicubic", "device": "auto"},
+             "divisible_by": "32", "rescale_algorithm": "bicubic", "device": "default"},
     "recorder": {"filename_prefix": "audio/system_recording", "format": "wav", "mp3_bitrate": "320 kbps",
                  "output_device": "default", "strip_start_silence": True, "silence_threshold_db": -70.0},
 }
@@ -66,6 +66,8 @@ def validate_configuration(raw, kind):
         raise ValueError(f"Expected version 1 {TITLES[kind]} configuration.")
     params = config["parameters"]
     require_fields(params, DEFAULTS[kind], name="Parameters")
+    if 'device' in params:
+        params['device'] = device_selection(params['device'])
     for key, field in NUMBERS[kind].items():
         require_number(params[key], field)
     for key, choices in CHOICES[kind].items():

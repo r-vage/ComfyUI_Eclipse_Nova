@@ -5,8 +5,8 @@ import math
 import comfy.utils
 import torch
 import torch.nn.functional as F
-from comfy import model_management
 
+from .devices import resolve_device
 from .image_helpers import hex_to_rgb_float, prepare_image_output, unwrap_value
 from .logger import log
 
@@ -528,15 +528,10 @@ class ImageResizeExecution:
         device = unwrap_value(device, "cpu")
 
         # Resolve device
-        if device == "gpu":
-            target_device = model_management.get_torch_device()
-            if method == "lanczos":
-                log.warning(
-                    _LOG_PREFIX, "Lanczos not supported on GPU, falling back to bicubic"
-                )
-                method = "bicubic"
-        else:
-            target_device = torch.device("cpu")
+        target_device = resolve_device(device)
+        if target_device.type != 'cpu' and method == 'lanczos':
+            log.warning(_LOG_PREFIX, 'Lanczos not supported on accelerator, falling back to bicubic')
+            method = 'bicubic'
 
         if not image:
             log.warning(_LOG_PREFIX, "No image input provided.")

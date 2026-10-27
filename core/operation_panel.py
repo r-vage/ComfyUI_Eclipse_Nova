@@ -6,6 +6,7 @@ import math
 
 from comfy_api.latest import io
 
+from .devices import DEVICE_OPTIONS, DEVICE_TIP, device_selection
 from .image_effects import STYLE_DEFAULTS
 from .operation_panel_layouts import CHOICE_LABELS, LABELS, LAYOUTS
 
@@ -38,6 +39,10 @@ def editor_spec(schema, kind):
                 value[key] = setting
         if field.id in layout.get("multiline", []):
             value["multiline"] = True
+        if field.id == 'device':
+            value.update(options=DEVICE_OPTIONS.copy(), default=device_selection(value['default']), tip=DEVICE_TIP)
+            if 'device' not in layout.setdefault('labelled_choices', []):
+                layout['labelled_choices'].append('device')
         fields[field.id] = value
     return {"family": "operation", "kind": kind, "title": schema.display_name,
             "nodeId": schema.node_id,
@@ -97,7 +102,8 @@ def validate_configuration(raw, spec):
             or type(config["version"]) is not int or config["version"] != 1 or config["kind"] != spec["kind"]
             or not isinstance(config["parameters"], dict) or set(config["parameters"]) != set(spec["fields"])):
         raise ValueError(f"Expected version 1 {spec['title']} configuration.")
-    return {key: _validate_value(config["parameters"][key], field) for key, field in spec["fields"].items()}
+    return {key: _validate_value(device_selection(config['parameters'][key]) if key == 'device'
+                                 else config['parameters'][key], field) for key, field in spec['fields'].items()}
 
 
 class OperationPanel:

@@ -13,6 +13,7 @@ export class MediaToolState {
         this.config = typeof raw === 'string' ? JSON.parse(raw) : clone(raw); this.spec = spec; this.editor = clone(editor);
         const fields = ['version', 'kind', 'parameters']; if (spec.kind === 'recorder') fields.push('recording_token');
         const c = this.config;
+        if (c?.parameters && spec.choices?.device && ['auto', 'cuda', 'gpu', 'mps'].includes(c.parameters.device)) c.parameters.device = 'default';
         if (!fieldsMatch(c, fields) || c.version !== 1 || c.kind !== spec.kind
             || !fieldsMatch(c.parameters, Object.keys(spec.defaults))
             || Object.keys(spec.toggles).some(key => typeof c.parameters[key] !== 'boolean')

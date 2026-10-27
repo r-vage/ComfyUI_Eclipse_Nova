@@ -16,6 +16,7 @@ export class CaptionState extends SeedState {
         super(); this.config = typeof raw === 'string' ? JSON.parse(raw) : clone(raw);
         this.spec = spec; this.editor = clone(editor);
         const c = this.config;
+        if (c?.parameters && ['auto', 'cuda', 'gpu', 'mps'].includes(c.parameters.device)) c.parameters.device = 'default';
         if (c.parameters && spec.choices.word_timing && !Object.hasOwn(c.parameters, 'word_timing')) c.parameters.word_timing = 'whisper';
         if (c.parameters && spec.numbers.line_max_words && !Object.hasOwn(c.parameters, 'line_max_words')) c.parameters.line_max_words = 0;
         if (!fieldsMatch(c, ['version', 'parameters', 'seed']) || c.version !== 1

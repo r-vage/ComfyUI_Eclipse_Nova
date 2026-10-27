@@ -16,6 +16,7 @@ from pathlib import Path
 
 import folder_paths
 
+from .devices import whisper_device
 from .logger import log
 from .lyric_timing import audio_data, from_alignment, timing_coverage
 from .node_debug import DebugProgress, debug_event
@@ -889,7 +890,6 @@ def recognition_model(audio, language="Auto", device="auto"):
     mm.throw_exception_if_processing_interrupted()
     try:
         import stable_whisper
-        import torch
         import torchaudio.functional as AF
     except ImportError as exc:
         raise RuntimeError(
@@ -902,19 +902,19 @@ def recognition_model(audio, language="Auto", device="auto"):
     root = _verify(str(model_path()), model_identity())
     if language != "Auto" and language not in LANGUAGES:
         raise ValueError("Unsupported Whisper language code.")
-    if device not in ("auto", "cpu", "cuda"):
-        raise ValueError("Recognition device must be auto, cpu or cuda.")
-    selected_device = (
-        ("cuda" if torch.cuda.is_available() else "cpu") if device == "auto" else device
-    )
+    target = whisper_device(device)
+    selected_device = target.type
     model = None
     try:
+        if target.type != 'cpu':
+            mm.free_memory(4 * 1024**3, target)
         debug_event(_LOG_PREFIX, "Loading verified model", device=selected_device,
                     compute_type="float16" if selected_device == "cuda" else "int8",
                     values=("device", "compute_type"))
         model = stable_whisper.load_faster_whisper(
             root,
             device=selected_device,
+            device_index=target.index or 0,
             compute_type="float16" if selected_device == "cuda" else "int8",
             local_files_only=True,
         )

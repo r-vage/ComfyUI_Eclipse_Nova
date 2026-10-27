@@ -17,7 +17,8 @@ class MultilineForm {
         this.text.rows = 6;
         this.result = element('textarea'); this.result.setAttribute('aria-label', 'Result');
         this.result.readOnly = true; this.result.rows = 6;
-        this.sizes = new TextFieldSizes(controller, { bounded: true });
+        // One 18px line plus the shared textarea padding and borders.
+        this.sizes = new TextFieldSizes(controller, { bounded: true, minHeight: 34 });
     }
     render() {
         this.sizes.disconnect();
@@ -114,7 +115,7 @@ app.registerExtension({
         return { [WIDGET_TYPE](node, name, inputData) {
             const controller = new ConfigurationPanel(node, name, inputData[1], {
                 State: MultilineState, Form: MultilineForm, widgetType: WIDGET_TYPE, editorKey: EDITOR_KEY,
-                className: 'en-multiline', label: 'String Multiline editor', fillHeight: true, minHeight: 150,
+                className: 'en-multiline', label: 'String Multiline editor', fillHeight: true, minHeight: 82,
                 onDispose: node => { controllers.get(node)?.form.destroy(); controllers.delete(node); },
             });
             controller.widget.options.socketless = true;

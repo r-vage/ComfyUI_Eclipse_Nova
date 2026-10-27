@@ -1,4 +1,4 @@
-/** Sampler/detailer live frames and final batches share one resizable preview. */
+/** Live sampler/detailer frames and completed sampler batches share one preview. */
 import { app, api, revokeNodePreview, clearNodeOutputImages } from './comfy/index.js';
 import { createDOMPreview, setDOMPreviewController } from './eclipse-dom-preview.js';
 
@@ -19,7 +19,7 @@ export class DetailerPreview {
         this.controller = controller; this.node = controller.node;
         this.element = document.createElement('div');
         this.element.className = 'en-review-preview-content';
-        const detailer = controller.spec.profile === 'detailer';
+        const detailer = ['detailer', 'detailer_auto'].includes(controller.spec.profile);
         const label = detailer ? 'Detailed image preview' : 'Sampler image preview';
         this.element.setAttribute('aria-label', label);
         this.element.style.position = 'relative';
@@ -38,7 +38,7 @@ export class DetailerPreview {
         const p = this.controller.state.config.parameters;
         if (this.effectivePreview && (this.effectivePreview.local !== p.preview_mode
             || this.effectivePreview.usePipe !== p.allow_overwrite)) this.effectivePreview = null;
-        return this.controller.spec.profile === 'detailer' ? p.live_preview
+        return ['detailer', 'detailer_auto'].includes(this.controller.spec.profile) ? p.live_preview
             : this.effectivePreview?.enabled ?? p.preview_mode === 'Preview';
     }
     get visible() {
@@ -76,9 +76,13 @@ export class DetailerPreview {
             local: this.controller.state.config.parameters.preview_mode,
             usePipe: this.controller.state.config.parameters.allow_overwrite, enabled: effective,
         };
-        // A run with Preview off has no new preview files. Keep the last
-        // available images so turning it on again does not require a queue.
-        if (Array.isArray(output?.images) && (output.images.length || this.enabled)) {
+        // Detailers only show live frames, including when replaying an older
+        // cached output that still contains final-image references.
+        if (['detailer', 'detailer_auto'].includes(this.controller.spec.profile)) {
+            setDOMPreviewController(this.final, []);
+        } else if (Array.isArray(output?.images) && (output.images.length || this.enabled)) {
+            // Samplers keep completed images while Preview is off so turning
+            // it on again does not require a queue.
             setDOMPreviewController(this.final, output.images);
         }
         suppressNativePreview(this.node);
@@ -112,8 +116,18 @@ export function installDetailerPreviews() {
     api.addEventListener('b_preview_with_metadata', live);
     const endings = ['execution_success', 'execution_error', 'execution_interrupted'];
     for (const event of endings) api.addEventListener(event, finished);
+    const review = ({ detail }) => {
+        let graph = app.rootGraph ?? app.graph, node;
+        if (detail.workflow_id && graph?.id && detail.workflow_id !== graph.id) return;
+        for (const id of String(detail.node_id).split(':')) {
+            node = graph?.getNodeById(id); graph = node?.subgraph;
+        }
+        previews.get(node)?.controller.review?.update(detail.output);
+    };
+    api.addEventListener('eclipse-nova-detailer-review', review);
     return () => {
         api.removeEventListener('b_preview_with_metadata', live);
+        api.removeEventListener('eclipse-nova-detailer-review', review);
         for (const event of endings) api.removeEventListener(event, finished);
     };
 }

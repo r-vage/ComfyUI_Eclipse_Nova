@@ -1,8 +1,7 @@
-# Structured Detailer with the shared SEGS engine and native final-image preview.
+# Structured Detailer with the shared SEGS engine and live sampling preview.
 
 import json
 
-import nodes
 from comfy_api.latest import io
 
 from ..core import CATEGORY
@@ -26,7 +25,7 @@ class RvSampler_DetailerForEach(io.ComfyNode):
             node_id="Detailer (SEGS/pipe) [Eclipse Nova]",
             display_name="Detailer (SEGS/pipe)",
             category=CATEGORY.MAIN.value + CATEGORY.SAMPLER.value,
-            description="Detail image regions from SEGS and a BASIC_PIPE. Compact sampler, sizing, mask and seed sections. Preview shows live sampling followed by the final detailed image; disabling it leaves image outputs available.",
+            description="Detail image regions from SEGS and a BASIC_PIPE. Compact sampler, sizing, mask and seed sections. Preview shows live sampling; completed images are available through the outputs.",
             is_input_list=True,
             is_output_node=True,
             inputs=[
@@ -95,12 +94,5 @@ class RvSampler_DetailerForEach(io.ComfyNode):
         ui = {"images": [], "eclipse_seed": [str(seed)]}
         if config["parameters"]["allow_overwrite"] and not pipe_seed:
             ui["eclipse_local_seed"] = [local_seed]
-        if config["parameters"]["live_preview"] and images:
-            # A list of HWC frames supports mixed dimensions without resizing or
-            # concatenating the image outputs just to create their previews.
-            preview = nodes.PreviewImage().save_images(
-                images=[frame[0] for frame in images], prompt=cls.hidden.prompt, extra_pnginfo=extra,
-            )
-            ui["images"] = preview["ui"]["images"]
         record_automatic_execution(not pipe_seed and config["seed"]["policy"] == "random")
         return io.NodeOutput(images, detailed_segs, pipes, ui=ui)

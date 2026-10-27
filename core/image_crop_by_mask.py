@@ -11,9 +11,9 @@ import math
 import torch  # type: ignore
 import torch.nn.functional as F  # type: ignore
 import torchvision.transforms.functional as TVF  # type: ignore
-from comfy import model_management  # type: ignore
 from torchvision.transforms import InterpolationMode  # type: ignore
 
+from .devices import resolve_device
 from .image_helpers import expand_mask
 from .logger import log
 
@@ -21,7 +21,6 @@ _LOG_PREFIX = "CropByMask"
 
 RESCALE_ALGORITHMS = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
 DIVISIBILITY_OPTIONS = ["0", "8", "16", "32", "64"]
-DEVICE_OPTIONS = ["auto", "cpu"]
 MIRROR_OPTIONS = ["none", "horizontal", "vertical", "both"]
 
 
@@ -151,10 +150,7 @@ def crop_by_mask(image, mask, rotation, mirror, mask_blur, mask_threshold, conte
         raise ValueError("context_expand must be a positive, finite zoom value")
 
     # Resolve device
-    if device == "auto":
-        dev = model_management.get_torch_device()
-    else:
-        dev = torch.device("cpu")
+    dev = resolve_device(device)
 
     image = image.clone().to(dev)
     mask = mask.clone().to(dev)

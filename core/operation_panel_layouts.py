@@ -149,7 +149,7 @@ CHOICE_LABELS = {
     "whisper": "Whisper", "qwen3": "Qwen3", "qwen3_compare": "Qwen3 · compare only",
     "align_manual_targets": "Manual", "auto_detect_pauses": "Auto", "source": "Source", "new_images": "New",
     "both": "Both", "disable": "Off", "prefix": "Prefix", "postfix": "Suffix", "shortest": "Shortest",
-    "video_to_audio": "Video to audio", "audio_to_video": "Audio to video", "auto": "Auto", "cpu": "CPU", "cuda": "CUDA",
+    "video_to_audio": "Video to audio", "audio_to_video": "Audio to video", "auto": "Auto", "default": "Default", "cpu": "CPU",
     "shrink": "Crop", "grow": "Pad", "resize": "Resize", "start": "Start", "end": "End",
     "linear": "Linear", "pyramid": "Pyramid",
 }

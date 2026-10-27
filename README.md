@@ -85,8 +85,10 @@ python_embeded\python.exe -m pip install -r ComfyUI\custom_nodes\ComfyUI_Eclipse
 Restart ComfyUI and reload the browser. Search for `[Eclipse Nova]` or open the
 **🌒 Eclipse Nova** menu. Character and MiniMax tools have their own submenus.
 
-Some features need additional runtimes: the Detailer uses Impact Pack, and video,
-audio and caption tools have their own requirements. Check the relevant guide
+Some features need additional runtimes: the [Advanced Detailer](Readme/Integrated_Detailer.md)
+has optional YOLO, SAM2 and matting backends; video, audio and caption tools also
+have their own requirements. The diffusion detailer engine is included in Eclipse.
+Check the relevant guide
 before using those features. Wildcard Processor uses Nova’s own engine and does
 not require Impact Pack.
 

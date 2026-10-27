@@ -64,6 +64,7 @@ class EclipseExtension(ComfyExtension):
         from .py.RvImage_Preview_SEGS_Simple import RvImage_Preview_SEGS_Simple
         from .py.RvMask_ToSEGS import RvMask_ToSEGS
         from .py.RvSampler_DetailerForEach import RvSampler_DetailerForEach
+        from .py.RvSampler_DetailerIntegrated import RvSampler_DetailerIntegrated
         from .py.RvImage_TileAssembly import RvImage_TileAssembly
         from .py.RvImage_TileDecodeAssembly import RvImage_TileDecodeAssembly
         from .py.RvImage_TileSplit import RvImage_TileSplit
@@ -99,6 +100,7 @@ class EclipseExtension(ComfyExtension):
         from .py.RvSampler_KSamplerKargim import RvSampler_KSamplerKargim
         from .py.RvSampler_KSamplerAdvanced import RvSampler_KSamplerAdvanced
         from .py.RvPipe_IO_KSampler import RvPipe_IO_KSampler
+        from .py.RvPipe_IO_Detailer import RvPipe_IO_Detailer
 
         # Pipe IO nodes
         from .py.RvPipe_IO_LyricCaptions import RvPipe_IO_LyricCaptions
@@ -249,6 +251,7 @@ class EclipseExtension(ComfyExtension):
             RvImage_Preview_SEGS_Simple,
             RvMask_ToSEGS,
             RvSampler_DetailerForEach,
+            RvSampler_DetailerIntegrated,
             RvImage_TileAssembly,
             RvImage_TileDecodeAssembly,
             RvImage_TileSplit,
@@ -281,6 +284,7 @@ class EclipseExtension(ComfyExtension):
             RvSampler_KSamplerKargim,
             RvSampler_KSamplerAdvanced,
             RvPipe_IO_KSampler,
+            RvPipe_IO_Detailer,
             # Pipe IO
             RvPipe_IO_LyricCaptions,
             RvPipe_IO_12CH_Any,

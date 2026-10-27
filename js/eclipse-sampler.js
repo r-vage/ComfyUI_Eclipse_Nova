@@ -1,5 +1,5 @@
 /** Eclipse Nova structured sampler editors, mounted identically in both renderers. */
-import { fitNodeToWidgets } from './eclipse-widget-utils.js';
+import { fitNodeToWidgets, isConfiguringGraph } from './eclipse-widget-utils.js';
 import { app, api } from './comfy/index.js';
 import { NODE_IDS, SETTINGS_ID, WIDGET_TYPE, EDITOR_KEY, SamplerState, clone, validSeed, nextSeed } from './eclipse-sampler-state.js';
 import { SamplerForm } from './eclipse-sampler-form.js';
@@ -7,6 +7,7 @@ import { installQueueHook } from './eclipse-sampler-queue.js';
 import { ensurePanelStyle } from './eclipse-panel-controls.js';
 import { PanelNumbers } from './eclipse-panel-numbers.js';
 import { DetailerPreview, installDetailerPreviews } from './eclipse-detailer-preview.js';
+import { DetailerReview } from './eclipse-detailer-review.js';
 
 const controllers = new WeakMap(), graphKey = Symbol('EclipseNova.PanelGraph');
 export class SamplerController {
@@ -16,7 +17,7 @@ export class SamplerController {
         const detailer = this.spec.profile !== 'settings';
         this.root = document.createElement('div'); this.root.className = 'en-panel'; this.root.dataset.profile = this.spec.profile;
         if (detailer) this.root.classList.add('en-panel-fill-height');
-        this.root.setAttribute('aria-label', { settings: 'Smart sampler settings', sampler: 'Eclipse sampler settings', detailer: 'Detailer settings', advanced: 'Advanced sampler settings' }[this.spec.profile]);
+        this.root.setAttribute('aria-label', { settings: 'Smart sampler settings', sampler: 'Eclipse sampler settings', detailer: 'Detailer settings', detailer_auto: 'Integrated detailer settings', advanced: 'Advanced sampler settings' }[this.spec.profile]);
         this.root.onpointerdown = event => event.stopPropagation(); this.root.onkeydown = event => event.stopPropagation();
         this.numbers = new PanelNumbers(this.root, () => this.measure());
         this.widget = node.addDOMWidget(name, WIDGET_TYPE, this.root, {
@@ -29,6 +30,7 @@ export class SamplerController {
         this.widget.serializeValue = () => this.value();
         if (detailer) this.preview = new DetailerPreview(this);
         else this.widget.computeSize = () => [this.node.size[0], this.height];
+        if (this.spec.profile === 'detailer_auto') this.review = new DetailerReview(this);
         this.form = new SamplerForm(this);
         this.observer = new ResizeObserver(() => this.measure()); this.observer.observe(this.root);
         this.form.render();
@@ -41,6 +43,7 @@ export class SamplerController {
         this.raw = value; this.form?.menu.close();
         try {
             this.state = new SamplerState(value, this.spec, this.node.properties?.[EDITOR_KEY] ?? {});
+            this.review?.restoreHeights();
             this.invalid = false; this.root.classList.remove('en-panel-error'); this.form?.render();
         } catch (error) {
             this.invalid = true; this.root.classList.add('en-panel-error');
@@ -74,28 +77,44 @@ export class SamplerController {
         }
         this.measure();
     }
+    resized(size) {
+        const previousHeight = this.lastHeight;
+        this.lastHeight = size[1];
+        if (!['detailer', 'detailer_auto'].includes(this.spec.profile) || this.fitting
+            || !this.height || isConfiguringGraph() || !Number.isFinite(size[1]) || size[1] <= 0
+            || (previousHeight === size[1] && this.state.editor.manualHeight > 0)) return;
+        // Store the user's height separately from temporary content growth.
+        // Keeping it in editor state also preserves that distinction on reload.
+        this.state.editor.manualHeight = size[1];
+        this.node.properties ??= {};
+        this.node.properties[EDITOR_KEY] = clone(this.state.editor);
+    }
     measure() {
         this.numbers?.sync();
         if (this.disposed || this.frame) return;
         this.frame = requestAnimationFrame(() => {
             this.frame = null; if (!this.root.isConnected || !this.root.offsetWidth) return;
-            const detailer = !!this.preview, preview = this.preview?.visible ?? false;
+            const detailer = !!this.preview, review = ['detailer', 'detailer_auto'].includes(this.spec.profile);
+            // Reserve live-preview space when enabled, before the first frame.
+            // Frame arrival and execution completion must not resize the node.
+            const preview = !this.invalid && (review ? this.preview?.enabled : this.preview?.visible) || false;
             const controls = detailer && !this.invalid ? this.form.controls : this.root.firstElementChild;
             const height = Math.ceil((controls?.offsetHeight ?? this.root.scrollHeight) + 16 + (preview ? 108 : 0));
             if (height <= 16 || (height === this.height && preview === this.measuredPreview)) return;
             this.height = height;
             this.measuredPreview = preview;
             for (const key of detailer ? ['min-height'] : ['height', 'min-height', 'max-height']) this.root.style.setProperty(`--comfy-widget-${key}`, `${height}px`);
-            // Resizable preview panels retain user geometry even before their
-            // first render or when Preview is off. Settings alone auto-fit.
-            const retainHeight = detailer;
-            fitNodeToWidgets(this.node, { minHeight: retainHeight ? this.node.size[1] : 0 });
+            if (review && !(Number.isFinite(this.state.editor.manualHeight) && this.state.editor.manualHeight > 0)) this.resized(this.node.size);
+            const minHeight = review ? this.state.editor.manualHeight : detailer ? this.node.size[1] : 0;
+            this.fitting = true;
+            try { fitNodeToWidgets(this.node, { minHeight }); }
+            finally { this.fitting = false; }
             this.node.setDirtyCanvas(true, true);
         });
     }
     dispose() {
         if (this.disposed) return;
-        this.disposed = true; this.observer.disconnect(); this.numbers.dispose(); this.form.dispose(); this.preview?.dispose();
+        this.disposed = true; this.observer.disconnect(); this.numbers.dispose(); this.form.dispose(); this.preview?.dispose(); this.review?.dispose();
         if (this.frame) cancelAnimationFrame(this.frame); controllers.delete(this.node);
     }
 }
@@ -122,17 +141,24 @@ app.registerExtension({
                 const controller = controllers.get(this), seed = output?.eclipse_seed?.[0];
                 if (controller && validSeed(seed)) controller.edit(state => {
                     const submitted = output?.eclipse_local_seed?.[0];
-                    if (submitted && state.config.parameters.allow_overwrite
+                    const deferred = state.config.parameters.allow_overwrite || (state.config.profile === 'detailer_auto'
+                        && (state.config.parameters.stop_detection || state.config.parameters.stop_segmentation));
+                    if (submitted && deferred
                         && JSON.stringify(state.config.seed) === JSON.stringify(submitted)) {
                         state.config.seed = nextSeed({ ...submitted, value: seed });
                     }
                     state.editor.lastSeed = seed;
                 });
                 controller?.preview.complete(output);
+                controller?.review?.update(output);
                 return result;
             };
         }
         const configure = nodeType.prototype.onConfigure, added = nodeType.prototype.onAdded;
+        const resized = nodeType.prototype.onResize;
+        nodeType.prototype.onResize = function (...args) {
+            const result = resized?.apply(this, args); controllers.get(this)?.resized(this.size); return result;
+        };
         nodeType.prototype.onConfigure = function (...args) {
             const result = configure?.apply(this, args), controller = controllers.get(this);
             if (controller) { controller.restore(controller.value()); controller.bindHost(); } return result;

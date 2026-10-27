@@ -72,7 +72,7 @@ export class ResizeForm {
         if (padding.childElementCount) content.append(padding);
         const processing = element('div', 'en-panel-grid'); this.number(processing, 'divisible_by'); this.choice(processing, 'device', 'Device'); content.append(processing);
         if (config.fit === 'resize') content.append(element('div', 'en-panel-note', 'Keeps the image ratio; output may be smaller than the target.'));
-        if (config.device === 'gpu' && config.method === 'lanczos') content.append(element('div', 'en-panel-note', 'GPU uses Bicubic for Lanczos resampling.'));
+        if (config.device === 'default' && config.method === 'lanczos') content.append(element('div', 'en-panel-note', 'Accelerator processing uses Bicubic for Lanczos resampling.'));
         const connected = (this.controller.node.inputs ?? []).filter(input => ['width', 'height'].includes(input.name) && input.link != null).map(input => input.name);
         if (connected.length) {
             const note = element('div', 'en-panel-note', config.use_input_size

@@ -4,6 +4,7 @@ import json
 import re
 import secrets
 
+from .devices import DEVICE_TIP, device_selection
 from .fonts import default_caption_font, get_font_list, get_font_path
 from .lyric_alignment import LANGUAGES
 from .lyric_animation import ANIMATED_MODES, ROTATION_AXES
@@ -47,13 +48,14 @@ CHOICES = {
              "floating-words": "Float words", "floating-lines": "Float lines",
              "rotating-words": "Rotate words", "rotating-lines": "Rotate lines"},
     "language": {key: key for key in ("Auto", *LANGUAGES)},
-    "device": {"auto": "Auto", "cpu": "CPU", "cuda": "CUDA"},
+    "device": {"default": "Default", "cpu": "CPU"},
     "position": {f"{v}_{h}": f"{v.title()} {h}" for v in ("top", "center", "bottom") for h in ("left", "center", "right")},
     "rotation_axis": {key: key for key in ROTATION_AXES},
     "unmatched_passages": {"omit": "Omit", "transcribe": "Transcribe"},
     "word_timing": WORD_TIMING_CHOICES,
 }
 TIPS = {
+    "device": DEVICE_TIP,
     "word_timing": WORD_TIMING_TIP,
     "font_size": "Maximum font size. Long captions shrink to fit the canvas, margins and effects.",
     "line_max_words": "Maximum words shown from a line at once. 0 keeps the full line. Each next phrase starts at its first timed word; active-word highlighting follows it. Lines without word timings and indivisible timed spans stay intact, so they can exceed the limit.",
@@ -81,7 +83,7 @@ def default_configuration():
             **{key: spec["default"] for key, spec in NUMBERS.items()},
             **{key: spec[1] for key, spec in COLORS.items()},
             "font_file": default_caption_font(), "mode": "floating-words", "language": "en",
-            "device": "auto", "position": "bottom_center", "rotation_axis": "Turning sign",
+            "device": "default", "position": "bottom_center", "rotation_axis": "Turning sign",
             "unmatched_passages": "omit", "enable_glow": False, "word_timing": "whisper",
         },
         "seed": {"source": "local", "value": "42", "policy": "fixed"},
@@ -108,6 +110,7 @@ def validate_configuration(raw):
         params.setdefault("word_timing", "whisper")
         params.setdefault("line_max_words", 0)
     require_fields(params, (*NUMBERS, *COLORS, *CHOICES, "font_file", "enable_glow"), name="Caption settings")
+    params['device'] = device_selection(params['device'])
     for key, spec in NUMBERS.items():
         require_number(params[key], spec)
     for key, choices in CHOICES.items():

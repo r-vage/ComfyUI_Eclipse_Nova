@@ -4,6 +4,7 @@ import copy
 import json
 import re
 
+from .devices import device_selection
 from .image_helpers import unwrap_value
 from .image_resize import ImageResizeExecution
 from .resolution_sizing import number, require_choice, require_fields, require_number
@@ -19,7 +20,7 @@ CHOICES = {
             "pillarbox_blur": "Blurred background", "stretch": "Stretch"},
     "crop_position": {key: key.title() for key in ("center", "top", "bottom", "left", "right")},
     "method": {key: key.title() for key in ("nearest-exact", "bilinear", "area", "bicubic", "lanczos")},
-    "device": {"cpu": "CPU", "gpu": "GPU"},
+    "device": {"default": "Default", "cpu": "CPU"},
 }
 NUMBERS = {
     "size": number("Size", 1024, 1, 16384),
@@ -66,6 +67,7 @@ def validate_configuration(raw):
     require_choice(config["scale_to"], CHOICES["scale_to"], "Scale to")
     require_choice(config["fit"], CHOICES["fit"], "Fit")
     require_fields(config, ["version", *active_fields(config)])
+    config['device'] = device_selection(config['device'])
     for key in active_fields(config):
         if key in CHOICES:
             require_choice(config[key], CHOICES[key], key.replace("_", " ").title())

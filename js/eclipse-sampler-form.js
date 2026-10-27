@@ -2,6 +2,7 @@
 import { element, button, SearchMenu } from './eclipse-panel-controls.js';
 import { FEATURES } from './eclipse-sampler-state.js';
 import { seedControls } from './eclipse-panel-seed-controls.js';
+import { detectionMode, detectionSections, detectionSummary } from './eclipse-detailer-form.js';
 
 export class SamplerForm {
     constructor(controller) { this.controller = controller; this.menu = new SearchMenu(); }
@@ -13,7 +14,8 @@ export class SamplerForm {
         const focused = root.contains(document.activeElement) ? document.activeElement?.dataset.field : null;
         const content = element('div', 'en-panel-content');
         const { config, spec } = this.state, p = config.parameters, settings = spec.profile === 'settings';
-        const choices = settings ? FEATURES.map(([key, label]) => [key, label, this.state.enabled(key)]) : spec.profile === 'detailer'
+        if (spec.profile === 'detailer_auto') detectionMode(this, content);
+        const choices = settings ? FEATURES.map(([key, label]) => [key, label, this.state.enabled(key)]) : ['detailer', 'detailer_auto'].includes(spec.profile)
             ? ['allow_overwrite', 'noise_mask', 'force_inpaint', 'inpaint_model', 'tiled_encode', 'tiled_decode', 'live_preview'].map(key => [key, spec.fields[key].label, p[key] === true]) : [
             ['allow_overwrite', 'Use pipe settings', p.allow_overwrite],
             ['tiled_decode', 'Tiled decode', p.tiled_decode], ['alpha', 'Alpha', p.alpha === true],
@@ -42,13 +44,18 @@ export class SamplerForm {
             if (spec.profile === 'advanced' && key === 'allow_overwrite') control.title = 'Use supplied pipe values for both stages, seeds, upscale, preview and decode. Missing values keep the local settings.';
             if (key === 'latent_upscale') { control.disabled = !p.two_stage; control.title = 'Resize the latent between stages. Only available in two-stage mode.'; }
             if (key === 'alpha') control.title = 'Keep decoded transparency. Off by default to return RGB instead of RGBA.';
-            if (key === 'live_preview') control.title = 'Show or hide live sampling and final images immediately. Turning this off keeps the image output.';
+            if (key === 'live_preview') control.title = 'Show or hide the live sampling preview immediately. Completed images remain available through the outputs.';
             bar.append(control);
         }
         content.append(bar);
         if (spec.profile === 'advanced') this.advanced(content);
-        else if (spec.profile === 'detailer') this.detailer(content);
+        else if (['detailer', 'detailer_auto'].includes(spec.profile)) {
+            if (spec.profile === 'detailer_auto') detectionSections(this, content);
+            if (this.controller.review) for (const stage of ['detection', 'segmentation']) this.controller.review.section(this, content, stage);
+            this.detailer(content);
+        }
         else this.sampling(content);
+        if (this.controls) this.controller.observer?.unobserve(this.controls);
         this.controls = content;
         if (this.controller.preview) {
             content.style.flex = '0 0 auto';
@@ -56,6 +63,9 @@ export class SamplerForm {
             layout.append(content, this.controller.preview.element); root.replaceChildren(layout);
             this.controller.preview.sync();
         } else root.replaceChildren(content);
+        // Intrinsic controls can shrink without resizing their flexible parent,
+        // for example when a detection preview is dragged smaller.
+        this.controller.observer?.observe(content);
         if (focused) [...root.querySelectorAll('[data-field]')].find(item => item.dataset.field === focused)?.focus({ preventScroll: true });
         this.controller.measure();
     }
@@ -148,10 +158,11 @@ export class SamplerForm {
             control.dataset.field = key; control.title = field.tooltip; return;
         }
         if (typeof field.default === 'boolean') {
-            const control = button(field.label, field.tooltip, () => this.edit(state => { state.config.parameters[key] = !value; }));
+            const control = button(field.label, field.label, () => this.edit(state => { state.config.parameters[key] = !value; }));
+            control.title = field.tooltip ?? field.label;
             control.dataset.field = key; control.setAttribute('aria-pressed', String(value)); parent.append(control); return;
         }
-        if (field.text) {
+        if (field.text || field.free_text) {
             const label = element('label', 'en-panel-field'), input = element('input');
             input.type = 'text'; input.value = value; input.dataset.field = key; input.title = field.tooltip;
             input.oninput = () => this.edit(state => { state.config.parameters[key] = input.value; }, false);
@@ -190,7 +201,13 @@ export class SamplerForm {
         this.section(content, 'seed', 'Seed', group => this.seed(group));
     }
     summary(key) {
+        const reviewSummary = this.controller.review?.summary(key);
+        if (reviewSummary != null) return reviewSummary;
         const p = this.state.config.parameters;
+        if (this.state.spec.profile === 'detailer_auto') {
+            const summary = detectionSummary(p, key);
+            if (summary !== null) return summary;
+        }
         if (this.state.spec.profile === 'advanced') {
             if (key === 'sampler' && p.two_stage) return `${p.sampler_name} · ${p.start_step}–${p.end_step} / ${p.steps}`;
             if (key === 'stage2') return `${p.second_sampler_name} · ${p.second_start}–${p.second_end} / ${p.second_steps}${p.second_start === 0 ? ` · ${p.second_denoise} denoise` : ''}`;
@@ -216,7 +233,7 @@ export class SamplerForm {
             label.textContent = label.title = this.summary(label.dataset.sectionSummary);
         }
     }
-    section(parent, key, title, build) {
+    section(parent, key, title, build, actions) {
         const section = element('section', 'en-panel-section'); section.setAttribute('aria-label', title);
         const header = element('div', 'en-panel-section-header'), open = this.state.sectionOpen(key);
         const toggle = button('', title, () => this.edit(state => state.toggleSection(key)));
@@ -227,7 +244,9 @@ export class SamplerForm {
         toggle.append(element('span', 'en-panel-section-label', `${open ? '▾' : '▸'} ${title}`), summary);
         const pin = button('⌖', `Pin ${title}`, () => this.edit(state => state.togglePin(key)));
         pin.setAttribute('aria-pressed', String(this.state.editor.pins?.[key] === true)); pin.dataset.field = `pin.${key}`;
-        header.append(toggle, pin); section.append(header);
+        header.append(toggle);
+        if (open) actions?.(header);
+        header.append(pin); section.append(header);
         if (open) { const body = element('div', 'en-panel-section-body'); build(body); section.append(body); }
         parent.append(section);
     }

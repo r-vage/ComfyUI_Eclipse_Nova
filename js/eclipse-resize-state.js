@@ -15,6 +15,7 @@ export function activeFields(config) {
 export class ResizeState {
     constructor(raw, spec, editor = {}) {
         const config = typeof raw === 'string' ? JSON.parse(raw) : clone(raw);
+        if (config && ['auto', 'cuda', 'gpu', 'mps'].includes(config.device)) config.device = 'default';
         if (!config || config.version !== 1 || !Object.hasOwn(spec.choices.scale_to, config.scale_to)
             || !Object.hasOwn(spec.choices.fit, config.fit)) throw Error('Expected version 1 resize configuration.');
         if (!Object.hasOwn(config, 'use_input_size')) config.use_input_size = true;
