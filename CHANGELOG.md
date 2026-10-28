@@ -2,6 +2,28 @@
 
 ## 2026-10-28
 
+### Version: 1.0.22
+
+- **Feat (New)**
+  - Add optional Color match to the Detailer (Advanced) Mode bar, revealing a settings section with six methods and adjustable strength. Match each decoded region to its original masked pixels before feathered compositing, reducing color and tonal shifts while retaining sampled detail, alpha and per-image ownership. Keep neutral black-and-white regions neutral, include corrected crops in output SEGS, and preserve existing workflows with correction disabled by default.
+- **Refactor**
+  - Simplify Detailer (Advanced): hide Sampler while Use pipe settings is enabled, retain local fallback values and keep Cycles available under Sizing. Remove the bottom sampling preview and its button while retaining sampling progress and both detection/segmentation review sections with their Stop buttons. Accept older saved preview settings without re-enabling the removed preview.
+- **Changed files**
+  - core/detailer_color_match.py
+  - core/detailer_configuration.py
+  - core/detailer_execution.py
+  - extern/impact/impact_pack.py
+  - js/eclipse-detailer-form.js
+  - js/eclipse-detailer-preview.js
+  - js/eclipse-sampler-form.js
+  - js/eclipse-sampler-state.js
+  - js/eclipse-sampler.js
+  - py/RvSampler_DetailerIntegrated.py
+  - Readme/Integrated_Detailer.md
+  - pyproject.toml
+
+## 2026-10-28
+
 ### Version: 1.0.21
 
 - **Feat (New)**

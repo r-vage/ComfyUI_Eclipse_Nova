@@ -1,11 +1,13 @@
 # Pipe-based detection, optional SAM2/matting and diffusion detailing.
 import json
+from functools import partial
 
 import torch
 from comfy_api.latest import io
 
 from ..core import CATEGORY
 from ..core.common import get_workflow_node
+from ..core.detailer_color_match import match_detail_crop
 from ..core.detailer_conditioning import DetailerConditioning
 from ..core.detailer_configuration import NODE_ID, PROFILE
 from ..core.detailer_execution import detail_images
@@ -107,7 +109,10 @@ class RvSampler_DetailerIntegrated(io.ComfyNode):
                                 group_by_label=conditioning.group_by_label))
         # Reviewing regions must not consume a local random/increment seed.
         seed = resolve_seed(config['seed'])
-        sampling = {key: config['parameters'][key] for key in detailer_editor_spec()['fields'] if key != 'allow_overwrite'}
+        sampling = {key: config['parameters'][key] for key in detailer_editor_spec()['fields']
+                    if key not in ('allow_overwrite', 'live_preview')}
+        crop_postprocess = partial(match_detail_crop, method=parameters['color_match_method'], strength=parameters['color_match_strength']) \
+            if parameters['color_match_enabled'] and parameters['color_match_strength'] > 0 else None
         enhanced, detailed, masks = [], [], []
         for frame, regions in zip(frames, prepared, strict=True):
             masks.append(combined_mask(regions))
@@ -122,7 +127,7 @@ class RvSampler_DetailerIntegrated(io.ComfyNode):
                 group_resources = (*resources[:3], positive, negative)
                 group_sampling = {**sampling, 'denoise': conditioning.denoise(label, sampling['denoise'])}
                 result, segments, _pipes = detail_images([current], group, group_resources,
-                    seed=(seed + offset) % (2**64), **group_sampling)
+                    seed=(seed + offset) % (2**64), live_preview=False, crop_postprocess=crop_postprocess, **group_sampling)
                 current = result[0]
                 sampled.extend(seg for _shape, items in segments for seg in items)
                 offset += len(group[1])

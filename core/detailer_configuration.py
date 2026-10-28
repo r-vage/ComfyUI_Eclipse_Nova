@@ -7,6 +7,7 @@ NODE_ID = 'Detailer (Advanced) [Eclipse Nova]'
 
 def integrated_spec(base):
     fields = base['fields']
+    fields.pop('live_preview', None)
 
     def number(key, label, default, low, high, step=1, integer=True, tooltip=''):
         fields[key] = {'label': label, 'default': default, 'min': low, 'max': high, 'step': step, 'integer': integer, 'tooltip': tooltip}
@@ -53,10 +54,20 @@ def integrated_spec(base):
     fields['combined'] = {'label': 'Combined region', 'default': False, 'tooltip': 'With external SEGS and conditioning lists or active denoise lists, combine masks within each label so both eyes share a sampling pass. Otherwise combine all selected masks. Disabled keeps individual regions. YOLO uses the first supplied conditioning and denoise.'}
     fields['bbox_fill'] = {'label': 'Fill bounding box', 'default': False, 'tooltip': 'Fill the complete bounding box instead of retaining the segmentation shape.'}
     fields['contour_fill'] = {'label': 'Fill contours', 'default': False, 'tooltip': 'Fill holes inside disconnected contours when Combined region is disabled.'}
+    fields['color_match_enabled'] = {'label': 'Color match', 'default': False, 'optional': True,
+        'tooltip': 'Match each detailed region to its original colors and tones after sampling, before blending it back. Uses the region mask, independently of Noise mask and Use pipe settings.'}
+    choice('color_match_method', 'Method', 'mkl', ['mkl', 'hm', 'reinhard', 'mvgd', 'hm-mvgd-hm', 'hm-mkl-hm'],
+        'Uses the same CPU color-transfer methods as Image Filter Adjustments. MKL matches color statistics; HM matches the tonal histogram. Each region uses its own original pixels as reference.')
+    number('color_match_strength', 'Strength', 1., 0, 1, .1, False,
+        '0 keeps the sampled colors; 1 fully matches the original region. Intermediate values blend the correction without blending away sampled detail.')
+    for key in ('color_match_method', 'color_match_strength'):
+        fields[key]['optional'] = True
     return {**base, 'profile': PROFILE, 'fields': fields}
 
 
 def upgrade_parameters(parameters, fields):
+    # Retired sampling preview; detection/segmentation reviews remain available.
+    parameters.pop('live_preview', None)
     if parameters.get('detection_device') in ('auto', 'cuda'):
         parameters['detection_device'] = 'default'
     for key, field in fields.items():

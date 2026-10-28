@@ -31,6 +31,7 @@ export class SamplerState extends SeedState {
     constructor(raw, spec, editor = {}) {
         super();
         this.config = parseConfiguration(raw); this.spec = spec; this.editor = clone(editor);
+        if (spec.profile === 'detailer_auto') delete this.config.parameters.live_preview;
         if (spec.profile === 'detailer_auto' && ['auto', 'cuda'].includes(this.config.parameters.detection_device)) {
             this.config.parameters.detection_device = 'default';
         }
@@ -68,7 +69,7 @@ export class SamplerState extends SeedState {
     toggleSection(key) {
         this.editor.sections ??= {};
         const open = !this.sectionOpen(key);
-        if (open) for (const other of ['detection', 'selection', 'sam', 'refinement', 'regions', 'detection_preview', 'segmentation_preview', 'sampler', 'stage2', 'upscale', 'qwen', 'dit', 'detail', 'sizing', 'mask', 'seed']) {
+        if (open) for (const other of ['detection', 'selection', 'sam', 'refinement', 'regions', 'detection_preview', 'segmentation_preview', 'sampler', 'stage2', 'upscale', 'qwen', 'dit', 'detail', 'sizing', 'mask', 'color_match', 'seed']) {
             if (other !== key && !this.editor.pins?.[other]) this.editor.sections[other] = false;
         }
         this.editor.sections[key] = open;

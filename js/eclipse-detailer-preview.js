@@ -19,7 +19,7 @@ export class DetailerPreview {
         this.controller = controller; this.node = controller.node;
         this.element = document.createElement('div');
         this.element.className = 'en-review-preview-content';
-        const detailer = ['detailer', 'detailer_auto'].includes(controller.spec.profile);
+        const detailer = controller.spec.profile === 'detailer';
         const label = detailer ? 'Detailed image preview' : 'Sampler image preview';
         this.element.setAttribute('aria-label', label);
         this.element.style.position = 'relative';
@@ -38,7 +38,7 @@ export class DetailerPreview {
         const p = this.controller.state.config.parameters;
         if (this.effectivePreview && (this.effectivePreview.local !== p.preview_mode
             || this.effectivePreview.usePipe !== p.allow_overwrite)) this.effectivePreview = null;
-        return ['detailer', 'detailer_auto'].includes(this.controller.spec.profile) ? p.live_preview
+        return this.controller.spec.profile === 'detailer' ? p.live_preview
             : this.effectivePreview?.enabled ?? p.preview_mode === 'Preview';
     }
     get visible() {
@@ -78,7 +78,7 @@ export class DetailerPreview {
         };
         // Detailers only show live frames, including when replaying an older
         // cached output that still contains final-image references.
-        if (['detailer', 'detailer_auto'].includes(this.controller.spec.profile)) {
+        if (this.controller.spec.profile === 'detailer') {
             setDOMPreviewController(this.final, []);
         } else if (Array.isArray(output?.images) && (output.images.length || this.enabled)) {
             // Samplers keep completed images while Preview is off so turning
@@ -98,7 +98,7 @@ export class DetailerPreview {
     }
 }
 
-export function installDetailerPreviews() {
+export function installDetailerPreviews(controllers) {
     const live = ({ detail }) => {
         let graph = app.rootGraph ?? app.graph, node;
         // Execution IDs describe the full nested path; local IDs can collide.
@@ -122,7 +122,8 @@ export function installDetailerPreviews() {
         for (const id of String(detail.node_id).split(':')) {
             node = graph?.getNodeById(id); graph = node?.subgraph;
         }
-        previews.get(node)?.controller.review?.update(detail.output);
+        // Advanced Detailer reviews also run when no sampling preview exists.
+        controllers.get(node)?.review?.update(detail.output);
     };
     api.addEventListener('eclipse-nova-detailer-review', review);
     return () => {

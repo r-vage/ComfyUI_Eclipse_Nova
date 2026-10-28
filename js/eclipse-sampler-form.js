@@ -2,7 +2,7 @@
 import { element, button, SearchMenu } from './eclipse-panel-controls.js';
 import { FEATURES } from './eclipse-sampler-state.js';
 import { seedControls } from './eclipse-panel-seed-controls.js';
-import { detectionMode, detectionSections, detectionSummary } from './eclipse-detailer-form.js';
+import { detectionMode, detectionSections, detectionSummary, colorMatchSection } from './eclipse-detailer-form.js';
 
 export class SamplerForm {
     constructor(controller) { this.controller = controller; this.menu = new SearchMenu(); }
@@ -16,7 +16,8 @@ export class SamplerForm {
         const { config, spec } = this.state, p = config.parameters, settings = spec.profile === 'settings';
         if (spec.profile === 'detailer_auto') detectionMode(this, content);
         const choices = settings ? FEATURES.map(([key, label]) => [key, label, this.state.enabled(key)]) : ['detailer', 'detailer_auto'].includes(spec.profile)
-            ? ['allow_overwrite', 'noise_mask', 'force_inpaint', 'inpaint_model', 'tiled_encode', 'tiled_decode', 'live_preview'].map(key => [key, spec.fields[key].label, p[key] === true]) : [
+            ? ['allow_overwrite', 'noise_mask', 'force_inpaint', 'inpaint_model', 'tiled_encode', 'tiled_decode',
+                ...(spec.profile === 'detailer' ? ['live_preview'] : [])].map(key => [key, spec.fields[key].label, p[key] === true]) : [
             ['allow_overwrite', 'Use pipe settings', p.allow_overwrite],
             ['tiled_decode', 'Tiled decode', p.tiled_decode], ['alpha', 'Alpha', p.alpha === true],
             ['preview_mode', 'Preview', p.preview_mode === 'Preview'],
@@ -42,6 +43,7 @@ export class SamplerForm {
                 ? 'Allow direct inputs in IO Sampler Settings to override values from this pipe.'
                 : 'Use values supplied by the pipe. Missing pipe values use the local settings below.';
             if (spec.profile === 'advanced' && key === 'allow_overwrite') control.title = 'Use supplied pipe values for both stages, seeds, upscale, preview and decode. Missing values keep the local settings.';
+            if (spec.profile === 'detailer_auto' && key === 'allow_overwrite') control.title = 'Use supplied sampler, scheduler, steps, CFG, denoise and seed values. Hides the Sampler section; missing pipe values keep its saved local settings. Cycles stays local under Sizing.';
             if (key === 'latent_upscale') { control.disabled = !p.two_stage; control.title = 'Resize the latent between stages. Only available in two-stage mode.'; }
             if (key === 'alpha') control.title = 'Keep decoded transparency. Off by default to return RGB instead of RGBA.';
             if (key === 'live_preview') control.title = 'Show or hide the live sampling preview immediately. Completed images remain available through the outputs.';
@@ -57,8 +59,10 @@ export class SamplerForm {
         else this.sampling(content);
         if (this.controls) this.controller.observer?.unobserve(this.controls);
         this.controls = content;
+        // Measure intrinsic controls even when the panel has no bottom preview.
+        // Stretching them to the node height would feed spare space back into its minimum.
+        if (spec.profile !== 'settings') content.style.flex = '0 0 auto';
         if (this.controller.preview) {
-            content.style.flex = '0 0 auto';
             const layout = element('div', 'en-panel-content');
             layout.append(content, this.controller.preview.element); root.replaceChildren(layout);
             this.controller.preview.sync();
@@ -184,7 +188,8 @@ export class SamplerForm {
         group.append(toggles);
     }
     detailer(content) {
-        this.section(content, 'sampler', 'Sampler', group => {
+        const usePipe = this.state.spec.profile === 'detailer_auto' && this.state.config.parameters.allow_overwrite;
+        if (!usePipe) this.section(content, 'sampler', 'Sampler', group => {
             this.sampling(group, false); this.number(group, 'cycle', 'en-panel-inline');
         });
         this.section(content, 'sizing', 'Sizing', group => {
@@ -193,11 +198,13 @@ export class SamplerForm {
             const control = this.menu.field(group, 'Guide size for', this.state.config.parameters.guide_size_for ? 'Bounding box' : 'Crop region',
                 ['Bounding box', 'Crop region'], value => this.edit(state => { state.config.parameters.guide_size_for = value === 'Bounding box'; }));
             control.dataset.field = 'guide_size_for';
+            if (usePipe) this.number(group, 'cycle', 'en-panel-inline');
         });
         this.section(content, 'mask', 'Mask & blending', group => {
             const numbers = element('div', 'en-panel-grid');
             this.number(numbers, 'feather'); this.number(numbers, 'noise_mask_feather'); group.append(numbers);
         });
+        if (this.state.spec.profile === 'detailer_auto') colorMatchSection(this, content);
         this.section(content, 'seed', 'Seed', group => this.seed(group));
     }
     summary(key) {

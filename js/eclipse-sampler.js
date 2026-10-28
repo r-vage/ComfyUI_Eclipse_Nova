@@ -28,8 +28,8 @@ export class SamplerController {
             hideOnZoom: false, serialize: true, margin: detailer ? 4 : 0,
         });
         this.widget.serializeValue = () => this.value();
-        if (detailer) this.preview = new DetailerPreview(this);
-        else this.widget.computeSize = () => [this.node.size[0], this.height];
+        if (detailer && this.spec.profile !== 'detailer_auto') this.preview = new DetailerPreview(this);
+        else if (!detailer) this.widget.computeSize = () => [this.node.size[0], this.height];
         if (this.spec.profile === 'detailer_auto') this.review = new DetailerReview(this);
         this.form = new SamplerForm(this);
         this.observer = new ResizeObserver(() => this.measure()); this.observer.observe(this.root);
@@ -94,7 +94,7 @@ export class SamplerController {
         if (this.disposed || this.frame) return;
         this.frame = requestAnimationFrame(() => {
             this.frame = null; if (!this.root.isConnected || !this.root.offsetWidth) return;
-            const detailer = !!this.preview, review = ['detailer', 'detailer_auto'].includes(this.spec.profile);
+            const detailer = this.spec.profile !== 'settings', review = ['detailer', 'detailer_auto'].includes(this.spec.profile);
             // Reserve live-preview space when enabled, before the first frame.
             // Frame arrival and execution completion must not resize the node.
             const preview = !this.invalid && (review ? this.preview?.enabled : this.preview?.visible) || false;
@@ -122,7 +122,7 @@ export class SamplerController {
 app.registerExtension({
     name: 'EclipseNova.SamplerV2',
     setup() {
-        ensurePanelStyle(); installQueueHook(api, app, controllers); installDetailerPreviews();
+        ensurePanelStyle(); installQueueHook(api, app, controllers); installDetailerPreviews(controllers);
     },
     getCustomWidgets() {
         return { [WIDGET_TYPE](node, name, inputData) {
@@ -149,7 +149,7 @@ app.registerExtension({
                     }
                     state.editor.lastSeed = seed;
                 });
-                controller?.preview.complete(output);
+                controller?.preview?.complete(output);
                 controller?.review?.update(output);
                 return result;
             };

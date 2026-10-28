@@ -99,9 +99,40 @@ Official model documentation: [Meta SAM2](https://github.com/facebookresearch/sa
 
 ## Sampling, outputs and batches
 
-The Options bar, Sampler, Sizing, Mask & blending and Seed sections follow the [existing detailer](Sampler.md#detailer-segspipe). **Use pipe settings** enables sampler, scheduler, steps, CFG, denoise and seed overrides. Missing values keep local settings. Models, conditioning and detection fields always come from the pipe when supplied, independently of that toggle. Supply one pipe for the complete image batch.
+The Options bar, Sampler, Sizing, Mask & blending and Seed sections follow the [existing detailer](Sampler.md#detailer-segspipe). **Use pipe settings** enables sampler, scheduler, steps, CFG, denoise and seed overrides and hides the Sampler section. Missing values keep its saved local settings; turn the toggle off to edit those settings again. **Cycles** stays local and moves into Sizing while Use pipe settings is on. Models, conditioning and detection fields always come from the pipe when supplied, independently of that toggle. Supply one pipe for the complete image batch.
 
-**Preview** shows live sampling of the current region and clears when sampling finishes. There is no separate final-image preview; completed images remain available through the image and pipe outputs. The detection and segmentation review sections below remain available independently.
+Completed images are available through the image and pipe outputs. The bottom sampling preview and its Preview button have been removed; existing workflows ignore their saved Preview setting. Sampling still reports progress. **Detection preview** and **Segmentation preview**, including their Stop buttons, remain available.
+
+## Color match
+
+Turn on **Color match** in the **Mode** bar to reveal its settings section and
+bring a detailed region's colors, brightness and contrast closer to the original. It starts off,
+including in existing workflows. The reference comes from the same region of
+the incoming image; no additional connection is needed. Turning it off hides the
+section while retaining its method and strength for the next time it is enabled.
+
+- **Method** offers the CPU methods from Image Filter Adjustments: `mkl`, `hm`,
+  `reinhard`, `mvgd`, `hm-mvgd-hm` and `hm-mkl-hm`. The default **mkl** matches
+  color statistics. **hm** matches the tonal histogram.
+- **Strength** ranges from **0** (no correction) to **1** (full correction),
+  with intermediate values blending the color correction. It does not blend
+  the original image detail back into the sampled crop.
+
+Each region is corrected after decoding and resizing, before the normal
+feathered paste. Only pixels within that region's mask supply the matching
+statistics; surrounding context does not dominate the reference. Neutral
+black-and-white references remain neutral at full strength. Tinted monochrome
+references retain their tint. Alpha is left unchanged, and each image in a batch
+uses its own original pixels.
+
+For a detailed face that looks too bright, contrasty or tinted against the body,
+start with **mkl / Strength 1** and lower the strength if needed. This corrects
+tonal differences, not changes to facial structure or the placement of lighting.
+Inspect the final **image** output with Image Comparer. Corrected crops also enter the output SEGS, and the
+effective settings are recorded under `detailer_settings` in the pipe.
+
+Color matching works independently of **Use pipe settings** and **Noise mask**.
+It does not change detection, SAM2, matting, prompts or sampling parameters.
 
 ## Reviewing detections and masks
 
@@ -117,4 +148,4 @@ No partial image result reaches downstream nodes while paused. The detailer's lo
 
 Outputs are **image** and **pipe**. The pipe preserves initial generation metadata and records the effective enhancement settings under `detailer_settings`, including the category denoise list when used. It adds enhanced images, per-image SEGS and masks, and removes the stale input latent. Equal-size images form a batch inside the pipe; mixed sizes remain a list. Images and masks keep the source dimensions; the mask represents prepared regions before diffusion’s blend feather. Each image gets its own SEGS result, preserving sizes and selection order. An image with no selected regions passes through unchanged with an empty mask. BBOXES must have one group per image; boxes are never silently broadcast across unrelated images. IO Detailer’s **segs** and **mask** outputs expose those results for other nodes.
 
-Sections can be collapsed or pinned. The node keeps its user-selected width, and the preview fills the remaining space. Both classic canvas and Nodes 2.0 use the same saved configuration.
+Sections can be collapsed or pinned. The node keeps its user-selected width; detection and segmentation previews retain their independently chosen heights. Both classic canvas and Nodes 2.0 use the same saved configuration.

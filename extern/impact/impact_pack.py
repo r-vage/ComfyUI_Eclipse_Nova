@@ -145,6 +145,7 @@ class DetailerForEach:
         tiled_encode=False,
         tiled_decode=False,
         preview_enabled=True,
+        crop_postprocess=None,
     ):
 
         if len(image) > 1:
@@ -300,6 +301,10 @@ class DetailerForEach:
                 cnet_pil_list.extend(cnet_pils)
 
             if enhanced_image is not None:
+                # Eclipse's optional crop correction runs after decode/resize,
+                # before the existing feathered paste and SEGS output.
+                if crop_postprocess is not None:
+                    enhanced_image = crop_postprocess(enhanced_image, orig_cropped_image, seg.cropped_mask)
                 # don't latent composite-> converting to latent caused poor quality
                 # use image paste
                 image = image.cpu()

@@ -50,7 +50,8 @@ def fixed_segs_scale_match(segs, target_shape):
 def detail_images(image, segs, basic_pipe, *, seed, guide_size, guide_size_for,
                   max_size, steps, cfg, sampler_name, scheduler, denoise, feather,
                   noise_mask, force_inpaint, cycle, inpaint_model, noise_mask_feather,
-                  tiled_encode, tiled_decode, live_preview=True, scheduler_func_opt=None):
+                  tiled_encode, tiled_decode, live_preview=True, scheduler_func_opt=None,
+                  crop_postprocess=None):
     model, clip, vae, positive, negative = basic_pipe
     enhanced_images, detailed_segs = [], []
     for index, frame in enumerate(flatten_images(image)):
@@ -66,6 +67,7 @@ def detail_images(image, segs, basic_pipe, *, seed, guide_size, guide_size_for,
             cycle=cycle, inpaint_model=inpaint_model, noise_mask_feather=noise_mask_feather,
             scheduler_func_opt=scheduler_func_opt, tiled_encode=tiled_encode,
             tiled_decode=tiled_decode, preview_enabled=live_preview,
+            crop_postprocess=crop_postprocess,
         )
         enhanced_images.append(enhanced)
         detailed_segs.extend(new_segs[1])

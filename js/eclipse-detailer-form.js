@@ -10,14 +10,15 @@ export function detectionMode(form, parent) {
     toggle.append(element('span', '', collapsed ? '▸' : '▾'), element('span', 'en-panel-bar-label', 'Mode:'));
     if (collapsed) toggle.append(element('span', 'en-panel-summary', ['YOLO',
         ...(state.config.parameters.sam2_enabled ? ['SAM2'] : []),
-        ...(state.config.parameters.refine_edges ? ['Edges'] : [])].join(' · ')));
+        ...(state.config.parameters.refine_edges ? ['Edges'] : []),
+        ...(state.config.parameters.color_match_enabled ? ['Color match'] : [])].join(' · ')));
     bar.append(toggle);
     if (!collapsed) {
         const control = button('YOLO', 'YOLO', () => form.edit(s => { if (!s.sectionOpen('detection')) s.toggleSection('detection'); }));
         control.title = 'Open YOLO detection settings. The checkpoint determines boxes or segmentation automatically. Non-None SEGS or BBOXES from the pipe take priority.';
         control.setAttribute('aria-pressed', 'true'); control.dataset.field = 'mode.YOLO'; bar.append(control);
     }
-    if (!collapsed) for (const key of ['sam2_enabled', 'refine_edges']) form.extraControl(bar, key);
+    if (!collapsed) for (const key of ['sam2_enabled', 'refine_edges', 'color_match_enabled']) form.extraControl(bar, key);
     parent.append(bar);
 }
 
@@ -45,10 +46,22 @@ export function detectionSections(form, parent) {
 }
 
 export function detectionSummary(p, key) {
+    if (key === 'color_match') return p.color_match_enabled ? `${p.color_match_method} · ${Math.round(p.color_match_strength * 100)}%` : 'Off';
     if (key === 'detection') return `${p.yolo_model} · ${p.detection || 'all'}`;
     if (key === 'sam') return p.sam2_model;
     if (key === 'refinement') return p.detail_method;
     if (key === 'regions') return `${p.combined ? 'Combined' : 'Separate'} · grow ${p.mask_grow} · blur ${p.mask_blur}`;
     if (key === 'selection') return p.selection === 'All' ? 'All regions' : `${p.sort_by} · from ${p.take_start} · ${p.take_count} regions`;
     return null;
+}
+
+export function colorMatchSection(form, parent) {
+    if (!form.state.config.parameters.color_match_enabled) return;
+    form.section(parent, 'color_match', 'Color match', body => {
+        const grid = element('div', 'en-panel-grid');
+        for (const key of ['color_match_method', 'color_match_strength']) form.extraControl(grid, key);
+        body.append(grid);
+        body.append(element('div', 'en-panel-note',
+            'Match each detailed region to its original colors and tones before blending. Only masked pixels supply the reference; the rest of the image stays unchanged. Neutral black-and-white regions stay neutral at full strength.'));
+    });
 }
