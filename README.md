@@ -50,8 +50,10 @@ Text and preview panels fit within the node size chosen by the user.
 Choose **Settings → Eclipse Nova → Appearance → Node design** for **Jade,
 Neutral, Ocean, Amethyst or Amber**, plus **Neutral Jade, Neutral Ocean,
 Neutral Amethyst and Neutral Amber** for lighter backgrounds and titles with
-colored controls. Themes are editable JSON files; add your own
-under `themes/custom/` and reload them from settings. Bundled themes are extracted
+colored controls. Use **Theme editor → Edit themes** in the same settings section
+to adjust colors, opacity and shadows with a preview, then **Save** or **Save As**.
+You can also edit JSON themes under `themes/custom/` and reload them from settings.
+Bundled themes are extracted
 once from `.defaults/themes/`; edits and deletions in `themes/` survive updates.
 The selected design styles panel controls and untouched node defaults, preserving
 custom title and background colors across workflow reloads. **Theme regular nodes**

@@ -11,7 +11,7 @@ folders. Nova nodes use `[Eclipse Nova]` IDs and the **🌒 Eclipse Nova** menu.
 
 | Guide | What it covers |
 | --- | --- |
-| [Node designs](Node_Design.md) | Neutral and colored palettes, including Neutral color variants; custom JSON themes, reload and saved background behavior |
+| [Node designs](Node_Design.md) | Neutral and colored palettes; theme editor with color pickers, preview, Save and Save As; custom JSON themes and saved node colors |
 | [Operation panels](Operation_Panels.md) | Compact image-batch, tile, timing, text and folder tools; connected value overrides |
 | [Previews and Stop](DOM_Previews.md) | Show Any Stop, image/mask previews, resizable output and continuation when reviewed inputs are unchanged |
 | [Media tools](Media_Tool_Panels.md) | Image Convert, Crop by Mask and System Audio Recorder panels |

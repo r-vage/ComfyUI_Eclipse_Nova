@@ -200,7 +200,8 @@ export function createNodeDesign({ app, api, settingId, category, route, prefix,
                 definition.options = options();
                 await applySaved();
                 await showSaved();
-            } catch (error) { notice(error.message); }
+                return true;
+            } catch (error) { notice(error.message); return false; }
         });
         return pending;
     }

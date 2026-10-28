@@ -4,6 +4,7 @@ import { ensurePanelStyle } from './eclipse-panel-controls.js';
 import { showEclipseToast } from './eclipse-notifications.js';
 import { createNodeDesign } from './node-design-theme.js';
 import { createThemeLink } from './eclipse-theme-link.js';
+import { openThemeEditor } from './eclipse-theme-editor.js';
 
 export const DESIGN_SETTING = 'EclipseNova.NodeDesign';
 
@@ -34,6 +35,23 @@ app.registerExtension({
         } catch (error) { showEclipseToast('Eclipse Nova design', error.message); }
         themeLink.initialize(config);
         await design.initialize(config);
+        app.ui.settings.addSetting({
+            id: `${DESIGN_SETTING}.Editor`, category: ['Eclipse Nova', 'Appearance', 'ThemeEditor'],
+            name: 'Theme editor', defaultValue: '', sortOrder: 499.8,
+            tooltip: 'Edit theme colors, transparency, shadows and controls. Save changes or create a new theme.',
+            type() {
+                const button = document.createElement('button'); button.type = 'button';
+                button.className = 'comfy-menu-btn'; button.textContent = 'Edit themes';
+                button.onclick = () => openThemeEditor({ api, selected: app.ui.settings.getSettingValue(DESIGN_SETTING),
+                    async onSaved(id) {
+                        if (!await design.reload()) throw Error('Reload themes in settings to apply it.');
+                        await app.ui.settings.setSettingValueAsync(DESIGN_SETTING, id);
+                        if (document.documentElement.dataset.eclipseNovaDesign !== id) throw Error('Select the saved theme in settings to apply it.');
+                    },
+                });
+                return button;
+            },
+        });
     },
     nodeCreated(node) { applyNodeDesign(node, true); },
     loadedGraphNode(node) { applyNodeDesign(node); },

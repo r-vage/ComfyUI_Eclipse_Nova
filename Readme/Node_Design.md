@@ -100,6 +100,28 @@ only read files. To restore a removed palette, copy its `.json.example` from
 
 ## Create or edit a theme
 
+Open **Settings → Eclipse Nova → Appearance → Theme editor → Edit themes**.
+Choose a theme such as Jade to load its current values. The panel includes all
+template colors, opacity, shadow layers, pill radius and native control color
+scheme. Color fields have both a picker and an exact hex value. The preview
+updates as you edit; your nodes change when you save.
+
+- **Save** updates the selected theme and applies it. Edits are written to
+  `themes/custom/<theme-id>.json`, preserving the original file in `themes/`
+  and the bundled defaults.
+- **Save As…** creates and selects a separate theme with its own name and ID.
+  Existing IDs cannot be overwritten through Save As.
+- **Revert edits** restores the values loaded in the editor. Closing or switching
+  themes with unsaved changes lets you keep editing or discard the draft.
+
+The editor preserves custom node colors. Shared routing and category color fields
+remain editable for template compatibility; Eclipse does not force those colors
+onto nodes. If a theme is edited elsewhere while the panel is open, Save reports
+the conflict instead of replacing the newer file. Reopen the editor to load it,
+or use Save As to keep your draft separately.
+
+You can also edit JSON files directly:
+
 1. Copy `themes/jade.json` (or another bundled theme) to
    **`themes/custom/my-theme.json`** in this repo.
 2. Change `label`, the colors under `node`, and the values under `tokens`.

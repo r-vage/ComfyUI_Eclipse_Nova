@@ -41,6 +41,7 @@ from .request_security import (
     global_mutation_denial,
     read_json_object_request,
 )
+from .theme_editor import register_theme_editor_routes
 from .wildcard_engine import get_wildcard_list, wildcard_load
 
 # Inline pattern to avoid regex_patterns dependency
@@ -326,6 +327,8 @@ class WildcardEndpoints:
         @PromptServer.instance.routes.get("/eclipse-nova/themes")
         async def get_node_designs(_request):
             return web.json_response(load_node_designs(), headers={"Cache-Control": "no-store"})
+
+        register_theme_editor_routes(PromptServer.instance.routes)
 
         @PromptServer.instance.routes.get("/eclipse-nova/config/all")
         async def get_all_config(request):

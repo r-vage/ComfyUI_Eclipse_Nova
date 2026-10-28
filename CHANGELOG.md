@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-10-28
+
+### Version: 1.0.21
+
+- **Feat (New)**
+  - Add a theme editor to Eclipse Nova's Appearance settings, with color pickers, opacity, shadow layers and the remaining template fields. Preview edits before applying them; Save updates the selected theme through a custom override, while Save As creates a separate theme. Preserve bundled files and manual node colors, retain unsaved drafts after errors, and protect against conflicting edits.
+- **Changed files**
+  - core/server_endpoints.py
+  - core/theme_editor.py
+  - js/eclipse-node-design.js
+  - js/eclipse-theme-editor.js
+  - js/eclipse-theme-editor.css
+  - js/eclipse-theme-editor-controls.js
+  - js/eclipse-theme-editor-form.js
+  - js/node-design-theme.js
+  - README.md
+  - Readme/README.md
+  - Readme/Node_Design.md
+  - pyproject.toml
+
 ## 2026-10-27
 
 ### Version: 1.0.20
