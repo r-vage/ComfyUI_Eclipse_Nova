@@ -1,5 +1,5 @@
 /** Eclipse Nova structured sampler editors, mounted identically in both renderers. */
-import { fitNodeToWidgets, isConfiguringGraph } from './eclipse-widget-utils.js';
+import { fitNodeToWidgets, forwardCanvasNavigation, isConfiguringGraph } from './eclipse-widget-utils.js';
 import { app, api } from './comfy/index.js';
 import { NODE_IDS, SETTINGS_ID, WIDGET_TYPE, EDITOR_KEY, SamplerState, clone, validSeed, nextSeed } from './eclipse-sampler-state.js';
 import { SamplerForm } from './eclipse-sampler-form.js';
@@ -19,6 +19,7 @@ export class SamplerController {
         if (detailer) this.root.classList.add('en-panel-fill-height');
         this.root.setAttribute('aria-label', { settings: 'Smart sampler settings', sampler: 'Eclipse sampler settings', detailer: 'Detailer settings', detailer_auto: 'Integrated detailer settings', advanced: 'Advanced sampler settings' }[this.spec.profile]);
         this.root.onpointerdown = event => event.stopPropagation(); this.root.onkeydown = event => event.stopPropagation();
+        this.disposeNavigation = forwardCanvasNavigation(this.root);
         this.numbers = new PanelNumbers(this.root, () => this.measure());
         this.widget = node.addDOMWidget(name, WIDGET_TYPE, this.root, {
             getValue: () => this.value(), setValue: value => this.restore(value),
@@ -114,7 +115,7 @@ export class SamplerController {
     }
     dispose() {
         if (this.disposed) return;
-        this.disposed = true; this.observer.disconnect(); this.numbers.dispose(); this.form.dispose(); this.preview?.dispose(); this.review?.dispose();
+        this.disposed = true; this.observer.disconnect(); this.disposeNavigation(); this.numbers.dispose(); this.form.dispose(); this.preview?.dispose(); this.review?.dispose();
         if (this.frame) cancelAnimationFrame(this.frame); controllers.delete(this.node);
     }
 }

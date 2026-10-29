@@ -155,6 +155,35 @@ export function onVueModeChange(callback) {
     return () => window[_VMC_KEY].delete(callback);
 }
 
+// DOM widgets sit above the classic canvas; their events cannot bubble to it.
+// Newer Vue frontends forward navigation at an ancestor, so those events never
+// reach this fallback. Keep primary-button editing and focused-field scrolling.
+export function forwardCanvasNavigation(root) {
+    const pointer = event => {
+        if (event.button !== 1 && !(event.buttons & 4)) return;
+        const canvas = window.app?.canvas?.canvas;
+        if (!canvas || event.defaultPrevented) return;
+        event.preventDefault(); event.stopPropagation();
+        // ComfyUI owns pointer capture, pan state, and the eventual release,
+        // including when the pointer leaves the widget during a drag.
+        canvas.dispatchEvent(new PointerEvent(event.type, event));
+    };
+    const wheel = event => {
+        const canvas = window.app?.canvas?.canvas;
+        if (!canvas || event.defaultPrevented) return;
+        event.preventDefault(); event.stopPropagation();
+        canvas.dispatchEvent(new WheelEvent('wheel', event));
+    };
+    const events = ['pointerdown', 'pointermove', 'pointerup'];
+    for (const name of events) root.addEventListener(name, pointer, true);
+    // Bubble phase lets text fields, playlists, and grids consume scrolling.
+    root.addEventListener('wheel', wheel, { passive: false });
+    return () => {
+        for (const name of events) root.removeEventListener(name, pointer, true);
+        root.removeEventListener('wheel', wheel);
+    };
+}
+
 // Delegate to one panel host so newly rendered textareas work without observers.
 // ComfyUI checks this marker before forwarding DOM-wheel events to its canvas.
 export function captureFocusedTextWheel(root) {

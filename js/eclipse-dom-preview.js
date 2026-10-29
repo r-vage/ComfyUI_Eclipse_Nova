@@ -1,8 +1,6 @@
+import { api } from './comfy/index.js';
 import {
-    app,
-    api
-} from './comfy/index.js';
-import {
+    forwardCanvasNavigation,
     isVueMode,
     onVueModeChange
 } from './eclipse-widget-utils.js';
@@ -61,24 +59,7 @@ export function createDOMPreviewController(node, opts = {}) {
     const minH = opts.minHeight ?? 100;
     const container = document.createElement('div');
     container.style.cssText = 'position:relative;width:100%;height:100%;' + 'overflow:hidden;background:#1a1a1a;user-select:none;display:flex;' + 'align-items:center;justify-content:center;' + 'border-radius:4px;';
-    container.addEventListener('wheel', (e) => {
-        const canvas = app.canvas?.canvas;
-        if (canvas) {
-            e.preventDefault();
-            e.stopPropagation();
-            canvas.dispatchEvent(new WheelEvent('wheel', {
-                clientX: e.clientX,
-                clientY: e.clientY,
-                deltaX: e.deltaX,
-                deltaY: e.deltaY,
-                ctrlKey: e.ctrlKey,
-                metaKey: e.metaKey,
-                shiftKey: e.shiftKey,
-                bubbles: true,
-                cancelable: true
-            }));
-        }
-    });
+    const disposeNavigation = forwardCanvasNavigation(container);
     const img = document.createElement('img');
     img.className = 'eclipse-dom-preview-image';
     img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;display:none;';
@@ -219,6 +200,7 @@ export function createDOMPreviewController(node, opts = {}) {
         disposed = true;
         state.revision = null;
         resizeObserver.disconnect();
+        disposeNavigation();
         modeUnsubscribe?.();
         modeUnsubscribe = null;
         container.classList.remove(FREE_RESIZE_CLASS);

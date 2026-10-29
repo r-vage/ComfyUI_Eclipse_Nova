@@ -1,5 +1,5 @@
 /** Lifecycle for one serialized DOM configuration panel in classic and Nodes 2.0. */
-import { captureFocusedTextWheel, fitNodeToWidgets } from './eclipse-widget-utils.js';
+import { captureFocusedTextWheel, fitNodeToWidgets, forwardCanvasNavigation } from './eclipse-widget-utils.js';
 import { PanelNumbers } from './eclipse-panel-numbers.js';
 
 const graphKey = Symbol('EclipseNova.ConfigurationGraph');
@@ -14,6 +14,7 @@ export class ConfigurationPanel {
             this.root.style.setProperty('--comfy-widget-min-height', `${profile.minHeight}px`);
         }
         this.root.onpointerdown = event => event.stopPropagation(); this.root.onkeydown = event => event.stopPropagation();
+        this.disposeNavigation = forwardCanvasNavigation(this.root);
         this.disposeTextWheel = captureFocusedTextWheel(this.root);
         this.numbers = new PanelNumbers(this.root, () => this.measure());
         // Keep the classic canvas resize corner outside an expanding DOM widget.
@@ -84,7 +85,7 @@ export class ConfigurationPanel {
     }
     dispose() {
         if (this.disposed) return;
-        this.disposed = true; this.observer?.disconnect(); this.disposeTextWheel(); this.numbers.dispose(); this.form.dispose();
+        this.disposed = true; this.observer?.disconnect(); this.disposeNavigation(); this.disposeTextWheel(); this.numbers.dispose(); this.form.dispose();
         if (this.frame) cancelAnimationFrame(this.frame); this.profile.onDispose?.(this.node);
     }
 }

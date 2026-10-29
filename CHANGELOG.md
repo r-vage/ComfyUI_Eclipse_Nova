@@ -2,6 +2,22 @@
 
 ## 2026-10-29
 
+### Version: 1.0.24
+
+- **Fix**
+  - Restore middle-button canvas panning over sampler previews, Smart Prompt and shared Nova panels. Forward wheel navigation over live previews as well as completed images, while preserving control editing and focused text scrolling in classic canvas and Nodes 2.0.
+  - Keep the last valid sampler preview visible until its replacement has decoded. Bound pending frames, release image URLs after replacement, and discard late frames after completion, interruption or node removal.
+- **Changed files**
+  - js/eclipse-configuration-panel.js
+  - js/eclipse-detailer-preview.js
+  - js/eclipse-dom-preview.js
+  - js/eclipse-sampler.js
+  - js/eclipse-smart-prompt.js
+  - js/eclipse-widget-utils.js
+  - pyproject.toml
+
+## 2026-10-29
+
 ### Version: 1.0.23
 
 - **Feat**

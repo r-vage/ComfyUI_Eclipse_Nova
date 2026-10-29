@@ -28,8 +28,7 @@ export class DetailerPreview {
         this.final.img.alt = detailer ? 'Detailed image' : 'Sampled image';
         this.final.img.style.width = '100%'; this.final.img.style.height = '100%';
         final.style.background = 'transparent';
-        this.live = document.createElement('img'); this.live.alt = detailer ? 'Live detailed image' : 'Live sampled image'; this.live.draggable = false;
-        this.live.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;';
+        this.live = this.createLiveImage();
         this.element.append(final, this.live);
         previews.set(this.node, this);
         this.sync();
@@ -53,16 +52,50 @@ export class DetailerPreview {
         this.live.style.display = this.liveUrl ? 'block' : 'none';
         this.controller.measure();
     }
+    createLiveImage() {
+        const image = document.createElement('img');
+        image.alt = this.controller.spec.profile === 'detailer' ? 'Live detailed image' : 'Live sampled image';
+        image.draggable = false;
+        image.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;';
+        return image;
+    }
     showLive(blob, jobId) {
         if (this.disposed) return;
-        this.releaseLive();
-        // Own a separate URL: ComfyUI's sidebar and node store own their URLs.
-        this.liveUrl = URL.createObjectURL(blob); this.jobId = jobId;
+        if (this.jobId !== jobId) { this.releaseLive(); this.sync(); }
+        this.jobId = jobId;
         activePreviews.add(this);
-        this.live.src = this.liveUrl;
-        this.sync();
+        // Decode one frame at a time, retaining only the newest waiting blob.
+        // Keep the completed image / last valid frame on screen in the meantime.
+        this.nextBlob = blob;
+        this.decodeNext();
+    }
+    decodeNext() {
+        if (this.pending || !this.nextBlob) return;
+        const frame = { image: this.createLiveImage(), url: URL.createObjectURL(this.nextBlob) };
+        this.nextBlob = null; this.pending = frame;
+        // Own a separate URL: ComfyUI's sidebar and node store own their URLs.
+        frame.image.src = frame.url;
+        const finish = ready => {
+            if (this.pending !== frame) return; // completed, cancelled or removed
+            this.pending = null;
+            if (ready) {
+                const previous = this.live, previousUrl = this.liveUrl;
+                previous.replaceWith(frame.image);
+                this.live = frame.image; this.liveUrl = frame.url;
+                this.sync();
+                previous.removeAttribute('src');
+                if (previousUrl) URL.revokeObjectURL(previousUrl);
+            } else {
+                frame.image.removeAttribute('src'); URL.revokeObjectURL(frame.url);
+            }
+            this.decodeNext();
+        };
+        frame.image.decode().then(() => finish(true), () => finish(false));
     }
     releaseLive() {
+        const pending = this.pending;
+        this.pending = null; this.nextBlob = null;
+        if (pending) { pending.image.removeAttribute('src'); URL.revokeObjectURL(pending.url); }
         this.live.removeAttribute('src');
         if (this.liveUrl) URL.revokeObjectURL(this.liveUrl);
         this.liveUrl = null; this.jobId = null;
@@ -89,7 +122,7 @@ export class DetailerPreview {
         this.sync();
     }
     finish(jobId) {
-        if (!this.liveUrl || this.jobId !== jobId) return;
+        if (this.jobId !== jobId) return;
         this.releaseLive(); suppressNativePreview(this.node); this.sync();
     }
     dispose() {

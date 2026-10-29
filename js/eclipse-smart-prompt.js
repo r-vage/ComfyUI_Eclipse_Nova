@@ -6,7 +6,7 @@ import { PromptForm } from './eclipse-smart-prompt-form.js';
 import { installPromptQueueHook } from './eclipse-smart-prompt-queue.js';
 import { ensurePanelStyle } from './eclipse-panel-controls.js';
 import { PromptLibrary } from './eclipse-smart-prompt-library.js';
-import { captureFocusedTextWheel, fitNodeToWidgets } from './eclipse-widget-utils.js';
+import { captureFocusedTextWheel, fitNodeToWidgets, forwardCanvasNavigation } from './eclipse-widget-utils.js';
 
 const controllers = new WeakMap(), graphKey = Symbol('EclipseNova.PromptGraph');
 const library = new PromptLibrary((...args) => api.fetchApi(...args));
@@ -16,6 +16,7 @@ export class PromptController {
         this.catalog = { folders: [] }; this.files = new Map(); this.fileRequests = new Map(); this.revision = 0; this.events = new AbortController();
         this.root = document.createElement('div'); this.root.className = 'en-panel en-prompt'; this.root.setAttribute('aria-label', 'Smart Prompt editor');
         this.root.onpointerdown = event => event.stopPropagation(); this.root.onkeydown = event => event.stopPropagation();
+        this.disposeNavigation = forwardCanvasNavigation(this.root);
         this.disposeTextWheel = captureFocusedTextWheel(this.root);
         this.widget = node.addDOMWidget(name, WIDGET_TYPE, this.root, {
             getValue: () => this.value(), setValue: value => this.restore(value),
@@ -107,7 +108,7 @@ export class PromptController {
     }
     dispose() {
         if (this.disposed) return;
-        this.disposed = true; this.revision++; this.events.abort(); this.observer.disconnect(); this.disposeTextWheel(); this.form.dispose(); this.closeEditor?.(); this.files.clear(); this.fileRequests.clear();
+        this.disposed = true; this.revision++; this.events.abort(); this.observer.disconnect(); this.disposeNavigation(); this.disposeTextWheel(); this.form.dispose(); this.closeEditor?.(); this.files.clear(); this.fileRequests.clear();
         if (this.frame) cancelAnimationFrame(this.frame); controllers.delete(this.node);
     }
 }
