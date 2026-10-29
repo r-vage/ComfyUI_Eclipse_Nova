@@ -1,5 +1,6 @@
 # Additional controls for the integrated detailer. No model imports at startup.
 from .detailer_models import model_files, yolo_files
+from .image_color_match import COLOR_MATCH_METHODS
 
 PROFILE = 'detailer_auto'
 NODE_ID = 'Detailer (Advanced) [Eclipse Nova]'
@@ -56,8 +57,8 @@ def integrated_spec(base):
     fields['contour_fill'] = {'label': 'Fill contours', 'default': False, 'tooltip': 'Fill holes inside disconnected contours when Combined region is disabled.'}
     fields['color_match_enabled'] = {'label': 'Color match', 'default': False, 'optional': True,
         'tooltip': 'Match each detailed region to its original colors and tones after sampling, before blending it back. Uses the region mask, independently of Noise mask and Use pipe settings.'}
-    choice('color_match_method', 'Method', 'mkl', ['mkl', 'hm', 'reinhard', 'mvgd', 'hm-mvgd-hm', 'hm-mkl-hm'],
-        'Uses the same CPU color-transfer methods as Image Filter Adjustments. MKL matches color statistics; HM matches the tonal histogram. Each region uses its own original pixels as reference.')
+    choice('color_match_method', 'Method', 'mkl', list(COLOR_MATCH_METHODS),
+        'Same methods as Image Filter Adjustments. MKL matches color statistics; HM and ScatterSort match histograms. Wavelet matches low-frequency LAB tones while preserving fine detail; Reinhard LAB matches LAB color statistics. Each method uses the original masked region as reference. Wavelet, ScatterSort and Reinhard LAB use ComfyUI’s configured device.')
     number('color_match_strength', 'Strength', 1., 0, 1, .1, False,
         '0 keeps the sampled colors; 1 fully matches the original region. Intermediate values blend the correction without blending away sampled detail.')
     for key in ('color_match_method', 'color_match_strength'):

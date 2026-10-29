@@ -101,6 +101,8 @@ Official model documentation: [Meta SAM2](https://github.com/facebookresearch/sa
 
 The Options bar, Sampler, Sizing, Mask & blending and Seed sections follow the [existing detailer](Sampler.md#detailer-segspipe). **Use pipe settings** enables sampler, scheduler, steps, CFG, denoise and seed overrides and hides the Sampler section. Missing values keep its saved local settings; turn the toggle off to edit those settings again. **Cycles** stays local and moves into Sizing while Use pipe settings is on. Models, conditioning and detection fields always come from the pipe when supplied, independently of that toggle. Supply one pipe for the complete image batch.
 
+**Tiled encode** and **Tiled decode** start off on newly added detailers. Enable them when needed to reduce VAE memory usage. Saved workflows retain their selected values.
+
 Completed images are available through the image and pipe outputs. The bottom sampling preview and its Preview button have been removed; existing workflows ignore their saved Preview setting. Sampling still reports progress. **Detection preview** and **Segmentation preview**, including their Stop buttons, remain available.
 
 ## Color match
@@ -111,9 +113,13 @@ including in existing workflows. The reference comes from the same region of
 the incoming image; no additional connection is needed. Turning it off hides the
 section while retaining its method and strength for the next time it is enabled.
 
-- **Method** offers the CPU methods from Image Filter Adjustments: `mkl`, `hm`,
-  `reinhard`, `mvgd`, `hm-mvgd-hm` and `hm-mkl-hm`. The default **mkl** matches
-  color statistics. **hm** matches the tonal histogram.
+- **Method** offers all nine methods from Image Filter Adjustments: `mkl`, `hm`,
+  `reinhard`, `mvgd`, `hm-mvgd-hm`, `hm-mkl-hm`, `reinhard_lab_gpu`, `wavelet`
+  and `scattersort`. The default **mkl** matches color statistics. **hm** and
+  **scattersort** match tonal histograms. **reinhard_lab_gpu** matches LAB color
+  statistics. **wavelet** matches low-frequency LAB tones while retaining the
+  sampled crop's fine detail and spatial layout. The last three methods use
+  ComfyUI's configured device, including CPU when selected.
 - **Strength** ranges from **0** (no correction) to **1** (full correction),
   with intermediate values blending the color correction. It does not blend
   the original image detail back into the sampled crop.

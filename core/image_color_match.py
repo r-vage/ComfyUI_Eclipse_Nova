@@ -7,8 +7,20 @@ from .image_soften import _haar_decompose, _haar_reconstruct, _pad
 from .logger import log
 
 _LOG_PREFIX = "ImageColorMatch"
+CPU_METHODS = ("mkl", "hm", "reinhard", "mvgd", "hm-mvgd-hm", "hm-mkl-hm")
+COLOR_MATCH_METHODS = (*CPU_METHODS, "reinhard_lab_gpu", "wavelet", "scattersort")
 
-def _wavelet_color_transfer(src_bchw, ref_bchw, strength):
+
+def _wavelet_statistics(channel, weights):
+    if weights is None:
+        return channel.mean(), channel.std(unbiased=False)
+    count = weights.sum().clamp_min(1e-6)
+    mean = (channel * weights).sum() / count
+    variance = ((channel - mean).square() * weights).sum() / count
+    return mean, variance.sqrt()
+
+
+def _wavelet_color_transfer(src_bchw, ref_bchw, strength, mask=None):
     # Transfer color via Haar wavelets: match LL band statistics, keep detail bands.
     # Operates in LAB space for perceptually uniform transfer.
     import kornia  # type: ignore
@@ -36,18 +48,32 @@ def _wavelet_color_transfer(src_bchw, ref_bchw, strength):
         src_lab = _pad(src_lab, (0, pad_w, 0, pad_h))
         ref_lab = _pad(ref_lab, (0, pad_w, 0, pad_h))
 
+    block_weights = None
+    if mask is not None:
+        # Keep the 2-D Haar neighborhoods. Fill only unselected pixels inside
+        # each block with its selected mean so outside context cannot affect
+        # either the low-frequency statistics or the selected detail bands.
+        mask = torch.nn.functional.pad(mask, (0, pad_w, 0, pad_h))
+        block_weights = torch.nn.functional.avg_pool2d(mask, 2)
+
+        def masked_blocks(lab):
+            means = torch.nn.functional.avg_pool2d(lab * mask, 2) / block_weights.clamp_min(1e-6)
+            fill = torch.nn.functional.interpolate(means, scale_factor=2, mode="nearest")
+            return torch.where(mask.bool(), lab, fill)
+
+        src_lab, ref_lab = masked_blocks(src_lab), masked_blocks(ref_lab)
+
     src_LL, src_LH, src_HL, src_HH = _haar_decompose(src_lab)
     ref_LL, _, _, _ = _haar_decompose(ref_lab)
 
     # AdaIN on LL band: normalize src LL, scale/shift by ref LL statistics
     for b in range(B):
         ref_idx = min(b, ref_LL.shape[0] - 1)
+        weights = block_weights[b, 0] if block_weights is not None else None
         for c in range(3):  # L, A, B channels
-            s_mean = src_LL[b, c].mean()
-            s_std = src_LL[b, c].std(unbiased=False).clamp(min=1e-6)
-            r_mean = ref_LL[ref_idx, c].mean()
-            r_std = ref_LL[ref_idx, c].std(unbiased=False).clamp(min=1e-6)
-            src_LL[b, c] = (src_LL[b, c] - s_mean) / s_std * r_std + r_mean
+            s_mean, s_std = _wavelet_statistics(src_LL[b, c], weights)
+            r_mean, r_std = _wavelet_statistics(ref_LL[ref_idx, c], weights)
+            src_LL[b, c] = (src_LL[b, c] - s_mean) / s_std.clamp_min(1e-6) * r_std.clamp_min(1e-6) + r_mean
 
     # Reconstruct with matched LL + original detail bands
     out_lab = _haar_reconstruct(src_LL, src_LH, src_HL, src_HH)
@@ -101,14 +127,11 @@ def _scattersort_transfer(src_bchw, ref_bchw, strength):
     return out_flat.reshape(B, C, H, W).clamp_(0, 1)
 
 
-CPU_METHODS = ("mkl", "hm", "reinhard", "mvgd", "hm-mvgd-hm", "hm-mkl-hm")
-
-
 def sanitize(image):
     return torch.nan_to_num(image, nan=0, posinf=1, neginf=0).clamp(0, 1)
 
 
-def match_color(image, reference, method, strength):
+def match_color(image, reference, method, strength, *, wavelet_mask=None):
     if strength == 0:
         return image
     # Both inputs belong to upstream nodes; never let a matcher mutate them.
@@ -134,7 +157,11 @@ def match_color(image, reference, method, strength):
     device = model_management.get_torch_device()
     source, ref = [item.to(device).movedim(-1, 1).contiguous() for item in (image, reference)]
     if method == "wavelet":
-        result = _wavelet_color_transfer(source, ref, strength)
+        if wavelet_mask is not None:
+            if tuple(wavelet_mask.shape) != tuple(image.shape[:3]) or reference.shape[:3] != image.shape[:3]:
+                raise ValueError("Masked wavelet matching requires aligned images and a BHW mask.")
+            wavelet_mask = wavelet_mask.to(device=device, dtype=source.dtype).unsqueeze(1)
+        result = _wavelet_color_transfer(source, ref, strength, wavelet_mask)
     elif method == "scattersort":
         result = _scattersort_transfer(source, ref, strength)
     else:

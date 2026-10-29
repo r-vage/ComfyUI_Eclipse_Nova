@@ -1,14 +1,14 @@
 # Match each decoded region to its original pixels before feathered compositing.
 import torch
 
-from .image_color_match import CPU_METHODS, match_color, sanitize
+from .image_color_match import COLOR_MATCH_METHODS, match_color, sanitize
 
 
 def match_detail_crop(image: torch.Tensor, reference: torch.Tensor, mask,
                       *, method: str, strength: float) -> torch.Tensor:
     if strength == 0:
         return image
-    if method not in CPU_METHODS:
+    if method not in COLOR_MATCH_METHODS:
         raise ValueError('Unsupported detailer color-match method.')
     if (image.ndim != 4 or reference.ndim != 4 or image.shape[0] != 1
             or image.shape[:3] != reference.shape[:3]
@@ -23,18 +23,24 @@ def match_detail_crop(image: torch.Tensor, reference: torch.Tensor, mask,
     if not selected.any():
         return image
 
-    # Pack only the region's pixels. Context (hair/background/body) must not
-    # dominate its color statistics. The ordinary paste mask handles blending.
-    source = sanitize(image[0, ..., :3].detach().cpu().float())[selected]
-    target = sanitize(reference[0, ..., :3].detach().cpu().float())[selected]
+    # Statistical methods can pack the region pixels; Wavelet must keep their
+    # spatial layout. Both exclude context from the matching statistics.
+    source_rgb = sanitize(image[0, ..., :3].detach().cpu().float())
+    target_rgb = sanitize(reference[0, ..., :3].detach().cpu().float())
+    source, target = source_rgb[selected], target_rgb[selected]
     grayscale = bool((target.amax(-1) - target.amin(-1)).max() <= 1 / 255)
+    matching_source = source_rgb if method == 'wavelet' else source
+    target = target_rgb if method == 'wavelet' else target
     if grayscale:
         coefficients = source.new_tensor([.2126, .7152, .0722])
-        matching_source = (source * coefficients).sum(-1, keepdim=True).expand_as(source)
+        matching_source = (matching_source * coefficients).sum(-1, keepdim=True).expand_as(matching_source)
         target = (target * coefficients).sum(-1, keepdim=True).expand_as(target)
+    if method == 'wavelet':
+        # A full mask uses precisely the standalone node's edge handling.
+        mask = None if selected.all() else selected[None]
+        corrected = match_color(matching_source[None], target[None], method, 1., wavelet_mask=mask)[0, selected]
     else:
-        matching_source = source
-    corrected = match_color(matching_source[None, None], target[None, None], method, 1.)[0, 0]
+        corrected = match_color(matching_source[None, None], target[None, None], method, 1.)[0, 0]
     if grayscale:
         # Numerical color-space transforms must not introduce a tint into B&W.
         corrected = corrected.mean(-1, keepdim=True).expand_as(corrected)

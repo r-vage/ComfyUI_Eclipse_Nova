@@ -5,6 +5,7 @@ from pathlib import Path
 
 import folder_paths
 
+from .image_color_match import COLOR_MATCH_METHODS
 from .image_helpers import unwrap_value
 from .resolution_sizing import number, require_choice, require_fields, require_number
 
@@ -37,8 +38,7 @@ GROUPS = {
         "supersample_factor": choice("Supersample factor", "8", {str(value): f"{value}×" for value in [2, 4, 6, 8]}),
     },
     "color_match": {
-        "method": choice("Method", "mkl", {key: key for key in [
-            "mkl", "hm", "reinhard", "mvgd", "hm-mvgd-hm", "hm-mkl-hm", "reinhard_lab_gpu", "wavelet", "scattersort"]}),
+        "method": choice("Method", "mkl", {key: key for key in COLOR_MATCH_METHODS}),
         "strength": number("Strength", 1, 0, 10, .01),
         "pairing": choice("Reference pairing", "first", {"first": "First reference for all frames", "frames": "Match frames; repeat last reference"}),
     },

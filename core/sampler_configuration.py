@@ -98,8 +98,8 @@ def detailer_editor_spec():
         "noise_mask": {"label": "Noise mask", "default": True},
         "force_inpaint": {"label": "Force inpaint", "default": True},
         "inpaint_model": {"label": "Inpaint model", "default": True},
-        "tiled_encode": {"label": "Tiled encode", "default": True},
-        "tiled_decode": {"label": "Tiled decode", "default": True},
+        "tiled_encode": {"label": "Tiled encode", "default": False},
+        "tiled_decode": {"label": "Tiled decode", "default": False},
         "live_preview": {"label": "Preview", "default": True},
     }
     return {"profile": "detailer", "fields": fields, "seedDefault": "0"}

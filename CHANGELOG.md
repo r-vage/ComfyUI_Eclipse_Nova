@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-10-29
+
+### Version: 1.0.23
+
+- **Feat**
+  - Extend Detailer (Advanced) Color match with Wavelet, Reinhard LAB and ScatterSort, sharing all nine methods with Image Filter Adjustments. Wavelet preserves spatial detail while matching tones within the region mask. Retain adjustable strength, neutral grayscale, alpha and unchanged pixels outside the region; use ComfyUI's configured device for the added methods.
+- **Fix**
+  - Default Tiled encode and Tiled decode to off in both detailers to avoid VAE tiling color shifts unless explicitly enabled. Preserve saved workflow selections.
+- **Changed files**
+  - core/detailer_color_match.py
+  - core/detailer_configuration.py
+  - core/image_adjustments_configuration.py
+  - core/image_color_match.py
+  - core/sampler_configuration.py
+  - Readme/Integrated_Detailer.md
+  - pyproject.toml
+
 ## 2026-10-28
 
 ### Version: 1.0.22
