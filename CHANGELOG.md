@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-31
+
+### Version: 1.0.25
+
+- **Fix**
+  - Preserve Anima's T5 token IDs and weights in IO Slice & Dice and conditioning list/batch conversion. Keep complete token vectors aligned with selected positive and negative prompts, including repeated selections, while rejecting incompatible prompts during batch conversion.
+- **Changed files**
+  - core/batch_helpers.py
+  - pyproject.toml
+
 ## 2026-10-29
 
 ### Version: 1.0.24

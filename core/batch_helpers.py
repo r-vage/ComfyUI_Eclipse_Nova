@@ -11,6 +11,11 @@ from .image_helpers import is_conditioning
 # Attention masks retain their token/head dimensions when split or combined.
 _CONDITIONING_BATCH_FIELDS = ("pooled_output", "mask", "attention_mask")
 
+# Anima's T5 token IDs and weights are [tokens], shared by the entry's samples.
+# ComfyUI adds their batch axis when preparing model conditions. Keep the vectors
+# intact when splitting; batch_conditionings requires equal shared metadata.
+_CONDITIONING_TOKEN_FIELDS = ("t5xxl_ids", "t5xxl_weights")
+
 
 def metadata_equal(left: Any, right: Any) -> bool:
     if isinstance(left, torch.Tensor) or isinstance(right, torch.Tensor):
@@ -79,6 +84,9 @@ def split_conditioning(conditioning: Any) -> list[list]:
                 if value.ndim < 2:
                     raise ValueError(f"Conditioning {key} has no supported batch dimension.")
                 per_sample[key] = _broadcast(value, batch, f"Conditioning {key}")
+            elif key in _CONDITIONING_TOKEN_FIELDS:
+                if value is not None and (not isinstance(value, torch.Tensor) or value.ndim != 1):
+                    raise ValueError(f"Conditioning {key} must be a token vector or None.")
             elif _has_tensor(value):
                 raise ValueError(f"Conditioning field '{key}' has unsupported per-sample tensors; keep these prompts as a list.")
         for index, result in enumerate(results):
