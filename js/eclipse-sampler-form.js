@@ -3,9 +3,13 @@ import { element, button, SearchMenu } from './eclipse-panel-controls.js';
 import { FEATURES } from './eclipse-sampler-state.js';
 import { seedControls } from './eclipse-panel-seed-controls.js';
 import { detectionMode, detectionSections, detectionSummary, colorMatchSection } from './eclipse-detailer-form.js';
+import { SamplerPresets } from './eclipse-sampler-presets.js';
 
 export class SamplerForm {
-    constructor(controller) { this.controller = controller; this.menu = new SearchMenu(); }
+    constructor(controller) {
+        this.controller = controller; this.menu = new SearchMenu();
+        if (controller.spec.profile === 'advanced' && controller.spec.presetFields) this.presets = new SamplerPresets(controller);
+    }
     get state() { return this.controller.state; }
     edit(fn, render = true) { this.controller.edit(fn, render); }
     render() {
@@ -50,6 +54,7 @@ export class SamplerForm {
             bar.append(control);
         }
         content.append(bar);
+        this.presets?.bar(content);
         if (spec.profile === 'advanced') this.advanced(content);
         else if (['detailer', 'detailer_auto'].includes(spec.profile)) {
             if (spec.profile === 'detailer_auto') detectionSections(this, content);
@@ -266,5 +271,5 @@ export class SamplerForm {
         label.append(element('span', '', field.label), input); parent.append(label);
     }
     seed(parent) { seedControls(parent, this.controller); }
-    dispose() { this.menu.close(); }
+    dispose() { this.menu.close(); this.presets?.dispose(); }
 }

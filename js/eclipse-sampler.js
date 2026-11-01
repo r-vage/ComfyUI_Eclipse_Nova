@@ -13,7 +13,7 @@ const controllers = new WeakMap(), graphKey = Symbol('EclipseNova.PanelGraph');
 export class SamplerController {
     constructor(node, name, options) {
         this.node = node; this.spec = options.editorSpec; this.raw = options.default;
-        this.state = new SamplerState(this.raw, this.spec); this.height = 0;
+        this.state = new SamplerState(this.raw, this.spec); this.height = 0; this.revision = 0;
         const detailer = this.spec.profile !== 'settings';
         this.root = document.createElement('div'); this.root.className = 'en-panel'; this.root.dataset.profile = this.spec.profile;
         if (detailer) this.root.classList.add('en-panel-fill-height');
@@ -41,7 +41,7 @@ export class SamplerController {
     value() { return this.invalid ? this.raw : this.state.value(); }
     restore(value) {
         if (this.editing) return;
-        this.raw = value; this.form?.menu.close();
+        this.revision++; this.raw = value; this.form?.menu.close(); this.form?.presets?.close();
         try {
             this.state = new SamplerState(value, this.spec, this.node.properties?.[EDITOR_KEY] ?? {});
             this.review?.restoreHeights();
@@ -58,6 +58,7 @@ export class SamplerController {
         const graph = this.node.graph;
         graph?.beforeChange(); graph?.canvasAction(canvas => canvas.emitBeforeChange()); this.editing = true;
         try {
+            this.revision++;
             fn(this.state); this.node.properties ??= {}; this.node.properties[EDITOR_KEY] = clone(this.state.editor);
             this.raw = this.state.value(); this.widget.callback?.(this.raw);
         } finally {

@@ -30,6 +30,33 @@ indices unchanged. Older sampler configurations default this value to 1.0.
 Connecting a new base seed or offset clears an inherited
 Stage 2 seed unless a new Stage 2 seed is supplied at the same time.
 
+## Sampling presets
+
+The **Presets** bar below **Options** saves named configurations for different
+models and workflows. Click the current name to search and load a preset, or
+**Save…** to save the current settings. Saving over an existing name requires
+enabling **Overwrite existing preset**. Deleting a preset asks for confirmation
+and leaves the node's current settings intact.
+
+Presets include standard/two-stage mode, both stages' samplers, schedulers, steps,
+CFG, denoise, step ranges and noise options, plus latent upscale, Qwen schedule,
+DiT guidance and Detail Daemon settings. Inactive settings are retained so they
+remain available when their mode is enabled again.
+
+Seeds and the Stage 2 seed offset, **Use pipe settings**, preview and decode
+preferences stay with each node. With **Use pipe settings** enabled, supplied
+PIPE values still override the loaded local settings. Model and conditioning
+connections are supplied by the workflow.
+
+Click **Presets** to collapse or reopen the bar. Its state and selected name are
+saved in the workflow. Presets are stored in this checkout's
+`presets/samplers/` folder; workflows retain their loaded settings independently
+of those files.
+
+**Moss J1b_v2** and **Moss Moody_v2.2** are bundled in
+`.defaults/presets/samplers/` and extracted once at startup. Existing presets are
+kept as saved; later edits and deletions survive restarts and bundled updates.
+
 ## Stage models and high/low-noise pairs
 
 Connect the high-noise loader's MODEL to IO KSampler's **model_1**, and the

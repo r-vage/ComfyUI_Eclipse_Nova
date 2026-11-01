@@ -11,6 +11,10 @@ from .sampler_extras import extra_fields
 
 WIDGET_TYPE = "ECLIPSE_NOVA_SAMPLER_CONFIGURATION"
 MAX_SEED = 2**64 - 1
+PRESET_LOCAL_PARAMETERS = frozenset({
+    "allow_overwrite", "tiled_decode", "alpha", "tile_size", "preview_mode",
+    "second_seed", "seed_offset",
+})
 
 
 def editor_spec(profile):
@@ -75,7 +79,8 @@ def advanced_editor_spec():
     # Append to keep every existing IO KSampler socket index stable.
     fields["second_denoise"] = {"label": "Denoise", "default": 1.0, "min": 0, "max": 1, "step": 0.01,
                                 "tooltip": "Stage 2 denoise strength when Start step is 0, like a standard KSampler. Ignored when Start step is above 0 so continuation uses the full schedule. 0 skips Stage 2 sampling; any latent upscale still applies."}
-    return {"profile": "advanced", "fields": fields, "seedDefault": "42"}
+    return {"profile": "advanced", "fields": fields, "seedDefault": "42",
+            "presetFields": [key for key in fields if key not in PRESET_LOCAL_PARAMETERS]}
 
 
 def detailer_editor_spec():

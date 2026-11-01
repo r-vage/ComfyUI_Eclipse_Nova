@@ -533,6 +533,63 @@ class SmartPromptEndpoints:
             return await respond(smart_prompt.save_file, data["path"], data["content"], data["revision"])
 
 
+class SamplerPresetEndpoints:
+    # Presets are explicit editor actions; execution uses the node's saved settings.
+
+    def __init__(self):
+        from . import sampler_presets
+        from .json_store import JsonStoreError
+
+        async def respond(operation, *args):
+            try:
+                result = await asyncio.to_thread(operation, *args)
+                return web.json_response(result, headers={"Cache-Control": "no-store"})
+            except FileExistsError as error:
+                return web.json_response({"error": str(error)}, status=409)
+            except FileNotFoundError:
+                return web.json_response({"error": "Sampler preset does not exist."}, status=404)
+            except (TypeError, ValueError, JsonStoreError):
+                return web.json_response({"error": "Invalid sampler preset, name, or existing file. Check the settings and choose a valid preset name."}, status=400)
+            except OSError:
+                return web.json_response({"error": "Could not access the sampler preset library."}, status=500)
+
+        def save(name, preset, overwrite):
+            sampler_presets.save_preset(name, preset, overwrite=overwrite)
+            return {"presets": sampler_presets.list_presets()}
+
+        def delete(name):
+            sampler_presets.delete_preset(name)
+            return {"presets": sampler_presets.list_presets()}
+
+        @PromptServer.instance.routes.get("/eclipse-nova/sampler/presets")
+        async def sampler_preset_list(_request):
+            return await respond(lambda: {"presets": sampler_presets.list_presets()})
+
+        @PromptServer.instance.routes.get("/eclipse-nova/sampler/preset")
+        async def sampler_preset_load(request):
+            return await respond(sampler_presets.load_preset, request.query.get("name", ""))
+
+        @PromptServer.instance.routes.post("/eclipse-nova/sampler/preset")
+        async def sampler_preset_save(request):
+            denied = global_mutation_denial(request)
+            if denied is not None:
+                return denied
+            data = await read_json_object_request(request)
+            if set(data) != {"name", "preset", "overwrite"}:
+                return web.json_response({"error": "Expected a preset name, settings and overwrite choice."}, status=400)
+            return await respond(save, data["name"], data["preset"], data["overwrite"])
+
+        @PromptServer.instance.routes.post("/eclipse-nova/sampler/preset/delete")
+        async def sampler_preset_delete(request):
+            denied = global_mutation_denial(request)
+            if denied is not None:
+                return denied
+            data = await read_json_object_request(request)
+            if set(data) != {"name"}:
+                return web.json_response({"error": "Expected a preset name."}, status=400)
+            return await respond(delete, data["name"])
+
+
 class EclipseRuntimeEndpoints:
     # Eclipse reload and Smart Prompt endpoints.
 
@@ -1309,6 +1366,7 @@ def initialize_endpoints(wildcard_path: str | None = None):
         WildcardEndpoints(wildcard_path)
         EclipseRuntimeEndpoints()
         SmartPromptEndpoints()
+        SamplerPresetEndpoints()
         LoadFilesEndpoints()
         LoadImageEndpoints()
         LoadVideoEndpoints()

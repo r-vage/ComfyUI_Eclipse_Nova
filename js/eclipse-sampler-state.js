@@ -65,6 +65,20 @@ export class SamplerState extends SeedState {
         }
     }
     value() { return JSON.stringify(this.config); }
+    preset() {
+        if (this.spec.profile !== 'advanced' || !Array.isArray(this.spec.presetFields)) throw Error('Presets are unavailable for this sampler.');
+        return { version: 1, profile: 'advanced', parameters: Object.fromEntries(
+            this.spec.presetFields.map(key => [key, clone(this.config.parameters[key])])) };
+    }
+    withPreset(raw, name) {
+        const preset = parseConfiguration(raw), keys = this.spec.presetFields;
+        if (this.spec.profile !== 'advanced' || preset.profile !== 'advanced' || !Array.isArray(keys)
+            || Object.hasOwn(preset, 'seed') || Object.keys(preset.parameters).some(key => !keys.includes(key))
+            || keys.some(key => !Object.hasOwn(preset.parameters, key))) throw Error('Preset does not match this sampler.');
+        const config = clone(this.config);
+        Object.assign(config.parameters, preset.parameters);
+        return new SamplerState(config, this.spec, { ...this.editor, presetName: name });
+    }
     sectionOpen(key) { return this.editor.sections?.[key] ?? key === 'sampler'; }
     toggleSection(key) {
         this.editor.sections ??= {};

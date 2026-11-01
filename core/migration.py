@@ -12,6 +12,7 @@ import platform
 import shutil
 from typing import Dict
 
+from .default_files import extract_defaults_once
 from .json_store import JsonStoreError, read_json_object, update_json_object
 from .logger import log
 from .theme_defaults import extract_theme_defaults
@@ -94,6 +95,7 @@ def extract_all_example_files(repo_root: str) -> int:
     #   .defaults/prompts/**/*.txt.example    → prompts/**/*.txt
     #   .defaults/styles/*.csv.example        → styles/*.csv
     #   .defaults/wildcards/*.txt.example     → wildcards/*.txt
+    #   .defaults/presets/samplers/*.json.example → presets/samplers/*.json (once)
     #
     # Smart update behavior:
     #   - New files (target doesn't exist) → extract and record hash
@@ -112,12 +114,16 @@ def extract_all_example_files(repo_root: str) -> int:
 
     _hide_on_windows(defaults_path)
     theme_count = extract_theme_defaults(repo_root)
+    preset_count = extract_defaults_once(
+        repo_root, "presets/samplers", ".sampler-preset-defaults.json",
+        label="sampler preset", log_prefix=_LOG_PREFIX,
+    )
     extracted, updated = _extract_defaults_dir(defaults_path, repo_root)
     if extracted > 0:
         log.msg(_LOG_PREFIX, f"Extracted {extracted} new default file(s)")
     if updated > 0:
         log.msg(_LOG_PREFIX, f"Updated {updated} default file(s) (unmodified by user)")
-    return theme_count + extracted + updated
+    return theme_count + preset_count + extracted + updated
 
 
 def _hide_on_windows(path: str) -> None:
@@ -189,8 +195,8 @@ def _extract_defaults_dir(defaults_dir: str, output_dir: str) -> tuple:
 
             example_hash = _file_hash(example_path)
 
-            if manifest_key.startswith("themes/"):
-                # Themes are installed once by extract_theme_defaults. The
+            if manifest_key.startswith(("themes/", "presets/samplers/")):
+                # Themes and sampler presets are installed once. The
                 # manifest records shipped hashes, not permission to update.
                 if manifest.get(manifest_key) != example_hash:
                     manifest[manifest_key] = example_hash

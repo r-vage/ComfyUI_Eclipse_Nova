@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-11-01
+
+### Version: 1.0.26
+
+- **Feat**
+  - Add a collapsible Presets bar below Options in Eclipse KSampler Advanced. Save, search, load, overwrite and delete named configurations for every mode, including both stages, latent upscale and optional guidance. Keep seeds and output preferences local, and retain the bar state in saved workflows.
+  - Bundle Moss J1b_v2 and Moss Moody_v2.2 sampler presets and extract each once at startup, preserving existing presets and subsequent edits or deletions.
+- **Changed files**
+  - .defaults/presets/samplers/Moss J1b_v2.json.example
+  - .defaults/presets/samplers/Moss Moody_v2.2.json.example
+  - core/default_files.py
+  - core/migration.py
+  - core/sampler_configuration.py
+  - core/sampler_presets.py
+  - core/server_endpoints.py
+  - core/theme_defaults.py
+  - js/eclipse-panel.css
+  - js/eclipse-sampler-form.js
+  - js/eclipse-sampler-presets.js
+  - js/eclipse-sampler-state.js
+  - js/eclipse-sampler.js
+  - Readme/Advanced_Sampler.md
+  - pyproject.toml
+
 ## 2026-10-31
 
 ### Version: 1.0.25

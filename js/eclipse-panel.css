@@ -246,6 +246,14 @@
 .en-prompt-dialog > .en-panel-content > :not(textarea) { flex-shrink: 0; }
 .en-prompt-dialog strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .en-prompt-dialog textarea { flex: 1; min-height: 0; max-height: none; resize: none; white-space: pre; overflow-wrap: normal; overflow: auto; }
+.en-sampler-preset-bar .en-preset-picker, .en-preset-row .en-preset-picker { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; }
+.en-preset-heading, .en-preset-save, .en-preset-search, .en-preset-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.en-preset-heading { justify-content: space-between; }
+.en-preset-save > label, .en-preset-search > input, .en-preset-delete-name { flex: 1; min-width: 0; }
+.en-preset-overwrite { display: flex; align-items: center; gap: 6px; }
+.en-preset-overwrite input { width: auto; min-height: 0; }
+.en-sampler-preset-dialog .en-preset-results { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.en-sampler-preset-dialog [hidden] { display: none; }
 .en-prompt-actions { display: flex; justify-content: flex-end; gap: 7px; }
 /* Grouped size menus share the selected palette and small aspect silhouettes. */
 .en-size-menu:popover-open { flex-direction: row; align-items: flex-start; overflow: auto; overscroll-behavior: contain; }
