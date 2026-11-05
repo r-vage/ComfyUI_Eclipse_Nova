@@ -38,7 +38,7 @@ export class MiniMaxForm {
             else this.note(body, 'Ref2VA uses warm resets with the active original reference.');
             this.number(body, 'warmup_seconds');
             this.textarea(body, 'manual_transition_times');
-            this.note(body, 'Comma-separated seconds; blank distributes images evenly. Audio defines the retained 24 FPS timeline.');
+            this.note(body, 'Comma-separated seconds. One image: exact camera cuts using that image. Multiple images: one transition per later image. Audio defines the retained 24 FPS timeline.');
         });
         this.section(parent, 'render', 'Render', body => {
             this.number(body, 'max_render_frames');
@@ -51,12 +51,12 @@ export class MiniMaxForm {
             }
             if (this.p.technical_split_source === 'original_image_reset') this.choice(body, 'technical_seam_style', 'Seam style');
             this.note(body, this.p.technical_split_source === 'original_image_reset'
-                ? 'Long intervals reset from the active original image. Camera-cut instructions apply only to these technical resets.'
+                ? 'Manual single-image cuts and long intervals reset from the active original image. Camera cut enables framing and animation directions.'
                 : 'Uses the preceding 22 generated frames at technical seams. Camera-cut instructions are inactive.');
         });
         if (this.p.technical_seam_style === 'intentional_camera_cut') this.section(parent, 'instructions', 'Cut instructions', body => {
             this.textarea(body, 'technical_cut_instruction');
-            this.note(body, 'Non-empty lines or connected list entries cycle across technical cuts. Blank uses the default cut instruction.');
+            this.note(body, 'Describe framing and motion through the shot. Connect a list for separate directions at each cut; capacity splits inside a manually timed shot reuse its direction. Blank uses the default instruction.');
         });
         if (this.p.align_to_activity_gap) this.section(parent, 'activity', 'Activity gaps', body => {
             this.choice(body, 'transition_edge', 'Edge');

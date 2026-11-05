@@ -129,6 +129,28 @@ comma-separated value on one line. A disconnected or blank input distributes
 images evenly; otherwise provide one strictly increasing second value per image
 after the first. Transition frame `T` always belongs to the destination interval.
 
+With **one image**, manual times instead create camera cuts that reuse that same
+source image. Supply any number of increasing times inside the audio clip, select
+**Original image** for technical splits, and enable **Camera cut** to apply shot
+directions. These boundaries stay at the nearest native 24 FPS frame even when
+Activity gaps is enabled. Times that collapse onto the same frame are rejected.
+Leave the times blank to retain the existing automatic single-image splitting.
+
+Connect **String Multiline** `string_list` or **Wildcard Processor** `list`, with
+one complete cut instruction per non-empty line. Describe both the new
+framing and the movement through the following shot: expressions, gaze, gestures,
+head or body movement, and camera motion. The first instruction belongs to the
+first cut; the opening shot uses the main performance prompt. Extra capacity
+splits inside a manually timed shot reuse its direction instead of advancing the
+instruction list. Directions cycle if there are fewer instructions than cuts.
+The first and later shots keep the same main performance prompt and source image.
+
+The stitch fixes cut positions and preserves continuous original audio; prompts
+guide the generated performance. Very brief shots may retain only a few frames,
+so exact gestures and lip sync still need visual review. Each task must generate
+at least 124 frames (about 5.17 seconds) before cropping, even when only two frames
+are kept. Many rapid cuts therefore cost substantially more than one long shot.
+
 The planner controls are:
 
 - `conditioning_family`: `fl2va_keyframes` or
@@ -163,6 +185,9 @@ no tensors. It records planned image transitions, every image/technical seam,
 half-open retained ranges, prompt owners, each intentional seam's selected
 technical-cut prompt index, guide positions, and expected source ownership for
 external analysis.
+For a manually cut single-image timeline it also records `planned_camera_cuts`
+and identifies those boundaries as `manual_camera_cut` seams, independently of
+image transitions and automatic capacity splits.
 
 ### Prompt ownership
 

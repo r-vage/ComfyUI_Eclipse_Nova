@@ -19,6 +19,7 @@ from .minimax_h3_segment_plan import (
     CONDITIONING_FAMILIES,
     DEFAULT_TECHNICAL_CUT_INSTRUCTION,
     H3_FPS,
+    MANUAL_CAMERA_CUT_SOURCE,
     MAX_RENDER_FRAMES,
     PLAN_KIND,
     PLAN_VERSION,
@@ -35,6 +36,7 @@ from .minimax_h3_segment_plan import (
     single_image_gap_boundaries,
     space_transition_frames,
     task_uses_intentional_camera_cut,
+    technical_cut_prompt_index_for_task,
     validate_segment_plan,
 )
 
@@ -224,6 +226,7 @@ def plan_segments(
     notes: list[str] = []
     manual_times: list[float] = []
     target_frames: list[int] = []
+    continuation_frames: list[int] = []
     transition_source = "single_image"
     if image_count > 1:
         manual = parse_manual_transition_times(
@@ -239,12 +242,23 @@ def plan_segments(
             transition_source = "manual_seconds"
             manual_times, target_frames = manual
     elif manual_transition_times.strip():
-        notes.append("Single image: manual transition times ignored.")
+        if technical_split_source != "original_image_reset":
+            raise ValueError(
+                "Single-image manual cuts require technical_split_source=original_image_reset."
+            )
+        manual_times, continuation_frames = parse_manual_transition_times(
+            manual_transition_times, image_count, total_frames
+        )
+        transition_source = MANUAL_CAMERA_CUT_SOURCE
+        notes.append(
+            "Single-image manual cuts retain exact 24 FPS boundaries; "
+            "activity alignment does not move them."
+        )
 
     candidates = list(target_frames)
     activity = None
     activity_error = "alignment disabled"
-    if align_to_activity_gap:
+    if align_to_activity_gap and transition_source != MANUAL_CAMERA_CUT_SOURCE:
         activity, activity_error = encoded_audio_activity(audio_encoder_output)
     if activity is not None and image_count > 1:
         for index, target in enumerate(target_frames):
@@ -276,8 +290,7 @@ def plan_segments(
         candidates, total_frames
     )
     notes.extend(f"Spacing adjustment: {item}." for item in spacing_notes)
-    continuation_frames: list[int] = []
-    if image_count == 1 and activity is not None:
+    if image_count == 1 and not continuation_frames and activity is not None:
         hidden_tail = 1 if reset_anchor == "same_first_last_experimental" else 0
         visible_capacity = max_render_frames - warmup_frames - hidden_tail
         continuation_frames, continuation_notes = single_image_gap_boundaries(
@@ -289,7 +302,7 @@ def plan_segments(
             max(1, visible_capacity),
         )
         notes.extend(continuation_notes)
-    elif image_count == 1 and align_to_activity_gap:
+    elif image_count == 1 and not continuation_frames and align_to_activity_gap:
         notes.append(f"Single-image activity fallback: {activity_error}.")
 
     tasks, technical_notes = build_segment_tasks(
@@ -355,8 +368,8 @@ def plan_segments(
     technical_cut_number = 0
     for task in tasks:
         if task_uses_intentional_camera_cut(plan, task):
-            task["technical_cut_prompt_index"] = (
-                technical_cut_number % len(technical_cut_instructions)
+            task["technical_cut_prompt_index"] = technical_cut_prompt_index_for_task(
+                plan, task, technical_cut_number
             )
             technical_cut_number += 1
         else:
@@ -368,6 +381,11 @@ def plan_segments(
     report_lines = [
         f"Timeline: {total_frames} frames at 24 fps ({duration:.3f}s)",
         f"Original images: {image_count}; transitions: {transition_frames}",
+        *(
+            [f"Single-image manual camera cuts: {continuation_frames}"]
+            if transition_source == MANUAL_CAMERA_CUT_SOURCE
+            else []
+        ),
         (
             f"Conditioning: {conditioning_family}; strategy: "
             f"{segment_strategy}; reset: {reset_anchor}"

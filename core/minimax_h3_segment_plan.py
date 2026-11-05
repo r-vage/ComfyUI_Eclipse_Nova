@@ -15,6 +15,7 @@ H3_FPS = 24.0
 MIN_RENDER_FRAMES = 124
 MAX_RENDER_FRAMES = 362
 CONTINUITY_FRAMES = 22
+MANUAL_CAMERA_CUT_SOURCE = "single_image_manual_seconds"
 
 CONDITIONING_FAMILIES = ("fl2va_keyframes", "ref2va_active_reference")
 SEGMENT_STRATEGIES = ("hard_cut", "first_last_bridge", "warmup_reset")
@@ -74,7 +75,7 @@ def parse_manual_transition_times(
     parts = [part.strip() for part in stripped.split(",")]
     if any(not part for part in parts):
         raise ValueError("manual_transition_times contains an empty value.")
-    if len(parts) != image_count - 1:
+    if image_count > 1 and len(parts) != image_count - 1:
         raise ValueError(
             "manual_transition_times must contain one time for every image "
             "after the first."
@@ -92,7 +93,10 @@ def parse_manual_transition_times(
     if any(current <= previous for previous, current in pairwise(times)):
         raise ValueError("manual transition times must be strictly increasing.")
     frames = [round(item * H3_FPS) for item in times]
-    if any(frame >= total_frames for frame in frames):
+    if any(
+        frame >= total_frames or (image_count == 1 and frame < 1)
+        for frame in frames
+    ):
         raise ValueError("manual transition times must be inside the audio timeline.")
     if len(set(frames)) != len(frames):
         raise ValueError("manual transition times resolve to duplicate video frames.")
@@ -484,10 +488,18 @@ def build_segment_tasks(
     return tasks, alignment_notes
 
 
+def manual_camera_cut_frames(plan: dict[str, Any]) -> list[int]:
+    # Manual same-image cuts are separate from image-ownership transitions.
+    if plan.get("transition_source") == MANUAL_CAMERA_CUT_SOURCE:
+        return plan.get("continuation_frames", [])
+    return []
+
+
 def task_uses_intentional_camera_cut(
     plan: dict[str, Any], task: dict[str, Any]
 ) -> bool:
     """Return whether one task receives the opt-in technical-cut prompt."""
+    manual_frames = manual_camera_cut_frames(plan)
     return (
         plan.get("technical_seam_style", "plain_reset")
         == "intentional_camera_cut"
@@ -496,7 +508,21 @@ def task_uses_intentional_camera_cut(
         and task.get("starts_image_interval") is False
         and task.get("has_continuity") is False
         and task.get("endpoint_role") != "destination"
+        and (not manual_frames or task["output_start_frame"] >= manual_frames[0])
     )
+
+
+def technical_cut_prompt_index_for_task(
+    plan: dict[str, Any], task: dict[str, Any], chronological_index: int
+) -> int:
+    # Capacity splits inside a manually timed shot keep that shot's direction.
+    manual_frames = manual_camera_cut_frames(plan)
+    cut_index = (
+        bisect_right(manual_frames, task["output_start_frame"]) - 1
+        if manual_frames
+        else chronological_index
+    )
+    return cut_index % len(technical_cut_prompts(plan))
 
 
 def technical_cut_prompts(plan: dict[str, Any]) -> list[str]:
@@ -531,6 +557,7 @@ def technical_cut_prompt_for_task(
 
 def build_analysis_manifest(plan: dict[str, Any]) -> dict[str, Any]:
     tasks = plan["tasks"]
+    manual_frames = manual_camera_cut_frames(plan)
     transitions = []
     for destination, frame in enumerate(plan["transition_frames"], start=1):
         bridge_task = next(
@@ -569,6 +596,10 @@ def build_analysis_manifest(plan: dict[str, Any]) -> dict[str, Any]:
             "technical_seam_style", "plain_reset"
         ),
         "planned_image_transitions": transitions,
+        "planned_camera_cuts": [
+            {"frame": frame, "image_index": 0}
+            for frame in manual_frames
+        ],
         "task_seams": [
             {
                 "frame": task["output_start_frame"],
@@ -576,6 +607,8 @@ def build_analysis_manifest(plan: dict[str, Any]) -> dict[str, Any]:
                 "seam_kind": (
                     "image_transition"
                     if task["starts_image_interval"]
+                    else "manual_camera_cut"
+                    if task["output_start_frame"] in manual_frames
                     else "technical_split"
                 ),
                 "expected_image_owner": task["expected_image_owner"],
@@ -714,6 +747,21 @@ def validate_segment_plan(plan: Any) -> tuple[dict[str, Any], list[dict[str, Any
         frame < 1 or frame >= total_frames for frame in transitions
     ):
         raise ValueError("Plan transition_frames are outside the retained timeline.")
+    manual_frames = manual_camera_cut_frames(plan)
+    if plan.get("transition_source") == MANUAL_CAMERA_CUT_SOURCE:
+        if (
+            image_count != 1
+            or not isinstance(manual_frames, list)
+            or not manual_frames
+            or any(type(frame) is not int for frame in manual_frames)
+            or manual_frames != sorted(set(manual_frames))
+            or any(frame < 1 or frame >= total_frames for frame in manual_frames)
+        ):
+            raise ValueError(
+                "Plan single-image manual cuts must be increasing frames inside the timeline."
+            )
+        if plan["technical_split_source"] != "original_image_reset":
+            raise ValueError("Single-image manual cuts require original_image_reset.")
     tasks = plan.get("tasks")
     if not isinstance(tasks, list) or not tasks:
         raise ValueError("Plan tasks must be a non-empty list.")
@@ -817,7 +865,9 @@ def validate_segment_plan(plan: Any) -> tuple[dict[str, Any], list[dict[str, Any
             )
         uses_cut_prompt = task_uses_intentional_camera_cut(plan, task)
         if uses_cut_prompt:
-            expected_cut_prompt = technical_cut_number % len(cut_prompts)
+            expected_cut_prompt = technical_cut_prompt_index_for_task(
+                plan, task, technical_cut_number
+            )
             if indexed_cut_prompts and cut_prompt_index != expected_cut_prompt:
                 raise ValueError(
                     f"Plan task {index} has an invalid technical-cut prompt index."
@@ -861,6 +911,8 @@ def validate_segment_plan(plan: Any) -> tuple[dict[str, Any], list[dict[str, Any
         expected_start = output_end
     if expected_start != total_frames:
         raise ValueError("Plan tasks do not cover the complete retained timeline.")
+    if not set(manual_frames).issubset(task["output_start_frame"] for task in tasks):
+        raise ValueError("Plan tasks do not preserve every single-image manual cut.")
     expected_endpoints = (
         [(frame, destination, None) for destination, frame in enumerate(transitions, 1)]
         if plan["segment_strategy"] == "first_last_bridge"

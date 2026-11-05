@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-05
+
+### Version: 1.0.27
+
+- **Feat**
+  - Support manually timed MiniMax H3 camera cuts from one source image. Keep cuts on the native 24 FPS timeline and preserve continuous original audio through hidden warmups and direct stitching.
+  - Apply each cut's framing and animation instructions to its following shot, retaining that direction across extra capacity splits. Report manual camera cuts separately from image transitions and reject invalid or duplicate frame times.
+- **Changed files**
+  - core/minimax_h3_configuration.py
+  - core/minimax_h3_segment_plan.py
+  - core/minimax_h3_segmented_timeline.py
+  - js/eclipse-minimax-form.js
+  - Readme/MiniMax_H3_Audio_Planner.md
+  - pyproject.toml
+
 ## 2026-11-01
 
 ### Version: 1.0.26
