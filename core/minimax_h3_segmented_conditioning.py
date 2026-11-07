@@ -99,30 +99,6 @@ def _reference_geometry(
     return target_width, target_height
 
 
-def _technical_cut_text(plan: dict[str, Any], task: dict[str, Any]) -> str:
-    # The model sees a local clip, not the caller's crop. Put its camera change
-    # early in the discarded prefix and leave the rest of that prefix to settle.
-    visible_seconds = task["crop_start_frames"] / plan["fps"]
-    cut_seconds = min(1.0, visible_seconds / 3.0)
-    cut_time = f"{int(cut_seconds // 60):02d}:{cut_seconds % 60:06.3f}"
-    # Do not expose the retained-range timestamp: H3 can turn even a negated
-    # reference to that time into a second, visible camera cut.
-    return (
-        f"{technical_cut_prompt_for_task(plan, task)}\n"
-        "Camera timing within this clip:\n"
-        "[Shot 1] Begin in the opening composition of <Picture 1>, with the "
-        "ongoing performance following the supplied audio.\n"
-        f"[Shot 2] At {cut_time}, the camera cuts to the new framing described "
-        "above. Complete the change of both angle and shot size at this cut, "
-        "then maintain the established framing as one uninterrupted moving shot "
-        "for the remainder of the clip. The performance and supplied audio "
-        "continue uninterrupted across "
-        "the camera cut. Lip movement follows the current supplied audio without "
-        "restarting the vocal phrase; retain the main prompt's behavior during "
-        "instrumental passages and silence."
-    )
-
-
 def encode_segment(
     clip,
     vae,
@@ -141,6 +117,7 @@ def encode_segment(
     segment_plan=None,
     task_index=None,
     visual_condition_strength=_NATIVE_VISUAL_CONDITION_STRENGTH,
+    first_part_prompt=None,
 ):
     clip = _single(clip)
     vae = _single(vae)
@@ -163,6 +140,10 @@ def encode_segment(
             _NATIVE_VISUAL_CONDITION_STRENGTH,
         )
     )
+    first_part_prompt = _single(first_part_prompt, "")
+    if not isinstance(first_part_prompt, str):
+        raise TypeError("first_part_prompt must be a string.")
+    use_first_part = bool(first_part_prompt.strip())
     source = _one_image(source_image, "source_image")
 
     if clip is None or vae is None:
@@ -218,11 +199,17 @@ def encode_segment(
             raise ValueError(
                 "conditioning_family differs from the connected segment_plan task."
             )
-        if task_uses_intentional_camera_cut(plan, task):
+        uses_cut = task_uses_intentional_camera_cut(plan, task)
+        use_first_part = use_first_part and task["source_image_index"] == 0 and not uses_cut
+        if uses_cut:
+            # Parts are joined at measured cuts. Describe the active part as a
+            # continuous shot, without another shot change inside its warmup.
             selected_prompt = (
-                f"{selected_prompt.rstrip()}\n"
-                f"{_technical_cut_text(plan, task)}"
+                f"{selected_prompt.rstrip()} {technical_cut_prompt_for_task(plan, task)}"
             ).strip()
+
+    if use_first_part:
+        selected_prompt = f"{selected_prompt.rstrip()} {' '.join(first_part_prompt.split())}".strip()
 
     if conditioning_family == "ref2va_active_reference":
         if has_start_guide or has_last_image:

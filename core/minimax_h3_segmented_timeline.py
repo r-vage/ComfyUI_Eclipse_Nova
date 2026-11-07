@@ -50,8 +50,10 @@ def _string_items(value: Any) -> list[str]:
         if isinstance(item, (list, tuple)):
             for child in item:
                 collect(child)
-        elif isinstance(item, str) and item.strip():
-            items.append(item.strip())
+        elif isinstance(item, str):
+            # Joined scene text and list outputs share one direction per line.
+            # Keeping a multiline block whole sends every shot to every task.
+            items.extend(line.strip() for line in item.splitlines() if line.strip())
 
     collect(value)
     return items
@@ -400,6 +402,11 @@ def plan_segments(
             f"guide: {guide_waveform.shape[-1]} samples at {guide_rate} Hz"
         ),
         f"Tasks: {len(tasks)}; legal render lengths: {render_lengths}",
+        *(
+            [f"Cut directions: {len(technical_cut_instructions)}; one per non-empty line."]
+            if technical_seam_style == "intentional_camera_cut"
+            else []
+        ),
         "Retained ranges: "
         + ", ".join(
             f"{task['task_index']}:[{task['output_start_frame']},"

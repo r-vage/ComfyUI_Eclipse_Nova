@@ -34,16 +34,16 @@ holds searchable posture, pose category, output distance, expression and coverag
 choices, plus optional candidate choices. History & files holds cooldowns and the
 explicit reload/reset actions. The report output contains the full plan.
 
-The **Character Dataset Creation V4 - Qwen 2.1 Sheets** workflow uses these
-connections on its planner:
+Connect shared character settings and shot text through the planner's optional
+inputs:
 
-| Upstream value | New input | Purpose |
+| Upstream value | Input | Purpose |
 | --- | --- | --- |
-| `str_character_name` from Get | `project` | Share the character's project label and Planner history. |
+| Character/project name | `project` | Share the character's project label and Planner history. |
 | Character Sheet Pack `positive` | `character_lock` | Add the shared identity and reference-role instructions. |
-| `str_dataset_scene` from Get | `scene` | Add shared scene instructions to each shot. |
-| Manual Shots wildcard list | `manual_shots` | Supply the complete ordered list once in Manual mode. |
-| IO Checkpoint Loader `seed` | `seed_input` | Share the planner seed; this replaces the old `seed` widget connection. |
+| Shared scene text | `scene` | Add shared scene instructions to each shot. |
+| Ordered shot text or STRING list | `manual_shots` | Supply the complete ordered list once in Manual mode. |
+| Shared seed | `seed_input` | Use the same seed source as other generation nodes. |
 
 An optional `outfit_lock` input also overrides the local Outfit text. Non-None
 connected project/text values take priority; None uses the saved local field.
@@ -52,11 +52,11 @@ combine as described below. Seed input requires one unsigned 64-bit integer;
 local controls retain exact values and provide stepping, randomize, last-used
 and fixed-seed actions.
 
-The reference workflow uses Manual mode, Start entry 1 and Count 100. Its
-`prompts` output feeds the Qwen text encoder, `seeds` feeds the dataset sampler,
-and `report` feeds a text preview. Keep these output roles when replacing the
-node manually. The workflow is not rewritten automatically, and external nodes
-keep their existing IDs. Width, height and fps overrides are not needed here.
+In Manual mode, set Start entry and Count to select the desired range of shots.
+Connect `prompts` to the text encoder, `seeds` to the sampler, and `report` to a
+text preview. Keep prompt and seed lists aligned so each image uses its planned
+shot and seed. This node plans text and seeds; image dimensions and video frame
+rates are set downstream.
 
 The node consumes connected lists in **one execution** and creates one plan.
 In both modes, `character_lock`, `outfit_lock`, and `scene` accept a single string

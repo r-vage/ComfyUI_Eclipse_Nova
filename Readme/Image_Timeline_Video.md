@@ -63,6 +63,12 @@ Connect **Load Image Timeline → pipe → IO Image Timeline → pipe → Image 
 
 The **images** output supplies one batch of enabled, nonempty slots in their displayed order. Each image is resized to the resolved canvas width/height using its own Pad, Crop or Stretch choice and crop alignment. **Use timeline setting** uses Pad on this output, matching the loader preview. It contains one still per slot, without blends, transitions or video styling. Alpha is preserved; RGB images receive opaque alpha when batched with RGBA images. Use this output for image previews, MiniMax/WAN planners or other image-processing nodes.
 
+**Blend to next does not add a fade between generated video clips.** It controls
+the still-image transitions rendered by Image Timeline Video through the PIPE.
+MiniMax and other generators receiving the **images** output receive reference
+stills only. Fading their completed clips requires a separate video edit. For
+first/last-image H3 generation, see [MiniMax native clips](MiniMax_H3_Clips.md).
+
 The **pipe** output retains the original images together with their per-image settings, so Image Timeline Video can frame them at its final dimensions and apply the selected blends during rendering. Leave the IO's images input disconnected to use this route. Forwarding the same original PIPE images through an IO preserves their options; supplying the loader's resized images output, or otherwise replacing, reordering or processing the images, clears inherited crop/blend settings to avoid applying them twice or to different images.
 
 ## Rendering and outputs

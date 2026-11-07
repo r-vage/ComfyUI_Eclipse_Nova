@@ -120,9 +120,14 @@ class RvVideo_MiniMaxH3SegmentedConditioningPanel(_MiniMaxPanel):
 
     @classmethod
     def define_schema(cls):
-        return _schema(cls.KIND, [
+        schema = _schema(cls.KIND, [
             io.Clip.Input("clip"), io.Vae.Input("vae"), io.Image.Input("source_image"), io.Image.Input("last_image", optional=True),
             io.Custom(PLAN_KIND).Input("segment_plan", optional=True, tooltip="Connect with task_index to apply planned camera-cut directions."),
             io.Int.Input("task_index", optional=True, force_input=True, min=0, max=65535,
                          tooltip="Current plan task; requires segment_plan. Separate from the prompt owner."),
         ], [io.Conditioning.Output("positive")])
+        schema.description = ("Global prompts apply throughout. Optional first_part_prompt describes the opening part; "
+                              "planned cut instructions describe subsequent parts. The first part's pose is never appended to later parts.")
+        schema.inputs.insert(-1, io.String.Input("first_part_prompt", optional=True, force_input=True,
+                             tooltip="Specific framing, movement or expression for the first part only. Leave disconnected for global performance alone."))
+        return schema

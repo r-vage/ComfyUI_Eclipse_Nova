@@ -15,7 +15,7 @@ stored by name, independently of the visible sections.
 | --- | --- | --- |
 | Audio Timeline Planner | FL2VA/Ref2VA and Activity gaps in Mode; Transitions, Render, Technical seams, Cut instructions, Activity gaps and Report. | `manual_transition_times`, `technical_cut_instruction` |
 | Audio Plan Step | Compact Task and Report sections. | `task_index` |
-| Segmented Conditioning | FL2VA/Ref2VA and guide switches in Mode; Canvas, Prompts, Guides and Report. | `prompts`, `prompt_index`, `conditioning_family`, `has_start_guide`, `start_guide_frame_index`, `has_last_image`, `endpoint_frame_index`, `width`, `height`, `ref_image_size`, `visual_condition_strength` |
+| Segmented Conditioning | FL2VA/Ref2VA and guide switches in Mode; Canvas, Prompts, Guides and Report. | `prompts`, `first_part_prompt`, `prompt_index`, `conditioning_family`, `has_start_guide`, `start_guide_frame_index`, `has_last_image`, `endpoint_frame_index`, `width`, `height`, `ref_image_size`, `visual_condition_strength` |
 
 Connected non-`None` values override the corresponding panel setting. Zero,
 false and empty text are valid overrides; `None` uses the saved local value.
@@ -29,11 +29,10 @@ Camera cuts require a non-zero FL2VA warmup; selecting them restores a two-secon
 warmup if it was zero. Connected conditioning flags and indexes should come
 from Plan Step together, so the family and guide positions agree.
 
-### DiskTimeline workflow connections
+### Connecting the planning nodes
 
-The inspected `MiniMaxH3_LipSync_V4_N2_Captions_DiskTimeline` workflow uses the
-segmented planner at the root and a Plan Step / Segmented Conditioning pair in
-each of its Base and Extension subgraphs. The new schemas preserve these paths:
+Use one Audio Timeline Planner and a Plan Step / Segmented Conditioning pair
+for each base or extension branch:
 
 - The planner accepts the connected transition-times string and cut-instruction
   list, alongside the master audio, ordered images, guide audio and Wav2Vec features.
@@ -45,8 +44,8 @@ each of its Base and Extension subgraphs. The new schemas preserve these paths:
   values. `segment_plan` and its separate `task_index` still supply camera-cut
   context; `task_index` and `prompt_index` serve different purposes.
 
-Use the Nova node IDs for the planner and both resolver/conditioning pairs.
-Original Eclipse workflow files are not converted automatically.
+Use the `[Eclipse Nova]` node IDs for the planner and both
+resolver/conditioning pairs.
 
 ## Segmented timeline
 
@@ -136,11 +135,14 @@ directions. These boundaries stay at the nearest native 24 FPS frame even when
 Activity gaps is enabled. Times that collapse onto the same frame are rejected.
 Leave the times blank to retain the existing automatic single-image splitting.
 
-Connect **String Multiline** `string_list` or **Wildcard Processor** `list`, with
-one complete cut instruction per non-empty line. Describe both the new
+Connect multiline text, **String Multiline** `string_list` or **Wildcard Processor**
+`list`, with one complete cut instruction per non-empty line. Joined text uses
+the same line boundaries as a list; each shot receives only its selected line.
+The planner report shows how many cut directions were read. Describe both the new
 framing and the movement through the following shot: expressions, gaze, gestures,
 head or body movement, and camera motion. The first instruction belongs to the
-first cut; the opening shot uses the main performance prompt. Extra capacity
+first cut; the opening shot uses the main performance prompt plus the optional
+`first_part_prompt`. Extra capacity
 splits inside a manually timed shot reuse its direction instead of advancing the
 instruction list. Directions cycle if there are fewer instructions than cuts.
 The first and later shots keep the same main performance prompt and source image.
@@ -167,13 +169,13 @@ The planner controls are:
   `original_image_reset`.
 - `technical_cut_instruction`, shown in the **Cut instructions** section:
   connect a scalar string, **String Multiline [Eclipse Nova]** `string_list`, or
-  **Wildcard Processor [Eclipse Nova]** `list`. Each non-empty list item is one
-  complete direction. Eligible intentional technical seams consume directions
-  chronologically and cycle when the list runs out. A disconnected or blank
+  **Wildcard Processor [Eclipse Nova]** `list`. Each non-empty line is one
+  complete direction, including lines inside connected list entries. Eligible
+  intentional technical seams consume directions chronologically and cycle when
+  the list runs out. A disconnected or blank
   input uses the existing camera-angle default. The
   [Wildcard Processor guide](Wildcard_Processor.md#minimax-h3-lipsync-technical-cut-directions)
-  shows this connection in the DiskTimeline variant of the
-  [MiniMax H3 LipSync workflow](https://civitai.com/models/2935228/minimax-h3-lipsync).
+  explains how to supply one direction per line.
 - `ref_image_size`: `match` or `max` for Ref2VA reference geometry.
 - `max_render_frames`: the upper legal `17k+5` render length from 124 through
   362 frames. Warmup and hidden endpoints consume this capacity; a 48-frame
@@ -204,6 +206,21 @@ it can append the technical-cut instruction to the exact eligible task. Both
 inputs must be connected to enable this behavior. Workflows that leave them
 disconnected keep the previous prompt behavior.
 
+For reference-video performance transfer, **Scene Analysis to H3** provides a
+global `main_prompt`, a separate `first_part_prompt`, and `next_part_prompts` for
+the planner's existing `technical_cut_instruction` input. Connect the global and
+first-part outputs to both **MiniMax H3 Segmented Conditioning** nodes. The
+global performance applies throughout; only the active part's framing and
+movement are added. The first-part pose is excluded after the first manual cut,
+while capacity splits retain the current part's prompt. Leaving part descriptions
+disconnected gives global performance alone.
+
+Part descriptions contain visual content, not retained-duration or audio-priority
+commands. The conditioner describes each part as one continuous shot and adds
+no internal timed cut. Measured cuts occur when the retained parts are joined;
+planner boundaries, hidden warmups, source guides and audio slices are unchanged. See the
+[scene analysis guide](Scene_Analysis.md#h3-connections) for the complete wiring.
+
 `visual_condition_strength` is a global `0.0`–`1.0` control with default
 `0.999`. At exactly `0.999`, Eclipse omits the override and preserves ComfyUI's
 native H3 conditioning path. Every other valid value is passed explicitly as
@@ -216,8 +233,8 @@ Qwen visual tokens or audio conditioning, and it is not a direct motion control.
 which may also increase static behavior or reference-like flashes. Lower values
 add progressively more seeded noise and may loosen visual adherence. Compare
 values with identical inputs, seed, frame count, model, LoRA, and sampling
-settings. The segmented workflow version `2.0.2` exposes one shared root Float
-control wired through both task subgraphs.
+settings. To keep the setting consistent across base and extension branches,
+connect one shared Float to each conditioner's `visual_condition_strength` input.
 
 ### FL2VA behavior
 
@@ -246,17 +263,13 @@ image. The technical-seam choices have distinct goals:
 - `plain_reset` independently regenerates from the active original image and can
   visibly reset framing at a same-image technical split.
 - `intentional_camera_cut` keeps that independent reset, source guide at hidden
-  local frame 0, and full warmup crop. The conditioner gives H3 one explicit
-  local cut time: change angle or shot size one third of the way into the hidden
-  warmup, capped at one second, then continue that shot through the visible
-  range. With a three-second warmup, the requested camera change is at one
-  second and the retained output begins at three seconds, leaving two seconds
-  for the new framing to settle. The performance continues against the same
-  guide audio throughout; retained frame ranges and audio timestamps do not
-  shift. Eclipse does not transform, crop differently, or paste the source image.
+  local frame 0, and full warmup crop. The conditioner adds the active part's
+  description to the global prompt without requesting an internal shot change.
+  The final cut occurs when the retained parts are joined. Retained frame ranges
+  and audio timestamps do not shift. Eclipse does not transform, crop differently,
+  or paste the source image.
 
-These shot times guide generation; they are not a guarantee that H3 will follow
-an exact frame boundary. A source-like flash or second jump after the hidden
+Prompt directions do not guarantee the intended framing or appearance. A source-like flash or second jump after the hidden
 warmup remains a failed transition and should be checked in the rendered result.
 
 The intentional instruction is never added to task 0, image transitions,
@@ -312,39 +325,13 @@ Plan Step returns these positions and names exactly:
 It rejects legacy plans, malformed ranges, invalid render lengths, inconsistent
 audio slices, mismatched image batches, and accumulated-timeline drift.
 
-### Transition and quality analysis
+### Reviewing transitions
 
-`tools/analyze-minimax-h3-segmented-timeline-v2.py` accepts a rendered video,
-the original timeline images, the segmented manifest, an output directory, and an
-optional local Hugging Face CLIP-Vision directory. It writes a JSON report, per-
-frame CSV, trace plots, and narrow/wide diagnostic contact sheets.
-
-The analyzer compares every frame with both H3 source normalizations and records
-CLIP cosine similarity when supplied, low-resolution NCC, SSIM, RGB difference,
-edge similarity, luminance/color, sharpness, entropy, adjacent-frame change, and
-repeat similarity. Source traces use a median window, a configurable winning
-margin, and a six-frame stable-state requirement. Planned repeated A-to-B-to-A
-states are resolved by expected interval; unplanned returns within a B interval
-remain failures.
-
-Reason codes cover `BACK_SWITCH`, `OSCILLATION`, `SOURCE_FLASH`,
-`TRANSIENT_STATE_FLASH`, `GENERATED_SOURCE_GENERATED_FLASH`, `DOUBLE_JUMP`,
-`WEAK_TECHNICAL_CUT`, `EARLY_SWITCH`, `LATE_OR_MISSING_SWITCH`,
-`UNEXPECTED_CUT`, `BLACK_WHITE_FLAT_FLASH`, `MOTION_STALL`, and
-`QUALITY_COLLAPSE`. `EXPECTED_TECHNICAL_CUT` records the one allowed
-`T-1`-to-`T` discontinuity at an intentional seam. A second robust jump at
-`T`-to-`T+1` that is also material relative to the planned cut remains
-`DOUBLE_JUMP`; ordinary first-frame settling is not a second cut. A requested
-cut without a measurable change is `WEAK_TECHNICAL_CUT`. Source flashes,
-ownership errors, stalls, and unrelated cuts remain failures. Adjacent
-discontinuities use rolling
-median plus median absolute deviation limits. Literal source flashes additionally
-require strict absolute NCC, SSIM, and RGB-difference thresholds. Every threshold
-is stored in the report.
-
-Automated metrics identify candidates and enforce structural failures, but live
-H3 acceptance still requires visual inspection. Identity similarity alone cannot
-decide whether motion, expression, or a model-chosen transition looks natural.
+Use the planner's `analysis_manifest` and report to locate planned cuts in the
+rendered video. Check that each cut changes framing once, retains the intended
+source appearance and keeps the original audio continuous. Look for brief source
+image flashes, repeated transitions, stalled motion and misplaced gestures around
+each boundary. Review the performance within each part as well as its cut position.
 
 ## Separate audio roles
 
@@ -356,3 +343,7 @@ that source's native sample rate.
 Vocal-stem conditioning can reduce reactions to instruments, but it is not an
 absolute lip lock. Separation bleed, visual prompting, and model behavior can
 still produce mouth motion during quiet or instrumental passages.
+
+## Reusing measured reference-video scenes
+
+The [reference scene analysis nodes](Scene_Analysis.md) create reusable cut timings and motion instructions from a separate video. Connect Scene Analysis to H3's timing and next-part outputs to the planner, and its separate global and first-part outputs to both Segmented Conditioning nodes. Keep one appearance image and the matching source audio/trim. Use Load Scene Analysis to reuse a saved analysis without rerunning detection or the language model.

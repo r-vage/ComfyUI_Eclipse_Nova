@@ -349,6 +349,14 @@ function addSlotReference(endpoint, id) {
     endpoint.slot[endpoint.key] = ids;
 }
 
+function preserveReferenceOrder(values, previousIds, oldIdByNewId) {
+    if (!Array.isArray(previousIds)) return;
+    const positions = new Map(previousIds.map((id, index) => [id, index]));
+    values.sort((left, right) =>
+        (positions.get(oldIdByNewId.get(left)) ?? Infinity) -
+        (positions.get(oldIdByNewId.get(right)) ?? Infinity));
+}
+
 function getReroutes(record) {
     const reroutes = record.graph.version === 0.4
         ? record.graph.extra?.reroutes
@@ -361,6 +369,9 @@ function getReroutes(record) {
 function repairReroutes(record, regularLinks, floatingLinks) {
     const reroutes = getReroutes(record);
     const byId = new Map();
+    const previousOrders = new Map();
+    const oldIdByNewId = new Map(regularLinks.map((link) => [link.fields.id, link.oldId]));
+    const previousExtensions = record.graph.extra?.linkExtensions?.map((entry) => entry.id);
     for (let index = 0; index < reroutes.length; index++) {
         const reroute = reroutes[index];
         const path = `${record.path}.reroutes[${index}]`;
@@ -368,6 +379,7 @@ function repairReroutes(record, regularLinks, floatingLinks) {
         const id = requireLinkId(reroute.id, `${path}.id`);
         if (byId.has(id)) fail(`${path}.id`, `duplicate reroute ID ${id}`);
         byId.set(id, reroute);
+        previousOrders.set(reroute, reroute.linkIds);
         reroute.linkIds = [];
     }
 
@@ -403,6 +415,7 @@ function repairReroutes(record, regularLinks, floatingLinks) {
 
     const kept = reroutes.filter((reroute) => live.has(reroute.id));
     for (const reroute of kept) {
+        preserveReferenceOrder(reroute.linkIds, previousOrders.get(reroute), oldIdByNewId);
         if (!liveFloating.has(reroute.id)) delete reroute.floating;
     }
     if (record.graph.version === 0.4) {
@@ -420,6 +433,10 @@ function repairReroutes(record, regularLinks, floatingLinks) {
         const extensions = regularLinks
             .filter((link) => link.parentId != null && byId.has(link.parentId))
             .map((link) => ({ id: link.fields.id, parentId: link.parentId }));
+        const orderedIds = extensions.map((entry) => entry.id);
+        preserveReferenceOrder(orderedIds, previousExtensions, oldIdByNewId);
+        const positions = new Map(orderedIds.map((id, index) => [id, index]));
+        extensions.sort((left, right) => positions.get(left.id) - positions.get(right.id));
         if (extensions.length) {
             record.graph.extra ??= {};
             record.graph.extra.linkExtensions = extensions;
@@ -513,14 +530,33 @@ function repairGraphLinks(record) {
     keptFloating.reverse();
 
     const removedLinkReferenceCount = countStaleSlotReferences(record, keptRegular);
+    const previousOrders = new Map();
+    forEachSerializedSlot(record, (slot) => {
+        previousOrders.set(slot, { links: slot.links, linkIds: slot.linkIds });
+    });
     resetSlotReferences(record);
     let temporaryId = 0;
-    for (const link of keptRegular) {
+    // configure() may reinsert dynamic-node links at the end of the link map.
+    // Allocate IDs by their previous numeric value, not map insertion order.
+    // Keep serialized records and valid fan-out references in their own order.
+    for (const link of [...keptRegular].sort((left, right) => left.oldId - right.oldId)) {
         link.fields.id = ++temporaryId;
-        addSlotReference(link.origin, temporaryId);
-        addSlotReference(link.target, temporaryId);
     }
-    for (const link of keptFloating) link.fields.id = ++temporaryId;
+    for (const link of [...keptFloating].sort((left, right) => left.oldId - right.oldId)) {
+        link.fields.id = ++temporaryId;
+    }
+    const oldIdByNewId = new Map(keptRegular.map((link) => [link.fields.id, link.oldId]));
+    for (const link of keptRegular) {
+        addSlotReference(link.origin, link.fields.id);
+        addSlotReference(link.target, link.fields.id);
+    }
+    forEachSerializedSlot(record, (slot) => {
+        for (const key of ['links', 'linkIds']) {
+            if (Array.isArray(slot[key])) {
+                preserveReferenceOrder(slot[key], previousOrders.get(slot)[key], oldIdByNewId);
+            }
+        }
+    });
 
     if (record.graph.links != null) record.graph.links = keptRegular.map((link) => link.raw);
     if (record.graph.floatingLinks != null) {
@@ -577,9 +613,13 @@ function collectIds(records, definitionById) {
             [regular, 'links', record.regularLinks],
             [floating, 'floatingLinks', record.floatingLinks],
         ]) {
-            for (let index = 0; index < collection.length; index++) {
+            const entries = collection.map((link, index) => ({
+                index,
+                fields: linkFields(link, `${record.path}.${label}[${index}]`,
+                    record.graph.version === 0.4 && label === 'links'),
+            })).sort((left, right) => left.fields.id - right.fields.id);
+            for (const { index, fields } of entries) {
                 const path = `${record.path}.${label}[${index}]`;
-                const fields = linkFields(collection[index], path, record.graph.version === 0.4 && label === 'links');
                 const id = requireLinkId(fields.id, `${path}.id`);
                 if (graphLinkIds.has(id)) fail(`${path}.id`, `duplicate link ID ${id} within this graph`);
                 graphLinkIds.add(id);

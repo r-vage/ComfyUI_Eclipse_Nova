@@ -31,23 +31,18 @@ inputs still need execution before their actual trim can be auditioned.
 The outputs remain **audio** and the **actual duration** in seconds, preserving
 sample rate, channels, batches and incoming sample values.
 
-In `MiniMaxH3_LipSync_V4_N2_Captions_DiskTimeline`, the full-song loader feeds a
-second loader for the H3 excerpt. Connect the existing **Shared clip start
-(seconds)** Float to the second loader's `start_time` input and continue
-sharing that Float with caption trimming. Keep `audio_in` and both output routes;
-the `duration` socket is optional when the clip length is set in the panel.
+For lip-sync generation, use one loader for the full song and a second for the
+video excerpt. Connect a shared Float to the second loader's `start_time` and
+to caption trimming so both select the same starting point. Set the excerpt
+length in the panel or through the optional `duration` socket.
 
 ## Visual tour
 
 ![Load Audio with File selected, one-second start and a four-second sample excerpt](assets/nova-load-audio.png)
 
-The panel example uses a short test recording. The wiring below shows how the same controls apply to full-song audio.
-
-This single example follows the two Load Audio nodes in the DiskTimeline
-variant of [MiniMax H3 LipSync](https://civitai.com/models/2935228/minimax-h3-lipsync),
-saved as
-`MiniMaxH3_LipSync_V4_N2_Captions_DiskTimeline.json`. Keep the incoming song whole
-in the first node, then select the video excerpt in the second.
+The panel example uses a short recording. To build the full-song and excerpt
+branches below, keep the incoming song whole in the first node, then select
+the video excerpt in the second.
 
 ```mermaid
 flowchart LR
@@ -63,10 +58,10 @@ flowchart LR
    node's `audio` output available for full-song saves and caption alignment.
 2. Connect the first node's `audio` output to the second node's `audio_in` and
    choose **Input** there.
-3. Connect **Shared clip start (seconds)** to the second node's `start_time`.
-   DiskTimeline sets this Float to `0` and the second node's `duration` to
-   `238` seconds. Share the start value with caption trimming so the video and
-   captions select the same excerpt.
+3. Connect a Float containing the desired start in seconds to the second node's
+   `start_time`, and set its `duration` to the desired excerpt length. Share the
+   start value with caption trimming so the video and captions select the same
+   excerpt.
 4. Enable **Stop** on the second node to audition the clip.
    Queue unchanged again to continue, using its `audio` and actual `duration`
    outputs for the video branch and its duration/planning consumers.

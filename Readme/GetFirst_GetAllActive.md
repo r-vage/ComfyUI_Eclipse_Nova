@@ -55,17 +55,16 @@ result on its own output. Feeding those outputs into Any Multi-Switch turns the
 parallel candidates into the first real non-None value at execution time, while
 inactive rows stay configured and contribute no resolved link.
 
-### Shared chains: the iGEN_ONE_M pattern
+### Shared chains with different starting points
 
 ![Two Get All Active members of the Image Generation chain, each starting at a different variable and feeding its own Any Multi-Switch](assets/get-all-active-shared-chain.png)
 
-The [iGEN ONE workflow](https://civitai.com/models/2715571/igen-one)
-(`iGEN_ONE_M`) uses two separate shared chains: **Image Generation** and
-**Reference Image**. The image above reconstructs two small excerpts of its
-Image Generation wiring, with the example getters enabled for clarity. The
-switches retain the workflow's `RFFN` title (return first non-None).
+You can keep separate shared chains for **Image Generation** and **Reference
+Image**. The image above shows two Image Generation getters with different
+starting points, each connected to its own switch. `RFFN` is a custom switch
+title meaning return first non-None.
 
-| Member in iGEN_ONE_M | Starting variable | Derived fallback list |
+| Example member | Starting variable | Derived fallback list |
 | --- | --- | --- |
 | Getter 416 · Image Generation | `img_upscaled` | `img_upscaled` → `img_initial` |
 | Getter 325 · Image Generation | `img_flux2_refined` | `img_flux2_refined` → `img_saved` → `img_upscaled` → `img_initial` |
@@ -78,7 +77,7 @@ shared-chain additions can then extend the switch wiring automatically.
 
 ### Edit the shared priority list
 
-![Native Edit shared chain dialog showing the Image Generation order from iGEN_ONE_M and the resulting lists for two linked getters](assets/get-all-active-chain-editor.png)
+![Native Edit shared chain dialog showing the Image Generation order and the resulting lists for two linked getters](assets/get-all-active-chain-editor.png)
 
 Right-click a linked getter and choose **Sync chain → Edit shared chain**. The
 highest-priority variable goes first. Add, delete, or move lines and review the
@@ -91,8 +90,8 @@ the draft. You can also open the editor from the canvas menu through
 ![Native Sync chain member options dialog with img_flux2_refined as the starting variable and an illustrative img_saved exclusion](assets/get-all-active-member-options.png)
 
 Choose **Sync chain → Member options** to change one getter's **Starting
-variable** or exclude individual names. The saved `iGEN_ONE_M` members have no
-exclusions; this screenshot shows an illustrative draft that skips `img_saved`
+variable** or exclude individual names. The example members start with no
+exclusions; this screenshot shows a draft that skips `img_saved`
 only for Getter 325. Its preview becomes `img_flux2_refined` → `img_upscaled` →
 `img_initial`, while Getter 416 stays unchanged. Only **Apply** commits the draft.
 

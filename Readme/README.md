@@ -70,12 +70,14 @@ image metadata.
 | [Load Audio](Load_Audio.md) | File or connected audio, auditioning, trim inputs and optional review |
 | [System Audio Recorder](System_Audio_Recorder.md) | Manual system-output capture, silence trim, WAV/MP3 and retained-source updates |
 | [Load / Preview / Split Video](Load_Video.md) | Editable clip slots beside the preview, per-clip trims, input overrides and timing-preserving extraction |
+| [Scene and motion analysis](Scene_Analysis.md) | CPU scene detection, cut limits, bounded disk sampling, SmartLLM motion/T2V descriptions and separate H3 part prompts |
 | [Image Timeline Video](Image_Timeline_Video.md) | PIPE renderer and IO, manual image slots or Image Selector, per-image crop/blending and selected metadata, even/quiet-gap/manual timing for captions or saving |
 | [Upscale Video](Upscale_Video.md) | Integrated model selection, bounded frame batches, source timing and audio |
 | [Save Video with Generation Data](Save_Video_Data.md) | IMAGE/VIDEO/timeline saving, output and encoding controls, trim/loop behavior and metadata |
 | [Lyric Captions](Lyric_Captions.md) | PIPE renderer and IO slots, shared transcription, optional wording/timing corrections and caption controls |
 | [Frame timelines](Frame_Timeline.md) | Disk-backed append/trim, preview/export and base-only loop plans |
-| [MiniMax H3 planning](MiniMax_H3_Audio_Planner.md) | Three segmented-planning panels under **Eclipse Nova → MiniMax** |
+| [MiniMax H3 planning](MiniMax_H3_Audio_Planner.md) | Segmented audio planning, manual cuts and global/first-part/next-part prompts under **Eclipse Nova → MiniMax** |
+| [MiniMax H3 native clips](MiniMax_H3_Clips.md) | Text, visual-reference and first/last-image generation, optional loaded/reference/generated audio and disk VIDEO loops |
 
 ## Character workflows
 
@@ -93,6 +95,9 @@ All character tools are under **Eclipse Nova → Character**.
 | [Set/Get and Mode Bridge](Set_Get_Bridge.md) | Named channels, subgraph scope and wireless mute/bypass control |
 | [Get First / Get All Active](GetFirst_GetAllActive.md) | Priority routing, shared chains, per-member choices and positional output wiring |
 | [Utilities](Utility_Nodes.md) | Switches, joiners, pipe merging, cleanup, string helpers and timing utilities |
+
+Try the bundled [Get All Active shared-chain preview](../Workflows/README.md) to
+explore routing with solid-color images, without models or input files.
 
 Routing, primitive and dynamic-input nodes keep the controls their workflows
 need. The panel redesign does not require them to adopt a configuration editor.

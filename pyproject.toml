@@ -1,13 +1,14 @@
 [project]
 name = "ComfyUI_Eclipse_Nova"
 description = "ComfyUI prompt, pipe and media tools redesigned from Eclipse with compact panels and a focus on canvas performance in classic canvas and Nodes 2.0."
-version = "1.0.27"
+version = "1.0.28"
 license = {file = "LICENSE"}
 dependencies = [
     "torch",
     "numpy",
     "Pillow",
     "opencv-python",
+    "scenedetect>=0.7.2,<0.8",
     "pilgram",
     "safetensors>=0.4,<0.9",
     "torchvision",

@@ -33,10 +33,9 @@ Details and resolves reference roles when its base positive is overridden.
 Changing role or stage does not rewrite connected prompt text.
 
 Canvas sizes remain multiples of 32 between 256 and 2048. Set the Qwen encoder's
-resolution to 0. Width, height, Details and both prompt overrides preserve the
-connections used by **Character Dataset Creation V4 - Qwen 2.1 Sheets**. Reference
-Prepare preserves that workflow's source and prompt inputs. No workflow files
-are converted or rewritten automatically.
+resolution to 0. Connect shared dimensions to `width` and `height`, and supply
+external Details or positive/negative overrides through the corresponding inputs
+when those values should come from another node.
 
 Section pins keep selected sections open together; text-field heights survive
 queues and workflow reloads. Report shows the last executed image-role mapping

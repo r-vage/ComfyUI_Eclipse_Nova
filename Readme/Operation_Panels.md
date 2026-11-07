@@ -35,8 +35,8 @@ disconnecting it restores use of the saved local value. Zero, `False` and empty
 text count as supplied values, subject to the setting's normal bounds.
 
 The inputs cover frame rates and loop counts, frame ranges, image and tile
-dimensions, mask settings, selected text and filename values. They include the
-settings driven by connections in the saved character and video workflows.
+dimensions, mask settings, selected text and filename values. Use these inputs
+to share settings across character, image and video branches.
 Other data sockets and output contracts stay the same, including list outputs.
 
 Connected controls show an **input** indication. If a connected mode decides

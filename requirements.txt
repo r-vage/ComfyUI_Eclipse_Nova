@@ -2,6 +2,7 @@ torch
 numpy
 Pillow
 opencv-python
+scenedetect>=0.7.2,<0.8
 pilgram
 safetensors
 torchvision

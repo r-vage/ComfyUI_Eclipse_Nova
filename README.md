@@ -29,9 +29,19 @@ The screenshots show the Amber theme; Neutral is the default.
 | Sampling and dimensions | [Sampler panels](Readme/Sampler.md), [Smart Folder](Readme/Smart_Folder.md), [Resolution Pipe](Readme/Resolution_Pipe.md) |
 | Images | [Loaders](Readme/Image_Loaders.md), [Resize](Readme/Image_Resize.md), [Adjustments](Readme/Image_Adjustments.md), [Text/Image FX](Readme/Image_FX.md), [Selection and comparison](Readme/Image_Review.md) |
 | Saving and metadata | [Save Images](Readme/Save_Images.md), [Save Video](Readme/Save_Video_Data.md), [Read Prompt Files](Readme/ReadPromptFiles.md), [Save Prompt](Readme/Save_Prompt.md) |
-| Audio and video | [Load Audio](Readme/Load_Audio.md), [Recorder](Readme/System_Audio_Recorder.md), [Load/Preview Video](Readme/Load_Video.md), [Upscale Video](Readme/Upscale_Video.md), [Lyric Captions](Readme/Lyric_Captions.md) |
-| Character and timeline workflows | [Character references](Readme/Character_Reference_Nodes.md), [Shot Planner](Readme/Character_Shot_Planner.md), [MiniMax planning](Readme/MiniMax_H3_Audio_Planner.md), [Frame timelines](Readme/Frame_Timeline.md) |
+| Audio and video | [Load Audio](Readme/Load_Audio.md), [Recorder](Readme/System_Audio_Recorder.md), [Load/Preview Video](Readme/Load_Video.md), [Scene and motion analysis](Readme/Scene_Analysis.md), [Upscale Video](Readme/Upscale_Video.md), [Lyric Captions](Readme/Lyric_Captions.md) |
+| Character and timeline workflows | [Character references](Readme/Character_Reference_Nodes.md), [Shot Planner](Readme/Character_Shot_Planner.md), [MiniMax audio planning](Readme/MiniMax_H3_Audio_Planner.md), [MiniMax native clips](Readme/MiniMax_H3_Clips.md), [Frame timelines](Readme/Frame_Timeline.md) |
 | Routing and review | [Set/Get and Bridge](Readme/Set_Get_Bridge.md), [Get First / Get All Active](Readme/GetFirst_GetAllActive.md), [Previews and Stop](Readme/DOM_Previews.md), [Utilities](Readme/Utility_Nodes.md) |
+
+**Reference-video analysis** measures scene boundaries on CPU, limits cut frequency
+when requested, and samples bounded windows from disk. SmartLLM Nova describes
+motion for a separate image reference or full scenes for text-to-video. The H3
+adapter supplies measured cut times and separate global, first-part and next-part
+prompts. See the [scene analysis guide](Readme/Scene_Analysis.md) for node connections,
+independent detection/image resolutions, review warnings and saved-analysis reuse.
+
+The bundled [Get All Active shared-chain preview](Workflows/README.md) demonstrates
+routing with solid-color images and requires no models or input files.
 
 ## Why the new panels?
 

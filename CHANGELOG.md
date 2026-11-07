@@ -1,5 +1,52 @@
 # Changelog
 
+## 2026-11-07
+
+### Version: 1.0.28
+
+- **Feat**
+  - Add native MiniMax H3 clip planning and conditioning for text, visual references or first/last images, with loaded audio, reference audio and generated audio in priority order. Preserve source duration and cut timing, retain last-image guides before discarded padding, and reuse Load Image Timeline's resized batch. Select native visual references without fixed endpoints, text-only conditioning, or a starting image per scene. Untimed scene prompts share the duration evenly; capacity splits retain their scene prompt and image assignment.
+  - Add Append Video Clip to retain generated video and audio on disk across loops, with an optional original soundtrack for the assembled VIDEO. Preserve whether Load Video's sources contain unmuted audio so synthesized silence permits generated-audio fallback.
+  - Add CPU scene detection with measured source timing, disk-backed frame sampling, bounded overlapping windows and text-only loop collection for reference-video performance analysis.
+  - Validate and save structured scene motion observations and sampled-frame evidence. Scene Analysis to H3 exposes separate global, first-part and subsequent-part prompts; Segmented Conditioning applies only the active part. Use these final node names as the sole interfaces, without temporary duplicates or embedded opening-scope text. Give each part one continuous-shot prompt with measured cuts applied during joining; keep timing/audio mechanics in the planner and prevent opening poses from leaking into later parts.
+  - Export concise performance paragraphs written alongside observations in the same analysis call. Accept motion-only results without appearance metadata and full T2V descriptions with appearance. Preserve new task paragraphs and edited directions without appearance rewriting, and require matching export policy. Older unmarked version-2 analyses retain bounded clothing/background and routine mouth-sentence cleanup. Retain black scenes and measured timing; reject analyses without performance paragraphs.
+  - Add an optional Scene Cut Limit after detection to enforce measured-time spacing without moving retained cuts or rescanning. Record excluded edits in window context so they are not mistaken for motion. Add an appearance dropdown to the H3 adapter to select motion-only image animation or full text-to-video descriptions.
+- **Fix**
+  - Keep Compact IDs stable when dynamic nodes reorder link records during reload. Preserve connection and reroute ordering while retaining validation and rollback for broken links.
+  - Keep usable scene descriptions with review warnings when they include unwanted appearance or questionable pose wording. Preserve the text in saved analyses and H3 outputs for copying and manual editing, including cached content rejections. Accept scalar action, gaze/expression and uncertainty text as list entries without rewording. Treat T2V appearance audits as optional metadata, retaining unusual formats for review without blocking the complete generation paragraph; stop only for broken required structure or incomplete coverage.
+  - Split multiline H3 cut instructions into individual shot directions, including joined analysis output and connected lists. Prevent every scene receiving the complete prompt sequence, and show the direction count in the planner report while preserving cut timing and audio ranges.
+- **Docs**
+  - Document native H3 clip connections, optional references and soundtrack selection. Clarify that image-slot blends affect the still-image renderer and do not automatically fade generated clips.
+  - Add practical tooltips to every scene-analysis input and output, covering detection sensitivity, independent resolutions, sample budgets, per-request frame limits, overlap, loop wiring, cut spacing and task-specific H3 export.
+  - Document node connections for optional live analysis, editable manual inputs and saved-analysis reuse. Keep each source's timings and part prompts together through Set/Get routing, with the global performance prompt independent of part-source muting.
+  - Update the README and guides for scene analysis, current image controls and part prompts. Remove references to unshipped workflows while retaining the bundled Get All Active shared-chain preview.
+- **Changed files**
+  - README.md
+  - Readme/README.md
+  - Readme/Character_Reference_Nodes.md
+  - Readme/Character_Shot_Planner.md
+  - Readme/GetFirst_GetAllActive.md
+  - Readme/Load_Audio.md
+  - Readme/MiniMax_H3_Audio_Planner.md
+  - Readme/MiniMax_H3_Clips.md
+  - Readme/Image_Timeline_Video.md
+  - Readme/Operation_Panels.md
+  - Readme/Scene_Analysis.md
+  - core/minimax_h3_segmented_conditioning.py
+  - core/minimax_h3_segmented_timeline.py
+  - core/minimax_h3_clips.py
+  - core/video_clip_append.py
+  - core/video_loader.py
+  - core/scene_analysis.py
+  - core/scene_motion_text.py
+  - js/eclipse-workflow-id-utils.js
+  - py/RvVideo_MiniMaxH3Panels.py
+  - py/RvVideo_MiniMaxH3Clips.py
+  - py/RvVideo_AppendClip.py
+  - py/RvVideo_SceneAnalysis.py
+  - pyproject.toml
+  - requirements.txt
+
 ## 2026-11-05
 
 ### Version: 1.0.27

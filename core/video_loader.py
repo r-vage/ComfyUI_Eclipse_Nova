@@ -560,6 +560,9 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
                 os.unlink(path)
                 raise
             _remember_media(key, video, encoded_timing)
+    # The encoded playlist always has an audio track, including synthesized
+    # silence. Retain source availability for consumers offering generated audio.
+    video.eclipse_source_has_audio = any(not clip.row["mute"] and bool(clip.info["audio"]) for clip in clips)
     report.append(f"Result: {width}x{height}, fit={fit}, {len(timing)} source frames, {float(timing.duration):.9f}s.")
     report.append("Frames streamed to VIDEO. Audio: first track per file, 48000 Hz stereo; missing or muted intervals are silence.")
     for index, window in enumerate(windows):

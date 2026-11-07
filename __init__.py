@@ -210,7 +210,16 @@ class EclipseExtension(ComfyExtension):
             RvVideo_DecodeAppendTimeline,
             RvVideo_TrimTimeline,
         )
+        from .py.RvVideo_MiniMaxH3Clips import (
+            RvVideo_MiniMaxH3ClipPlanner, RvVideo_MiniMaxH3ClipConditioning,
+        )
+        from .py.RvVideo_AppendClip import RvVideo_AppendClip
         from .py.RvVideo_SaveData import RvVideo_SaveData
+        from .py.RvVideo_SceneAnalysis import (
+            RvVideo_SceneDetector, RvVideo_SceneCutLimit, RvVideo_SceneAnalysisPlan, RvVideo_SceneFrameSampler,
+            RvVideo_SceneDescriptionCollector, RvVideo_SaveSceneAnalysis,
+            RvVideo_LoadSceneAnalysis, RvVideo_SceneAnalysisToH3,
+        )
         from .py.RvVideo_Load import RvVideo_Load
         from .py.RvVideo_ImageTimeline import RvVideo_ImageTimeline
         from .py.RvPipe_IO_ImageTimeline import RvPipe_IO_ImageTimeline
@@ -378,8 +387,19 @@ class EclipseExtension(ComfyExtension):
             RvVideo_DecodeAppendTimeline,
             RvVideo_TrimTimeline,
             RvVideo_TimelineLoopGate,
+            RvVideo_MiniMaxH3ClipPlanner,
+            RvVideo_MiniMaxH3ClipConditioning,
+            RvVideo_AppendClip,
             RvVideo_SaveData,
             RvVideo_Load,
+            RvVideo_SceneDetector,
+            RvVideo_SceneCutLimit,
+            RvVideo_SceneAnalysisPlan,
+            RvVideo_SceneFrameSampler,
+            RvVideo_SceneDescriptionCollector,
+            RvVideo_SaveSceneAnalysis,
+            RvVideo_LoadSceneAnalysis,
+            RvVideo_SceneAnalysisToH3,
             RvVideo_ImageTimeline,
             RvPipe_IO_ImageTimeline,
             RvImage_LoadImageTimeline,
