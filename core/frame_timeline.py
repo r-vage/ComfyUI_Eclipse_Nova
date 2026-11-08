@@ -1,4 +1,4 @@
-# Exact, execution-local frame storage. Descriptors own files, never tensors or mappings.
+# Exact frame storage with shared descriptors for temporary files, saved runs or RAM.
 import errno
 import math
 import os
@@ -25,13 +25,14 @@ def raise_storage_error(error, directory):
         return
     raise OSError(
         error.errno,
-        f"Eclipse temporary video storage is full, over quota, or could not complete a write: {error}. "
-        f"Temporary folder: {os.path.abspath(directory)}. "
+        f"Eclipse video storage is full, over quota, or could not complete a write: {error}. "
+        f"Storage folder: {os.path.abspath(directory)}. "
         "Free space on this drive. For manual cleanup, finish or cancel the job, then stop ComfyUI. "
-        "In this temporary folder, remove unneeded EclipseFrames_* folders (exact cached frames) "
+        "For temporary storage, remove unneeded EclipseFrames_* folders (exact cached frames) "
         "and EclipseVideo_temp_*.mp4 files (accumulated previews). "
         "Deleting frame chunks means regeneration is required for later caption changes or re-exports; "
-        "a preview MP4 cannot replace them. Keep final videos in output, source files in input, and models. "
+        "a preview MP4 cannot replace them. For persistent runs, remove only complete run folders you no longer need. "
+        "Keep final videos in output, source files in input, and models. "
         "Restart ComfyUI before queueing again. See Readme/Frame_Timeline.md for cleanup details.",
     ) from error
 
@@ -44,9 +45,10 @@ def check_interrupted():
 
 @dataclass(frozen=True)
 class FrameChunk:
-    owner: tempfile.TemporaryDirectory
+    owner: object
     start: int
     count: int
+    seed: int | None = None
 
     @property
     def path(self):
@@ -54,13 +56,23 @@ class FrameChunk:
 
 
 @dataclass(frozen=True)
+class MemoryFrameChunk:
+    pixels: torch.Tensor
+    start: int
+    count: int
+    seed: int | None = None
+
+
+@dataclass(frozen=True)
 class FrameTimeline:
-    chunks: tuple[FrameChunk, ...]
+    chunks: tuple[FrameChunk | MemoryFrameChunk, ...]
     height: int
     width: int
     channels: int
     dtype: str
     fps: float
+    storage: str = "temporary"
+    run_directory: str | None = None
 
     def __deepcopy__(self, memo):
         # Immutable graph copies share the same file owners.
@@ -76,6 +88,11 @@ class FrameTimeline:
 
     def __iter__(self):
         for chunk in self.chunks:
+            if isinstance(chunk, MemoryFrameChunk):
+                for index in range(chunk.start, chunk.start + chunk.count):
+                    check_interrupted()
+                    yield chunk.pixels[index]
+                continue
             mapping = np.load(chunk.path, mmap_mode="r", allow_pickle=False)
             try:
                 for index in range(chunk.start, chunk.start + chunk.count):
@@ -96,15 +113,17 @@ class FrameTimeline:
             first = max(start - offset, 0)
             last = min(start + count - offset, chunk.count)
             if last > first:
-                chunks.append(FrameChunk(chunk.owner, chunk.start + first, last - first))
+                source = chunk.pixels if isinstance(chunk, MemoryFrameChunk) else chunk.owner
+                chunks.append(type(chunk)(source, chunk.start + first, last - first, chunk.seed))
             offset += chunk.count
-        return FrameTimeline(tuple(chunks), self.height, self.width, self.channels, self.dtype, self.fps)
+        return FrameTimeline(tuple(chunks), self.height, self.width, self.channels, self.dtype, self.fps,
+                             self.storage, self.run_directory)
 
     def tail(self, count):
         return torch.stack(list(self.slice(len(self) - count, count)))
 
 
-def append_frames(images, fps, previous=None, *, directory=None):
+def append_frames(images, fps, previous=None, *, directory=None, storage=None, generation_seed=None):
     if not isinstance(images, torch.Tensor) or images.ndim != 4 or min(images.shape) < 1:
         raise ValueError("Timeline requires a nonempty NHWC IMAGE batch.")
     if images.dtype not in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
@@ -119,6 +138,23 @@ def append_frames(images, fps, previous=None, *, directory=None):
             raise TypeError("previous must be an Eclipse frame timeline.")
         if (*previous.shape[1:], previous.dtype, previous.fps) != (*shape[1:], dtype, fps):
             raise ValueError("Timeline dimensions, dtype and FPS must remain unchanged.")
+    mode = storage.mode if storage is not None else "temporary"
+    if previous is not None and previous.storage != mode:
+        raise ValueError("Timeline storage mode must remain unchanged within a run.")
+    if mode == "memory":
+        # Copy the retained range only; never keep the full decoded warmup or a
+        # GPU allocation alive through a view of the cropped scene.
+        chunk = MemoryFrameChunk(images.detach().to(device="cpu", copy=True).contiguous(), 0, shape[0], generation_seed)
+        return FrameTimeline((previous.chunks if previous else ()) + (chunk,), *shape[1:], dtype,
+                             float(fps), mode)
+    if mode not in ("temporary", "persistent"):
+        raise ValueError("Unknown frame storage mode.")
+    run_directory = None
+    if mode == "persistent":
+        from .video_run import create_run_directory
+
+        run_directory = previous.run_directory if previous else create_run_directory(storage)
+        directory = run_directory
     if directory is None:
         import folder_paths
 
@@ -128,7 +164,12 @@ def append_frames(images, fps, previous=None, *, directory=None):
                 bytes=images.numel() * images.element_size(), previous_frames=len(previous) if previous else 0)
     progress = DebugProgress(_LOG_PREFIX, "Frames written", shape[0])
     try:
-        owner = tempfile.TemporaryDirectory(prefix="EclipseFrames_", dir=directory)
+        if mode == "persistent":
+            from .video_run import StoredDirectory
+
+            owner = StoredDirectory(tempfile.mkdtemp(prefix="EclipseFrames_", dir=directory))
+        else:
+            owner = tempfile.TemporaryDirectory(prefix="EclipseFrames_", dir=directory)
         path = os.path.join(owner.name, "frames.npy")
         # Write sequentially without mapping dirty pages or copying a full CPU scene.
         with open(path, "wb") as stream:
@@ -142,8 +183,9 @@ def append_frames(images, fps, previous=None, *, directory=None):
                     pixels = pixels.view(torch.uint16)
                 pixels.numpy().tofile(stream)
                 progress.update(index)
-        chunk = FrameChunk(owner, 0, shape[0])
-        return FrameTimeline((previous.chunks if previous else ()) + (chunk,), *shape[1:], dtype, float(fps))
+        chunk = FrameChunk(owner, 0, shape[0], generation_seed)
+        return FrameTimeline((previous.chunks if previous else ()) + (chunk,), *shape[1:], dtype,
+                             float(fps), mode, run_directory)
     except BaseException as error:
         if owner is not None:
             owner.cleanup()

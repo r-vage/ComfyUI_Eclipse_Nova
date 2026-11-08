@@ -34,11 +34,24 @@ The screenshots show the Amber theme; Neutral is the default.
 | Routing and review | [Set/Get and Bridge](Readme/Set_Get_Bridge.md), [Get First / Get All Active](Readme/GetFirst_GetAllActive.md), [Previews and Stop](Readme/DOM_Previews.md), [Utilities](Readme/Utility_Nodes.md) |
 
 **Reference-video analysis** measures scene boundaries on CPU, limits cut frequency
-when requested, and samples bounded windows from disk. SmartLLM Nova describes
+when requested, and samples bounded windows from disk or RAM. SmartLLM Nova describes
 motion for a separate image reference or full scenes for text-to-video. The H3
 adapter supplies measured cut times and separate global, first-part and next-part
 prompts. See the [scene analysis guide](Readme/Scene_Analysis.md) for node connections,
 independent detection/image resolutions, review warnings and saved-analysis reuse.
+
+**Video Run Storage** switches loop accumulation between CPU RAM, temporary disk
+and persistent output. **Load Video Run** restores saved parts and their soundtrack
+after a restart, while **Video Run Info** reports timing, size and part ranges.
+**Video Loop Start / Loop End** render and resume H3 runs without Easy-Use.
+Persistent runs save resolved timings, prompts, references and audio, so resume
+can reuse them after a restart. Stop after the current part and its accumulated
+preview, or limit the new parts per queue. **Video Part Seed** keeps sampling
+variation separate from planning and the retained media.
+**Loop Control** puts the live stop button outside a subgraph, connected to the
+loop through Get/Set. See [loop controls](Readme/Loops.md) for wiring and resume.
+See [saved runs](Readme/Frame_Timeline.md#ram-disk-and-saved-runs) for connections
+and the execution gates used to skip generation during re-export.
 
 The bundled [Get All Active shared-chain preview](Workflows/README.md) demonstrates
 routing with solid-color images and requires no models or input files.

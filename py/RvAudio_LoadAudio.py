@@ -35,31 +35,42 @@ class RvAudio_LoadAudio(io.ComfyNode):
                                tooltip="Override the local duration in seconds. Zero means the remainder of the source."),
                 io.String.Input("configuration", socketless=True, default=json.dumps(default_configuration()),
                                 extra_dict={"widgetType": WIDGET, "editorSpec": {}}),
+                io.Boolean.Input("enabled", optional=True, force_input=True, default=True,
+                                 tooltip="False skips this loader and its preview without reading the file or incoming audio. Connect Video Run Storage's prepare output to load sources only for a new run."),
             ],
             outputs=[io.Audio.Output("audio"), io.Float.Output("duration")],
             is_output_node=True,
         )
 
     @classmethod
-    def check_lazy_status(cls, configuration, audio_in=MISSING_AUDIO, **_inputs):
+    def check_lazy_status(cls, configuration, audio_in=MISSING_AUDIO, enabled=True, **_inputs):
         config = validate_configuration(configuration)
-        return ["audio_in"] if config["source"] != "Selected file" and audio_in is None else []
+        return ["audio_in"] if enabled and config["source"] != "Selected file" and audio_in is None else []
 
     @classmethod
-    def validate_inputs(cls, configuration, audio_in=MISSING_AUDIO, start_time=None, duration=None):
+    def validate_inputs(cls, configuration, audio_in=MISSING_AUDIO, start_time=None, duration=None, enabled=True):
         try:
             config = validate_configuration(configuration)
             resolved_trim(config, start_time, duration)
-            return validate_audio_source(config["audio"], audio_in, config["source"])
+            # A connected enable control is unresolved during validation. Defer
+            # availability until execution; preserve ordinary standalone checks.
+            return (validate_audio_source(config["audio"], audio_in, config["source"])
+                    if enabled is True else True)
         except (TypeError, ValueError, OSError) as error:
             return str(error)
 
     @classmethod
-    def fingerprint_inputs(cls, configuration, **_inputs):
+    def fingerprint_inputs(cls, configuration, enabled=True, **_inputs):
+        if enabled is False:
+            return False
         return audio_fingerprint(validate_configuration(configuration)["audio"])
 
     @classmethod
-    def execute(cls, configuration, audio_in=None, start_time=None, duration=None):
+    def execute(cls, configuration, audio_in=None, start_time=None, duration=None, enabled=True):
+        if not enabled:
+            from comfy_execution.graph_utils import ExecutionBlocker
+
+            return io.NodeOutput(ExecutionBlocker(None), ExecutionBlocker(None))
         config = validate_configuration(configuration)
         start_time, duration = resolved_trim(config, start_time, duration)
         audio, loaded_duration, ui = load_audio_excerpt(

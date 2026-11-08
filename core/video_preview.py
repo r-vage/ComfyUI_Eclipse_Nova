@@ -4,6 +4,7 @@ import json
 import os
 import random
 import time
+import weakref
 from fractions import Fraction
 
 import av  # type: ignore
@@ -159,10 +160,14 @@ class VideoPreview:
                 raise ValueError("Connect one VIDEO per input; combine multiple clips before this node.")
             # Audio is for the IMAGE fallback; VIDEO retains its own soundtrack.
             preview, descriptor = preview_video_file(video)
+            if preview is not video:
+                # Keep the viewing copy alive with the original VIDEO, while
+                # returning that original for exact storage/loop semantics.
+                weakref.finalize(video, lambda owner: None, preview)
             if stop_review:
                 import nodes
                 nodes.interrupt_processing()
-            return io.NodeOutput([preview], ui={"eclipse_video": [descriptor]})
+            return io.NodeOutput([video], ui={"eclipse_video": [descriptor]})
 
         if images is None:
             return io.NodeOutput(None, ui={"eclipse_video": []})

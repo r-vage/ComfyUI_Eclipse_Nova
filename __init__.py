@@ -214,6 +214,10 @@ class EclipseExtension(ComfyExtension):
             RvVideo_MiniMaxH3ClipPlanner, RvVideo_MiniMaxH3ClipConditioning,
         )
         from .py.RvVideo_AppendClip import RvVideo_AppendClip
+        from .py.RvVideo_RunStorage import RvVideo_RunStorage, RvVideo_LoadRun, RvVideo_RunGate, RvVideo_RunInfo
+        from .py.RvVideo_Resume import RvVideo_LoopStart, RvVideo_PartSeed
+        from .py.RvLogic_Loop import RvLogic_LoopStart, RvLogic_LoopEnd, RvLogic_LoopIteration
+        from .py.RvLogic_LoopControl import RvLogic_LoopControl
         from .py.RvVideo_SaveData import RvVideo_SaveData
         from .py.RvVideo_SceneAnalysis import (
             RvVideo_SceneDetector, RvVideo_SceneCutLimit, RvVideo_SceneAnalysisPlan, RvVideo_SceneFrameSampler,
@@ -390,6 +394,16 @@ class EclipseExtension(ComfyExtension):
             RvVideo_MiniMaxH3ClipPlanner,
             RvVideo_MiniMaxH3ClipConditioning,
             RvVideo_AppendClip,
+            RvVideo_RunStorage,
+            RvVideo_LoadRun,
+            RvVideo_RunGate,
+            RvVideo_RunInfo,
+            RvVideo_LoopStart,
+            RvLogic_LoopStart,
+            RvLogic_LoopEnd,
+            RvLogic_LoopIteration,
+            RvLogic_LoopControl,
+            RvVideo_PartSeed,
             RvVideo_SaveData,
             RvVideo_Load,
             RvVideo_SceneDetector,

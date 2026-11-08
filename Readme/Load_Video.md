@@ -70,6 +70,14 @@ its result instead of encoding another copy. Metadata selection alone does not
 require a new encode. Reuse is temporary: changed media settings, an expired or
 deleted preview, or a server restart can require rebuilding.
 
+When a queued Load Video result loses its temporary file between runs, the next
+queue rebuilds it from the original playlist and refreshes dependent results.
+Scene Analysis Plan likewise rebuilds missing sampled-frame caches. Intact files
+continue to reuse the execution cache; this check does not force a rebuild on
+every queue. Original source files must remain available. This recovery applies
+to reproducible loader/analysis caches, not deleted generated video parts; keep
+those in a [persistent saved run](Frame_Timeline.md#ram-disk-and-saved-runs).
+
 The **Blending** section sets the default transition and duration for all clips.
 Each clip's **Blend to next** can inherit that global setting or override it;
 these apply to Sequence slots, and the last sequence clip has no outgoing transition. Crossfades, wipes, dissolve,

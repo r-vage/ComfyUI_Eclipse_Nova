@@ -49,22 +49,46 @@ part. Capacity splits do not provide latent or motion continuation.
 
 Wire the loop as follows:
 
-1. Planner **clip_count** → loop total; loop **index** → Clip Conditioning.
+1. Planner **plan** → **Video Loop Start**, along with canvas size, references
+   and **Video Run Storage**. Start's resolved **plan**, **index**, **images**,
+   **width**, **height** and **reference_mode** → Clip Conditioning.
 2. Clip Conditioning **positive** → BasicGuider; **latent** → SamplerCustomAdvanced.
-3. Clip Conditioning **seed** → RandomNoise. It adds the loop index to the base seed.
+3. Seed → **Video Part Seed → RandomNoise**, with the loop index connected to
+   Video Part Seed. Keep Clip Conditioning's seed fixed and leave its seed output
+   unused to isolate sampling changes from encoding. Its original seed output
+   remains supported for existing workflows.
 4. Decode the sampled joint latent with both **VAE Decode** and **VAE Decode Audio**.
 5. Both decoded outputs → **Append Video Clip**, with **keep_frames** from Clip
    Conditioning and **previous** from the loop's carried VIDEO value.
-6. Planner **selected_audio** → Append Video Clip **soundtrack**. This is the full
+6. Video Loop Start **audio** → Append Video Clip **soundtrack**, and Start's
+   **storage** → Append Video Clip **storage**. The audio is the full
    recording from time zero; the conditioner handles per-clip guide slices.
-7. Carry Append Video Clip's VIDEO through the loop and save the final VIDEO.
+7. **Append Video Clip → Preview Video → Loop End value**, with Start's **loop**
+   connected to End's **loop**. End returns the final accumulated VIDEO.
    Leave Save Video's **Audio input** mode disabled: the VIDEO already contains
    the selected recording or the generated audio.
 
-Append Video Clip stores each retained clip on disk with RGB8 video and PCM audio.
+By default, Append Video Clip stores each retained clip on temporary disk with RGB8 video and PCM audio.
 Loop state references those files rather than accumulating decoded image tensors.
 The final save performs the delivery encode. Cached outputs keep temporary files
 alive; interruption removes a partially written clip.
+
+Connect **Video Run Storage** to choose temporary disk, persistent output or CPU
+RAM. Persistent mode saves ordered clips and a `run.json` for **Load Video Run**,
+including a selected master soundtrack when supplied. RAM mode shares decoded
+parts across loop iterations without clip-cache files. Preview Video returns the
+original accumulated VIDEO; its viewing copy does not replace the loop state.
+See [frame storage and saved runs](Frame_Timeline.md#ram-disk-and-saved-runs) for
+the controls, loading and lifetime rules. These modes also support lip-sync
+frame timelines through Decode and Append Timeline.
+
+For a stopped run or a replacement from part N onward, select **Resume saved run**
+in Video Run Storage. **Video Loop Start** restores the saved inputs and supplies
+the absolute index to conditioning and Video Part Seed. Limit **parts_per_queue**
+or use **Stop after current part** to review the accumulated result. Change the
+render seed before the next queue to vary replacement clips while retaining the
+earlier saved parts. See
+[resume controls](Frame_Timeline.md#resume-or-replace-the-remaining-parts).
 
 ## Reference images
 

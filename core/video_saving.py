@@ -800,6 +800,10 @@ def _encode(
                     layout="stereo" if audio_array.shape[0] >= 2 else "mono",
                 )
                 audio_frame.sample_rate = int(audio["sample_rate"])
+                # Preserve AAC encoder priming timestamps so MP4 playback starts
+                # at waveform sample zero rather than one audio packet late.
+                audio_frame.pts = 0
+                audio_frame.time_base = Fraction(1, audio_frame.sample_rate)
                 for packet in audio_stream.encode(audio_frame):
                     container.mux(packet)
                 for packet in audio_stream.encode():

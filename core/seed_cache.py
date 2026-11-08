@@ -1,16 +1,14 @@
 # Cache automatic nodes according to the override actually used at execution.
 # No images, pipes, model objects or resolved input values are retained here.
-import hashlib
-import inspect
 import itertools
-import json
 import threading
 import weakref
 from collections import OrderedDict
 from dataclasses import dataclass
 
-from comfy_execution.graph_utils import is_link
 from comfy_execution.utils import get_executing_context
+
+from .execution_cache import fingerprint_context, input_scope
 
 _MAX_STATES = 512
 _lock = threading.RLock()
@@ -28,53 +26,14 @@ class _State:
     pending_key: tuple | None = None
 
 
-def _fingerprint_context():
-    # ComfyUI deliberately omits linked values from fingerprint_inputs and does
-    # not expose its cache scope through CurrentNodeContext. Inspect only the
-    # enclosing IsChangedCache call, as Image Selector already does. Never
-    # patch the executor or request/evaluate upstream nodes during this check.
-    frame = inspect.currentframe()
-    try:
-        while frame is not None:
-            evaluator = frame.f_locals.get("self")
-            if type(evaluator).__name__ == "IsChangedCache":
-                node_id = frame.f_locals.get("node_id")
-                if node_id is not None and getattr(evaluator, "outputs_cache", None) is not None:
-                    return evaluator, str(node_id)
-            frame = frame.f_back
-    finally:
-        del frame
-
-
-def _input_scope(prompt, node_id):
-    # Separate graph/configuration revisions without depending on evaluation
-    # order or another workflow's node IDs. Only this node's ancestors matter.
-    sources = {}
-    pending = [node_id]
-    while pending:
-        key = pending.pop()
-        if key in sources:
-            continue
-        node = prompt.get_node(key)
-        inputs = node.get("inputs", {})
-        sources[key] = (node["class_type"], inputs)
-        pending.extend(value[0] for value in inputs.values() if is_link(value))
-    encoder = json.JSONEncoder(sort_keys=True, separators=(",", ":"),
-                               default=lambda value: (type(value).__qualname__, id(value)))
-    digest = hashlib.sha256()
-    for part in encoder.iterencode(sources):
-        digest.update(part.encode("utf-8"))
-    return node_id, digest.digest()
-
-
 def automatic_fingerprint():
-    context = _fingerprint_context()
+    context = fingerprint_context()
     if context is None:
         # Direct calls/older execution hosts cannot provide a scoped record.
         # Keep the existing automatic behavior rather than freezing a fallback.
         return float("nan")
     evaluator, node_id = context
-    scope = _input_scope(evaluator.dynprompt, node_id)
+    scope = input_scope(evaluator.dynprompt, node_id)
     with _lock:
         entries = _states.setdefault(evaluator.outputs_cache, OrderedDict())
         state = entries.get(scope)

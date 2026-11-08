@@ -24,6 +24,7 @@ and Nodes 2.0.
 | `audio_in` | Incoming AUDIO. Auto prefers it; File ignores it and does not request its upstream execution. |
 | `start_time` | Optional FLOAT overriding the local start, including an explicit zero. |
 | `duration` | Optional FLOAT overriding the local duration, including zero for “to end.” |
+| `enabled` | Optional BOOLEAN. False skips loading and the execution preview; connect Video Run Storage's `prepare` output to read sources only for New run. |
 
 Unconnected or `None` trim inputs use the local values. A connected trim input
 disables its local field; the header summarizes resolvable input values. Computed
@@ -35,6 +36,12 @@ For lip-sync generation, use one loader for the full song and a second for the
 video excerpt. Connect a shared Float to the second loader's `start_time` and
 to caption trimming so both select the same starting point. Set the excerpt
 length in the panel or through the optional `duration` socket.
+
+In a resumable loop, connect the first loader's full recording to Video Loop
+Start's `caption_audio` and the excerpt start to `caption_start`. The run saves
+both for later captions. Connect `prepare` to both audio loaders' `enabled`
+inputs so Resume/Load do not reopen the original files. File availability is
+checked when an enabled loader executes if its enable control is connected.
 
 ## Visual tour
 

@@ -31,6 +31,15 @@ class VideoFrameSource:
 
 
 def video_frame_source(video):
+    from .video_clip_append import MemoryClipVideo
+
+    if isinstance(video, MemoryClipVideo):
+        width, height = video.get_dimensions()
+        timing = VideoTiming.constant(video.get_frame_count(), video.get_frame_rate())
+        return VideoFrameSource(width, height, timing,
+            lambda: (frame for images, _ in video.chunks for frame in images),
+            lambda: _normalize_component_audio(video.get_audio(), timing.duration),
+            video.soundtrack is not None or any(audio is not None for _, audio in video.chunks))
     if isinstance(video, InputImpl.VideoFromList):
         parts = [video_frame_source(item) for item in video.videos]
         if len({(item.width, item.height) for item in parts}) != 1:

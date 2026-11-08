@@ -2,9 +2,9 @@
 
 The scene-analysis nodes measure a reference video's scene boundaries and describe the performance between them. Eclipse handles detection, sampling, collection and H3 export; [SmartLLM Nova](https://github.com/r-vage/ComfyUI_SmartLLM_Nova) supplies the image descriptions. The connections below can be added to your own graph.
 
-Use a loop node, such as the Easy-Use for-loop, to process one sampled window per iteration:
+Use Eclipse **Loop Start / Loop End** to process one sampled window per iteration:
 
-`Load Video → Scene Detector → Scene Cut Limit (optional) → Scene Analysis Plan → for-loop [Scene Frame Sampler → Smart LM Prompt Pipe → Smart LM Loader → Scene Description Collector] → Save Scene Analysis → Scene Analysis to H3`
+`Load Video → Scene Detector → Scene Cut Limit (optional) → Scene Analysis Plan → Loop Start [Scene Frame Sampler → Smart LM Prompt Pipe → Smart LM Loader → Scene Description Collector] → Loop End → Save Scene Analysis → Scene Analysis to H3`
 
 Connect the sampler's `frame_source` directly to Smart LM Loader's `frame_source`, and its `context` to Smart LM Prompt Pipe's `user_prompt`. Connect the pipe's `settings` to the loader's `pipe_opt`, then the loader's `text` to Scene Description Collector.
 
@@ -48,11 +48,26 @@ Scene Analysis Plan supports a uniform sample budget per scene or **every_nth** 
 
 Selections larger than `max_frames` become overlapping windows. The defaults are eight frames per request and two shared samples between windows. Windows retain their scene ID and never create additional cuts. Use `window_count` as the loop's total and connect its zero-based index to both Scene Frame Sampler and Scene Description Collector. Initialize the loop state with `empty_descriptions`, carry the collector's updated descriptions into the next iteration, and send the final state plus the same `jobs` to Save Scene Analysis.
 
+Connect Start's `loop` to End's `loop`, the collector to End's `value`, and Start's
+`previous` to the collector's accumulated descriptions. Select **block downstream**
+on End so an intentionally stopped analysis does not reach the complete-analysis
+saver. Completed unchanged windows can reuse ComfyUI's cache. This generic loop
+does not persist partial analysis progress across server restarts; video render
+resume instead restores the completed, resolved analysis prompts saved with the
+run. See [Eclipse loops](Loops.md).
+
 For up to **16 images together**, set **samples_per_scene = 16** and **max_frames = 16**, then use Smart LM **Together** with **Every Nth = 1**. Increasing only `max_frames` does not increase the uniform sample budget. Short scenes can provide fewer images. All scene-analysis nodes have input/output tooltips with practical settings and connection guidance.
 
 The detector streams frames; the planner makes one additional streaming pass to cache only selected frames as uint8 data on disk. Scene Frame Sampler passes `SMARTLLM_FRAME_SOURCE` references, not IMAGE tensors. Smart LM materializes only the current request, resizes before batching, and returns an empty IMAGE list for this lazy input. Ordinary IMAGE input still passes through normally. Loop state contains descriptions and metadata. Cache files remain valid while graph outputs refer to them and are deleted when those owners are released. A file-backed VIDEO is required for bounded source decoding; a VIDEO built from an already loaded image batch still owns that batch.
 
 ## Descriptions and recovery
+
+The optional **Video Run Storage → storage** input on Scene Analysis Plan shares
+the generation loop's Disk/RAM control. Disk off keeps selected uint8 images in
+CPU RAM, increasing memory use without writing image-cache files. Detection still
+streams the source, and Smart LM still processes one window at a time. Disk on
+uses temporary analysis images regardless of Keep files; that option retains
+generated video parts. Diagnostic response JSON is written in either mode.
 
 Select **Scene Motion Analysis** for image-to-video. Its prompt focuses on transferable shot geometry, camera movement, existing body positions, body/hand motion, gaze and expressions. The separate target reference supplies appearance and setting. It requests a `performance_prompt` plus supporting observations, using neutral subject/body terms and usually 20–50 words in one to three sentences. The requested schema needs no `appearance` field. Every sentence should provide useful visual direction; measured timing and audio handling remain in the planner.
 

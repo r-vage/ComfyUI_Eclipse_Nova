@@ -1370,6 +1370,7 @@ def initialize_endpoints(wildcard_path: str | None = None):
         LoadFilesEndpoints()
         LoadImageEndpoints()
         LoadVideoEndpoints()
+        LoopEndpoints()
         PromptStylerEndpoints()
         ShotPlannerEndpoints()
         ImageSelectorEndpoints()
@@ -1379,6 +1380,25 @@ def initialize_endpoints(wildcard_path: str | None = None):
         log.msg("", "All server endpoints initialized successfully")
     except Exception as e:  # noqa: BLE001 - optional processor initialization boundary
         log.error("", f"Failed to initialize endpoints: {e}")
+
+
+class LoopEndpoints:
+    def __init__(self):
+        @PromptServer.instance.routes.post("/eclipse-nova/loop/stop")
+        async def stop_loop(request):
+            denial = global_mutation_denial(request)
+            if denial is not None:
+                return denial
+            payload = await read_json_object_request(request, max_bytes=1024)
+            token, prompt_id = payload.get("token"), payload.get("prompt_id")
+            if (not isinstance(token, str) or not re.fullmatch(r"[a-f0-9]{32}", token)
+                    or not isinstance(prompt_id, str) or not 1 <= len(prompt_id) <= 256):
+                return web.json_response({"error": "A current loop token and prompt_id are required."}, status=400)
+            from .loop import request_stop
+
+            if not request_stop(token, prompt_id):
+                return web.json_response({"error": "This loop is no longer running."}, status=409)
+            return web.json_response({"success": True})
 
 
 class ImageSelectorEndpoints:

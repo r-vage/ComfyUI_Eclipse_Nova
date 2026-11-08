@@ -75,7 +75,7 @@ image metadata.
 | [Upscale Video](Upscale_Video.md) | Integrated model selection, bounded frame batches, source timing and audio |
 | [Save Video with Generation Data](Save_Video_Data.md) | IMAGE/VIDEO/timeline saving, output and encoding controls, trim/loop behavior and metadata |
 | [Lyric Captions](Lyric_Captions.md) | PIPE renderer and IO slots, shared transcription, optional wording/timing corrections and caption controls |
-| [Frame timelines](Frame_Timeline.md) | Disk-backed append/trim, preview/export and base-only loop plans |
+| [Frame timelines](Frame_Timeline.md) | RAM/disk append/trim, saved runs, H3 resume from a part, sampling seeds and preview/export |
 | [MiniMax H3 planning](MiniMax_H3_Audio_Planner.md) | Segmented audio planning, manual cuts and global/first-part/next-part prompts under **Eclipse Nova → MiniMax** |
 | [MiniMax H3 native clips](MiniMax_H3_Clips.md) | Text, visual-reference and first/last-image generation, optional loaded/reference/generated audio and disk VIDEO loops |
 
@@ -94,6 +94,7 @@ All character tools are under **Eclipse Nova → Character**.
 | --- | --- |
 | [Set/Get and Mode Bridge](Set_Get_Bridge.md) | Named channels, subgraph scope and wireless mute/bypass control |
 | [Get First / Get All Active](GetFirst_GetAllActive.md) | Priority routing, shared chains, per-member choices and positional output wiring |
+| [Eclipse loops](Loops.md) | Sequential analysis/render loops, accumulated previews, live stop buttons outside subgraphs, saved input recovery and part limits |
 | [Utilities](Utility_Nodes.md) | Switches, joiners, pipe merging, cleanup, string helpers and timing utilities |
 
 Try the bundled [Get All Active shared-chain preview](../Workflows/README.md) to

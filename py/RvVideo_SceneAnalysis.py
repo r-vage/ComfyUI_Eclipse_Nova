@@ -1,4 +1,4 @@
-"""Small scene-analysis nodes for an existing Easy-Use for-loop."""
+"""Scene-analysis nodes for the Eclipse sequential loop."""
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -7,6 +7,7 @@ import folder_paths
 from comfy_api.latest import io
 
 from ..core import CATEGORY
+from ..core.cache_artifacts import artifact_fingerprint, record_artifacts
 from ..core.scene_analysis import (
     ANALYSIS_TYPE,
     APPEARANCE_MODES,
@@ -26,6 +27,7 @@ from ..core.scene_analysis import (
     save_scene_analysis,
     scene_analysis_review_report,
 )
+from ..core.video_run import STORAGE_TYPE
 
 _CATEGORY = CATEGORY.MAIN.value + CATEGORY.VIDEO.value
 
@@ -81,7 +83,7 @@ class RvVideo_SceneAnalysisPlan(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         return io.Schema(node_id="Scene Analysis Plan [Eclipse Nova]", display_name="Scene Analysis Plan", category=_CATEGORY,
-                         description="Cache selected source frames on disk in one streaming pass. Every scene keeps its first and last frame. Long selections become overlapping windows, never additional cuts.",
+                         description="Cache selected source frames on disk or in CPU RAM in one streaming pass. Every scene keeps its first and last frame. Long selections become overlapping windows, never additional cuts.",
                          inputs=[io.Custom(PLAN_TYPE).Input("scene_plan", tooltip="Connect Scene Detector, or Scene Cut Limit when limiting cut frequency. Sampling uses the scene ranges in this plan."),
                                  io.Combo.Input("sampling", options=["uniform", "every_nth"], default="uniform",
                                                 tooltip="uniform spreads up to samples_per_scene images across each scene. every_nth takes every Nth original frame and ignores samples_per_scene. Both keep the scene's first and last frame."),
@@ -92,17 +94,29 @@ class RvVideo_SceneAnalysisPlan(io.ComfyNode):
                                  io.Int.Input("max_frames", default=8, min=2, max=256,
                                               tooltip="Maximum selected images in one LM request window. It does not increase samples_per_scene. For up to 16 images per request in uniform mode, set BOTH controls to 16 and use Smart LM Together with Every Nth = 1. Larger windows use more LM memory; longer selections split into overlapping windows."),
                                  io.Int.Input("overlap", default=2, min=0, max=255,
-                                              tooltip="Selected images shared by adjacent windows of the same scene. This helps the LM follow movement across a window boundary, but increases repeated work. Must be smaller than max_frames. It has no effect when the scene fits in one window and never creates video cuts.")],
-                         outputs=[io.Custom(JOBS_TYPE).Output("jobs", tooltip="Window schedule and owned disk-frame cache. Connect this same output to Scene Frame Sampler, Scene Description Collector and Save Scene Analysis."),
+                                              tooltip="Selected images shared by adjacent windows of the same scene. This helps the LM follow movement across a window boundary, but increases repeated work. Must be smaller than max_frames. It has no effect when the scene fits in one window and never creates video cuts."),
+                                 io.Custom(STORAGE_TYPE).Input("storage", optional=True,
+                                              tooltip="Optional Video Run Storage control. RAM retains selected source images in CPU memory. Disk uses temporary analysis image files; Keep in output applies to generated video parts, not this analysis cache. Response JSON is saved for diagnostics in either mode.")],
+                         outputs=[io.Custom(JOBS_TYPE).Output("jobs", tooltip="Window schedule and owned frame cache. Connect this same output to Scene Frame Sampler, Scene Description Collector and Save Scene Analysis."),
                                   io.Int.Output("window_count", tooltip="Total LM analysis windows across all scenes. Use this as the loop's iteration count. It can exceed scene_count when selections are split into windows."),
                                   io.Custom(STATE_TYPE).Output("empty_descriptions", tooltip="Empty text accumulator for the first loop iteration. Carry the collector's updated descriptions through subsequent iterations."),
                                   io.String.Output("report", tooltip="Window count, per-request frame limit and temporary cache location. Connect to Show Any to check the workload before describing the video.")])
 
     @classmethod
-    def execute(cls, scene_plan, sampling="uniform", samples_per_scene=8, every_nth=2, max_frames=8, overlap=2):
+    def fingerprint_inputs(cls, **kwargs):
+        return artifact_fingerprint()
+
+    @classmethod
+    def execute(cls, scene_plan, sampling="uniform", samples_per_scene=8, every_nth=2, max_frames=8, overlap=2, storage=None):
         jobs = prepare_scene_jobs(scene_plan, sampling, samples_per_scene, every_nth, max_frames, overlap,
-                                  folder_paths.get_temp_directory())
-        return io.NodeOutput(jobs, len(jobs.jobs), (), f"{len(jobs.jobs)} windows, at most {max_frames} frames per request. Disk cache: {jobs.cache.name}")
+                                  folder_paths.get_temp_directory(), storage)
+        paths = [jobs.cache.name]
+        if jobs.memory_frames is None:
+            indices = {index for job in jobs.jobs for index in job["frame_indices"]}
+            paths.extend(Path(jobs.cache.name) / f"{index:09d}.npy" for index in indices)
+        record_artifacts(jobs, paths)
+        location = "Selected frames in CPU RAM" if jobs.memory_frames is not None else f"Disk cache: {jobs.cache.name}"
+        return io.NodeOutput(jobs, len(jobs.jobs), (), f"{len(jobs.jobs)} windows, at most {max_frames} frames per request. {location}")
 
 
 class RvVideo_SceneFrameSampler(io.ComfyNode):

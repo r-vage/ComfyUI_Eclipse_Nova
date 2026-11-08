@@ -5,6 +5,7 @@ import json
 from comfy_api.latest import io
 
 from ..core import CATEGORY
+from ..core.cache_artifacts import artifact_fingerprint, record_artifacts
 from ..core.image_blending import BLEND_MODES, BLEND_TOOLTIPS
 from ..core.image_effects import STYLE_MODES, STYLE_TOOLTIP
 from ..core.video_helpers import preview_video_file
@@ -74,10 +75,11 @@ class RvVideo_Load(io.ComfyNode):
             settings = overlay_settings(row)
             if is_overlay(row) and settings["mode"] == "mask" and settings["mask"]:
                 versions.append((row["id"], "mask", file_version(resolve_video_file(settings["mask"]))))
-        return tuple(versions)
+        return artifact_fingerprint(tuple(versions))
 
     @classmethod
     def execute(cls, configuration, width=None, height=None, fps=None):
         config = validate_load(configuration)
         result = load_playlist(playlist_value(config), **resolve_load(config, width, height, fps))
+        record_artifacts(result[0], (result[0].get_stream_source(),))
         return io.NodeOutput(*result, ui={"eclipse_video": [preview_video_file(result[0])[1]], "eclipse_report": [result[3]]})

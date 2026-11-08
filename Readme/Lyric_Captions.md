@@ -20,6 +20,16 @@ Connect full-song `audio`. Optional `vocals` supplies a separated vocal stem for
 analysis; the video keeps the original audio as its soundtrack. Both recordings
 must start at the same time and match in duration within 50 ms.
 
+If no separate `audio` is supplied, IO Lyric Captions can read its background
+VIDEO's audio, including H3-generated sound. It reads audio without concatenating
+the video frames. An explicitly supplied recording takes priority.
+
+For saved H3 runs, connect Loop End or Load Video Run's `caption_context` to
+`pipe`. This restores the complete recording and excerpt start saved by Video
+Loop Start. Keep the selected video as `background` and set its actual duration;
+do not override the saved recording with the already-trimmed soundtrack. Runs
+created before caption context was saved use their soundtrack from zero.
+
 | IO field | How the renderer uses it |
 | --- | --- |
 | `lyrics` | Original complete lyrics, song JSON or Transcribe Audio's text. Blank uses the timing reference's text, or automatic transcription. |

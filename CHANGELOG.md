@@ -1,5 +1,65 @@
 # Changelog
 
+## 2026-11-08
+
+### Version: 1.0.29
+
+- **Feat (New)**
+  - Add Video Run Storage for CPU RAM, temporary disk or persistent output. Share the control across frame timelines, native video clip accumulation and scene-analysis image caching, preserving temporary storage for existing connections.
+  - Add Load Video Run to restore ordered video parts, exact frame ranges, FPS, dimensions and saved soundtracks after a restart. Use one refreshable dropdown to select discovered output runs. Write a manifest after each completed part, keep workflow/prompt snapshots when available, and support moving the whole run folder with relative part paths. Unavailable inactive selections do not block New run; Load and Resume require an available selected run.
+  - Add Video Run Gate to skip independent generation outputs without requesting their upstream inputs and pass through absent or muted optional sources. Add Video Run Info for selected-media timing, storage size and retained-part ranges.
+  - Add Eclipse-owned Loop Start, Video Loop Start and Loop End for sequential analysis and H3 rendering without Easy-Use. Support loops inside subgraphs, with stop requests scoped to the matching loop. Limit parts per queue or stop after saving the current part and its accumulated preview, preserving warmup-trim and transition review. Load mode skips fresh inputs and rendering, including independent accumulated previews.
+  - Add Loop Control to place the live Stop after current part button outside a subgraph. Connect it to either loop start through Get/Set; synchronize both buttons and keep requests scoped to the current queue.
+  - Save resolved timing plans, prompts, references, canvas and audio in persistent render checkpoints, including the full caption recording and excerpt start. Resume without fresh analysis or planning, continue after completed parts or replace from a selected part in a new revision. Keep original media unchanged; retain load/export for older media-only runs. Expose the matching caption context on loop completion or loading so captions align with the saved excerpt.
+  - Add Video Part Seed to separate absolute clip selection from sampling variation and record each completed part's actual seed.
+- **Feat**
+  - Add an optional enable input to Load Audio to skip source loading and previews during saved-run recovery.
+  - Let IO Lyric Captions use generated VIDEO audio when no separate recording is supplied, including RAM clips without concatenating their pixels.
+- **Fix**
+  - Preserve soundtrack timing when exporting image batches and frame timelines to MP4. Set audio timestamps so AAC encoder priming does not introduce a one-packet playback delay.
+  - Rebuild Load Video temporary outputs and scene-analysis sample caches when their files are removed between queues. Invalidate the affected producer and dependent outputs while preserving reuse of intact media, independent workflow variants and downstream-only edits.
+  - Return the original VIDEO through Preview Video while retaining its viewing copy separately. Preserve native loop state and its storage metadata instead of feeding a compressed preview back into accumulation.
+- **Docs**
+  - Explain RAM and disk resource use, saved-run ownership, downstream re-export, analysis cache behavior and the limits of media checkpoints.
+  - Document loop wiring, New/Resume/Load controls, saved input recovery, accumulated previews and separate preparation/render gates.
+- **Changed files**
+  - core/cache_artifacts.py
+  - core/execution_cache.py
+  - core/frame_timeline.py
+  - core/loop.py
+  - core/lyric_caption_pipe.py
+  - core/scene_analysis.py
+  - core/seed_cache.py
+  - core/server_endpoints.py
+  - core/video_checkpoint.py
+  - core/video_clip_append.py
+  - core/video_preview.py
+  - core/video_resume.py
+  - core/video_run.py
+  - core/video_saving.py
+  - core/video_stream.py
+  - js/eclipse-loop.js
+  - js/eclipse-video-run.js
+  - py/RvLogic_Loop.py
+  - py/RvLogic_LoopControl.py
+  - py/RvAudio_LoadAudio.py
+  - py/RvVideo_AppendClip.py
+  - py/RvVideo_FrameTimeline.py
+  - py/RvVideo_Load.py
+  - py/RvVideo_Resume.py
+  - py/RvVideo_RunStorage.py
+  - py/RvVideo_SceneAnalysis.py
+  - pyproject.toml
+  - README.md
+  - Readme/README.md
+  - Readme/Frame_Timeline.md
+  - Readme/Load_Video.md
+  - Readme/Load_Audio.md
+  - Readme/Lyric_Captions.md
+  - Readme/Loops.md
+  - Readme/MiniMax_H3_Clips.md
+  - Readme/Scene_Analysis.md
+
 ## 2026-11-07
 
 ### Version: 1.0.28

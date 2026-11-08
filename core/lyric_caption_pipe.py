@@ -47,13 +47,13 @@ def validate_configuration(raw):
 
 def fields():
     result = [
-        ("audio", "Audio", "Complete original recording. This remains the output video's soundtrack."),
+        ("audio", "Audio", "Complete original recording. When omitted, use the background VIDEO's audio, starting at zero. This remains the caption video's soundtrack."),
         ("vocals", "Audio", "Optional full-song vocal stem with the same time zero and duration (within 50 ms)."),
         ("lyrics", "String", "Original full-song lyrics or song JSON. Blank uses the timing reference's text or automatic transcription."),
         ("corrected_lyrics", "String", "Optional complete edited lyrics. Paste the original text and correct words; blank keeps the original."),
         ("timing", "String", "Original full-song timing JSON from Transcribe Audio or a previous render. Blank creates it internally."),
         ("corrected_timing", "String", "Optional manually edited full-song timing JSON matching the selected lyrics. Blank or {} means no manual override."),
-        ("background", "Background", "IMAGE, VIDEO or exact frame timeline starting at the rendered clip's zero. Background audio is ignored."),
+        ("background", "Background", "IMAGE, VIDEO or exact frame timeline starting at the rendered clip's zero. VIDEO audio is used only when no separate recording is supplied."),
         ("seed", "Int", "Optional unsigned 64-bit seed. A supplied value overrides the local caption-placement seed."),
     ]
     for key, field in OVERRIDE_NUMBERS.items():
@@ -81,6 +81,16 @@ def assemble_pipe(pipe=None, **values):
         if value is not None:
             # Empty strings deliberately clear inherited correction fields.
             context[key] = value
+    if context.get("audio") is None:
+        from comfy_api.latest import Input
+
+        background = context.get("background")
+        if isinstance(background, (list, tuple)) and len(background) == 1:
+            background = background[0]
+        if isinstance(background, Input.Video):
+            from .video_stream import video_frame_source
+
+            context["audio"] = video_frame_source(background).audio()
     return context
 
 

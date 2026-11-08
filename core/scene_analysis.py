@@ -166,6 +166,7 @@ class SceneJobs:
     jobs: tuple
     cache: object
     sampling: dict
+    memory_frames: dict | None = None
 
     def __deepcopy__(self, memo):
         return self
@@ -183,15 +184,18 @@ class DiskFrameSource:
     def iter_frames(self):
         for index in self.indices:
             check_media_interrupt()
-            # uint8 on disk; only one source frame is resident during iteration.
-            yield np.load(Path(self.owner.cache.name) / f"{index:09d}.npy", allow_pickle=False)
+            if self.owner.memory_frames is not None:
+                yield self.owner.memory_frames[index]
+            else:
+                # uint8 on disk; only one source frame is resident during iteration.
+                yield np.load(Path(self.owner.cache.name) / f"{index:09d}.npy", allow_pickle=False)
 
     def __deepcopy__(self, memo):
         return self
 
 
 def prepare_scene_jobs(plan, sampling="uniform", samples_per_scene=8, every_nth=2,
-                       max_frames=8, overlap=2, cache_root=None):
+                       max_frames=8, overlap=2, cache_root=None, storage=None):
     if not isinstance(plan, ScenePlan):
         raise TypeError("Expected Scene Detector plan")
     jobs = []
@@ -205,6 +209,9 @@ def prepare_scene_jobs(plan, sampling="uniform", samples_per_scene=8, every_nth=
                          "frame_indices": list(window), "frame_seconds": [float(times[index]) for index in window]})
             wanted.update(window)
     cache = tempfile.TemporaryDirectory(prefix="eclipse-scenes-", dir=cache_root)
+    # Response JSON still has a diagnostic location in RAM mode. Only selected
+    # images are kept resident; detection and source decoding remain streaming.
+    memory_frames = {} if storage is not None and storage.mode == "memory" else None
     iterator = iter(plan.source.frames())
     try:
         saved = set()
@@ -212,7 +219,11 @@ def prepare_scene_jobs(plan, sampling="uniform", samples_per_scene=8, every_nth=
         for index, frame in enumerate(iterator):
             check_media_interrupt()
             if index in wanted:
-                np.save(Path(cache.name) / f"{index:09d}.npy", _rgb_array(frame), allow_pickle=False)
+                pixels = _rgb_array(frame)
+                if memory_frames is None:
+                    np.save(Path(cache.name) / f"{index:09d}.npy", pixels, allow_pickle=False)
+                else:
+                    memory_frames[index] = pixels.copy()
                 saved.add(index)
             if progress:
                 progress.update_absolute(index + 1)
@@ -226,7 +237,7 @@ def prepare_scene_jobs(plan, sampling="uniform", samples_per_scene=8, every_nth=
         if close:
             close()
     return SceneJobs(plan, tuple(jobs), cache, {"mode": sampling, "samples_per_scene": samples_per_scene,
-                                              "every_nth": every_nth, "max_frames": max_frames, "overlap": overlap})
+                                              "every_nth": every_nth, "max_frames": max_frames, "overlap": overlap}, memory_frames)
 
 
 def get_scene_job(jobs, index):
