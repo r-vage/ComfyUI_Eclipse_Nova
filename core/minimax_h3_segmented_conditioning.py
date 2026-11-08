@@ -12,11 +12,10 @@ import torch  # type: ignore
 from comfy_api.latest import io  # type: ignore
 
 from .image_helpers import flatten_images
+from .minimax_h3_prompts import segment_prompt
 from .minimax_h3_segment_plan import (
     CONDITIONING_FAMILIES,
     REF_IMAGE_SIZES,
-    task_uses_intentional_camera_cut,
-    technical_cut_prompt_for_task,
     validate_segment_plan,
 )
 
@@ -31,20 +30,6 @@ def _single(value: Any, default: Any = None) -> Any:
             return default
         value = value[0]
     return default if value is None else value
-
-
-def _prompt_items(value: Any) -> list[str]:
-    prompts: list[str] = []
-
-    def collect(item: Any) -> None:
-        if isinstance(item, (list, tuple)):
-            for child in item:
-                collect(child)
-        elif isinstance(item, str):
-            prompts.extend(line.strip() for line in item.splitlines() if line.strip())
-
-    collect(value)
-    return prompts or [""]
 
 
 def _visual_strength(value: Any) -> float:
@@ -143,7 +128,6 @@ def encode_segment(
     first_part_prompt = _single(first_part_prompt, "")
     if not isinstance(first_part_prompt, str):
         raise TypeError("first_part_prompt must be a string.")
-    use_first_part = bool(first_part_prompt.strip())
     source = _one_image(source_image, "source_image")
 
     if clip is None or vae is None:
@@ -175,17 +159,12 @@ def encode_segment(
     ):
         raise ValueError("width and height must be positive integer canvases.")
 
-    prompt_lines = _prompt_items(prompts)
-    selected_prompt = (
-        prompt_lines[prompt_index]
-        if 0 <= prompt_index < len(prompt_lines)
-        else prompt_lines[0]
-    )
+    task = None
     if segment_plan is None:
         if task_index is not None:
             raise ValueError("task_index requires segment_plan.")
     else:
-        plan, tasks = validate_segment_plan(segment_plan)
+        segment_plan, tasks = validate_segment_plan(segment_plan)
         if not isinstance(task_index, int) or isinstance(task_index, bool):
             raise TypeError(
                 "task_index must be an integer when segment_plan is connected."
@@ -199,17 +178,7 @@ def encode_segment(
             raise ValueError(
                 "conditioning_family differs from the connected segment_plan task."
             )
-        uses_cut = task_uses_intentional_camera_cut(plan, task)
-        use_first_part = use_first_part and task["source_image_index"] == 0 and not uses_cut
-        if uses_cut:
-            # Parts are joined at measured cuts. Describe the active part as a
-            # continuous shot, without another shot change inside its warmup.
-            selected_prompt = (
-                f"{selected_prompt.rstrip()} {technical_cut_prompt_for_task(plan, task)}"
-            ).strip()
-
-    if use_first_part:
-        selected_prompt = f"{selected_prompt.rstrip()} {' '.join(first_part_prompt.split())}".strip()
+    selected_prompt = segment_prompt(prompts, prompt_index, first_part_prompt, segment_plan, task)
 
     if conditioning_family == "ref2va_active_reference":
         if has_start_guide or has_last_image:

@@ -2,6 +2,32 @@
 
 ## 2026-11-08
 
+### Version: 1.0.30
+
+- **Feat (New)**
+  - Add Part Prompt Editor to read combined prompts and time ranges from the existing saved-run selection, edit individual render parts, and apply full prompt replacements on Resume for lip-sync or native H3. Route it through Get/Set into subgraphs without loading models or media arrays to review text.
+- **Feat**
+  - Save prompt corrections in the new run revision, including upcoming parts, while preserving timing, references, audio, warmup and retained media. Keep changes local to the selected render part even when a scene spans several renders. Validate the source run and restart position before creating a revision; provide Apply, Reset and Clear controls.
+- **Fix**
+  - Align Preview Video soundtracks from input sample zero for image batches and frame timelines. Remove the extra AAC packet delay so preview audio timing agrees with final exports.
+- **Docs**
+  - Explain per-part prompt correction, full replacement text, restart selection and continuing an edited revision.
+- **Changed files**
+  - core/minimax_h3_prompts.py
+  - core/minimax_h3_segmented_conditioning.py
+  - core/server_endpoints.py
+  - core/video_checkpoint.py
+  - core/video_part_prompts.py
+  - core/video_preview.py
+  - js/eclipse-part-prompts.js
+  - py/RvVideo_PartPromptEditor.py
+  - py/RvVideo_Resume.py
+  - pyproject.toml
+  - README.md
+  - Readme/README.md
+  - Readme/Frame_Timeline.md
+  - Readme/Loops.md
+
 ### Version: 1.0.29
 
 - **Feat (New)**

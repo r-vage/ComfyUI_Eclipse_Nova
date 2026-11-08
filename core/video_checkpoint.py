@@ -1,8 +1,9 @@
 # Resolved render inputs, saved before sampling. Model objects are never serialized.
 import json
 import math
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 import torch
@@ -12,6 +13,7 @@ from .image_helpers import flatten_images, unwrap_value
 from .json_store import read_json_object, write_json_object
 from .minimax_h3_clips import REFERENCE_MODES, H3Clip, H3ClipPlan
 from .minimax_h3_segment_plan import audio_shape
+from .video_part_prompts import apply_prompt_edits, source_key
 from .video_resume import plan_ranges, prepare_resume
 from .video_run import (
     _contained_file,
@@ -37,6 +39,7 @@ class RenderInputs:
     visual_condition_strength: float = 0.999
     caption_audio: object = None
     caption_start: float = 0.0
+    prompt_source_id: str = field(default_factory=lambda: uuid4().hex)
 
     @property
     def fps(self):
@@ -122,6 +125,7 @@ def save_checkpoint(root, data, parent=None):
              "reference_mode": data.reference_mode, "visual_condition_strength": data.visual_condition_strength,
              "images": [], "audio": None, "conditioning_audio": None, "parent_run": parent,
              "caption_audio": None, "caption_start": data.caption_start}
+    value["prompt_source_id"] = data.prompt_source_id
     for index, pixels in enumerate(flatten_images(data.images)):
         file = f"reference_{index:05d}.npy"
         _save_array(root / file, pixels.detach().to(device="cpu", dtype=torch.float32).numpy())
@@ -170,6 +174,7 @@ def load_checkpoint(run_path):
     elif value["kind"] != "frames":
         raise ValueError("Unsupported checkpoint render kind.")
     data = render_inputs(plan, value["width"], value["height"], images=images or None, **audios,
+                         prompt_source_id=source_key(value),
                          caption_start=value.get("caption_start", 0.0),
                          **{name: value[name] for name in ("prompts", "first_part_prompt", "reference_mode", "visual_condition_strength")})
     kind, fps, ranges = plan_ranges(data.plan)
@@ -180,11 +185,15 @@ def load_checkpoint(run_path):
     return data
 
 
-def prepare_video_loop(storage, restart_part, previous=None, run_path=None, **inputs):
+def prepare_video_loop(storage, restart_part, previous=None, run_path=None, prompt_edits=None, **inputs):
     if storage.run_mode == "Resume saved run":
         if not run_path or previous is None:
             raise ValueError("Resume requires source and run_path from Load Video Run.")
         data = load_checkpoint(run_path)
+        if type(restart_part) is not int or restart_part < 0:
+            raise ValueError("Restart part must be 0 (continue) or a one-based part number.")
+        completed = len(previous.chunks) if hasattr(previous, "chunks") else len(getattr(previous, "_eclipse_run_entries", ()))
+        data = apply_prompt_edits(data, prompt_edits, restart_part - 1 if restart_part else completed)
         previous, start, remaining, report = prepare_resume(data.plan, True, restart_part, previous,
             storage, data.width, data.height, allow_complete=True)
     elif storage.run_mode == "New run":

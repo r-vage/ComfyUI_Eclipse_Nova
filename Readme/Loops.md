@@ -77,6 +77,45 @@ continues; **N** keeps parts 1 through N−1 and replaces N onward. Persistent r
 creates a new revision and leaves the original files intact. End reports its
 saved path. A completed resume returns the existing result without sampling.
 
+### Edit the prompt for one render part
+
+Connect Load Video Run's **run_path** to **Part Prompt Editor → run_path**, and
+the editor's **prompt_edits** to Start's optional **prompt_edits** input. Both
+connections can use Get/Set, including when Start is inside a subgraph. The editor
+uses the loader's existing selection; it has no second run picker.
+
+1. Select the saved run, then click **Read selected run** in the editor. This reads
+   prompt text and part ranges without loading models, references or audio arrays.
+2. Choose the **Render part** and edit its prompt. Numbers match **Restart part**;
+   a long scene may span several render parts with independently editable prompts.
+3. Enable **Apply edits**, choose **Resume saved run**, and set **Restart part**
+   to the earliest completed part you changed. Leave it at `0` for upcoming parts.
+4. Set **Parts per queue = 1** to review the replacement and its transition, change
+   the render seed if desired, then queue.
+
+The field contains the combined global and scene text for that part. Its edit
+**replaces the full prompt**, so conflicting original instructions are not added
+back. Keep any global direction or native H3 sound instructions you still want.
+Reference-image conditioning, timing, audio selection and lip-sync warmup remain
+as saved. Unedited parts keep their original prompts. Replacing part N still
+retains only parts before N and renders from N onward; it does not splice a new
+part into a retained ending.
+
+The edited plan is saved with the new persistent revision, including changes to
+upcoming parts. Select that revision to continue; the corrections remain even
+when Apply edits is off. Reading its prompts again clears edits already saved
+there. **Reset this part** restores the text read from the selected revision;
+**Clear edits** discards all pending edits and switches Apply off. Neither changes
+saved files. Clear drafts before reading a different run, or disable Apply to use
+that run without them. New run and Load saved run do not apply this editor.
+
+Queueing captures the edits. Stop first to change a prompt for the next queue.
+Editing the ordinary upstream prompt boxes affects New run; use this editor to
+change a saved run. Older media-only runs need a render checkpoint for editing,
+as they do for Resume.
+
+### Routing saved results
+
 Route **Load saved run** around Start directly to final output. Use Storage's
 **generate** output for the generated-versus-loaded selector and its **prepare**
 output to gate independent source/analysis/planning outputs. Otherwise those

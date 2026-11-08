@@ -49,7 +49,10 @@ can reuse them after a restart. Stop after the current part and its accumulated
 preview, or limit the new parts per queue. **Video Part Seed** keeps sampling
 variation separate from planning and the retained media.
 **Loop Control** puts the live stop button outside a subgraph, connected to the
-loop through Get/Set. See [loop controls](Readme/Loops.md) for wiring and resume.
+loop through Get/Set. **Part Prompt Editor** reads prompts from the existing saved
+run selection and replaces the text for individual render parts on Resume. Edits
+persist in the new revision while retained media stays intact.
+See [loop controls](Readme/Loops.md) for wiring, prompt editing and resume.
 See [saved runs](Readme/Frame_Timeline.md#ram-disk-and-saved-runs) for connections
 and the execution gates used to skip generation during re-export.
 

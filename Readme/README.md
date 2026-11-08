@@ -94,7 +94,7 @@ All character tools are under **Eclipse Nova → Character**.
 | --- | --- |
 | [Set/Get and Mode Bridge](Set_Get_Bridge.md) | Named channels, subgraph scope and wireless mute/bypass control |
 | [Get First / Get All Active](GetFirst_GetAllActive.md) | Priority routing, shared chains, per-member choices and positional output wiring |
-| [Eclipse loops](Loops.md) | Sequential analysis/render loops, accumulated previews, live stop buttons outside subgraphs, saved input recovery and part limits |
+| [Eclipse loops](Loops.md) | Sequential analysis/render loops, accumulated previews, live stop buttons outside subgraphs, saved input recovery, per-part prompt editing and part limits |
 | [Utilities](Utility_Nodes.md) | Switches, joiners, pipe merging, cleanup, string helpers and timing utilities |
 
 Try the bundled [Get All Active shared-chain preview](../Workflows/README.md) to

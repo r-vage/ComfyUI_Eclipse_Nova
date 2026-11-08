@@ -1371,6 +1371,7 @@ def initialize_endpoints(wildcard_path: str | None = None):
         LoadImageEndpoints()
         LoadVideoEndpoints()
         LoopEndpoints()
+        VideoRunPromptEndpoints()
         PromptStylerEndpoints()
         ShotPlannerEndpoints()
         ImageSelectorEndpoints()
@@ -1380,6 +1381,34 @@ def initialize_endpoints(wildcard_path: str | None = None):
         log.msg("", "All server endpoints initialized successfully")
     except Exception as e:  # noqa: BLE001 - optional processor initialization boundary
         log.error("", f"Failed to initialize endpoints: {e}")
+
+
+class VideoRunPromptEndpoints:
+    def __init__(self):
+        @PromptServer.instance.routes.post("/eclipse-nova/video_run/prompts")
+        async def read_part_prompts(request):
+            import asyncio
+
+            import folder_paths
+
+            from .request_security import same_origin_browser_request
+            from .video_part_prompts import prompt_catalog
+
+            if not same_origin_browser_request(request):
+                return web.json_response({"error": "Cross-origin prompt request rejected"}, status=403)
+            payload = await read_json_object_request(request, max_bytes=8192)
+            selected = payload.get("saved_run")
+            if not isinstance(selected, str) or not selected or len(selected) > 4096:
+                return web.json_response({"error": "Select a saved run first."}, status=400)
+            try:
+                root = Path(folder_paths.get_output_directory()).resolve()
+                path = (root / selected).resolve()
+                if not path.is_relative_to(root) or path.name != "run.json":
+                    raise ValueError("Select a run.json inside ComfyUI output.")
+                result = await asyncio.to_thread(prompt_catalog, path)
+                return web.json_response(result, headers={"Cache-Control": "no-store"})
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                return web.json_response({"error": str(error)}, status=400)
 
 
 class LoopEndpoints:

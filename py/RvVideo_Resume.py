@@ -12,6 +12,7 @@ from ..core.loop import (
 )
 from ..core.minimax_h3_clips import REFERENCE_MODES
 from ..core.video_checkpoint import prepare_video_loop
+from ..core.video_part_prompts import EDITS_TYPE
 from ..core.video_resume import part_seed
 from ..core.video_run import STORAGE_TYPE, VideoStorage
 
@@ -42,7 +43,8 @@ class RvVideo_LoopStart(io.ComfyNode):
                     io.String.Input("first_part_prompt", optional=True, force_input=True, lazy=True, tooltip="Resolved first lip-sync shot prompt."),
                     io.Audio.Input("caption_audio", optional=True, lazy=True, tooltip="Full recording before selecting the H3 excerpt. Saved with the run for caption alignment after restarting. When absent, captions use the selected soundtrack from zero."),
                     io.Float.Input("caption_start", optional=True, force_input=True, lazy=True, default=0.0, min=0.0, tooltip="Start of the H3 excerpt in caption_audio. Resume restores the saved value, independently of the current source controls."),
-                    io.Custom(STOP_CONTROL_TYPE).Input("stop_control", optional=True, tooltip="Optional Loop Control button, directly or through Get/Set. Put the control on the main canvas to stop after the current save and accumulated preview without opening this subgraph.")],
+                    io.Custom(STOP_CONTROL_TYPE).Input("stop_control", optional=True, tooltip="Optional Loop Control button, directly or through Get/Set. Put the control on the main canvas to stop after the current save and accumulated preview without opening this subgraph."),
+                    io.Custom(EDITS_TYPE).Input("prompt_edits", optional=True, lazy=True, tooltip="Part Prompt Editor replacements for Resume only. Applied after restoring saved inputs and saved with the new revision. Restart at or before any changed completed part.")],
             outputs=loop_outputs(video=True), hidden=[io.Hidden.unique_id, io.Hidden.dynprompt], is_input_list=True)
 
     @classmethod
@@ -50,7 +52,7 @@ class RvVideo_LoopStart(io.ComfyNode):
         storage = unwrap_value(storage)
         if storage.run_mode == "Load saved run":
             return []
-        requested = {"previous", "run_path"} if storage.run_mode == "Resume saved run" else {
+        requested = {"previous", "run_path", "prompt_edits"} if storage.run_mode == "Resume saved run" else {
             "plan", "width", "height", "images", "audio", "conditioning_audio", "prompts", "first_part_prompt", "visual_condition_strength", "caption_audio", "caption_start"}
         connected = cls.hidden.dynprompt.get_node(cls.hidden.unique_id).get("inputs", {})
         return [name for name in requested if name in connected and missing_input(kwargs.get(name))]
@@ -64,7 +66,7 @@ class RvVideo_LoopStart(io.ComfyNode):
     def execute(cls, storage, restart_part=0, parts_per_queue=0, reference_mode="first_and_last",
                 visual_condition_strength=0.999, plan=None, previous=None, run_path=None, width=0, height=0,
                 images=None, audio=None, conditioning_audio=None, prompts="", first_part_prompt="",
-                caption_audio=None, caption_start=0.0, stop_control=None):
+                caption_audio=None, caption_start=0.0, stop_control=None, prompt_edits=None):
         if unwrap_value(storage).run_mode == "Load saved run":
             from comfy_execution.graph_utils import ExecutionBlocker
 
@@ -73,7 +75,7 @@ class RvVideo_LoopStart(io.ComfyNode):
         prompt_value = prompts[0] if isinstance(prompts, list) and len(prompts) == 1 else prompts
         data, previous, start, total, output_storage, report = prepare_video_loop(
             unwrap_value(storage) or VideoStorage(), unwrap_value(restart_part), unwrap_value(previous),
-            unwrap_value(run_path), plan=unwrap_value(plan), width=unwrap_value(width), height=unwrap_value(height),
+            unwrap_value(run_path), prompt_edits=unwrap_value(prompt_edits), plan=unwrap_value(plan), width=unwrap_value(width), height=unwrap_value(height),
             images=images, audio=unwrap_value(audio), conditioning_audio=unwrap_value(conditioning_audio),
             prompts=prompt_value or "", first_part_prompt=unwrap_value(first_part_prompt) or "",
             caption_audio=unwrap_value(caption_audio), caption_start=unwrap_value(caption_start),

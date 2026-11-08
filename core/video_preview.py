@@ -131,6 +131,10 @@ def _encode_video(
                     layout="stereo" if np_audio.shape[0] >= 2 else "mono",
                 )
                 aframe.sample_rate = sample_rate
+                # Match final export: retain AAC priming timestamps so playback
+                # begins at input sample zero, without an extra packet of delay.
+                aframe.pts = 0
+                aframe.time_base = Fraction(1, sample_rate)
                 for packet in astream.encode(aframe):
                     container.mux(packet)
                 for packet in astream.encode():

@@ -222,6 +222,14 @@ with hard links when possible and copying otherwise. It never edits the original
 run. RAM and temporary output are also supported, with their usual lifetimes.
 Changing a widget during a running job does not change its queued settings.
 
+To correct conflicting scene descriptions, connect **Part Prompt Editor** to the
+same run selection and Video Loop Start's **prompt_edits** input, directly or
+through Get/Set. Read the selected run, edit the full prompt for the numbered part,
+enable Apply edits and restart at that part. Timing, images, audio and the retained
+prefix stay as saved. The new revision keeps the changed prompts for subsequent
+resumes. See [part prompt editing](Loops.md#edit-the-prompt-for-one-render-part)
+for the controls and the distinction between scene and render-part numbers.
+
 Resume restores resolved render inputs, not loaded models. Keep the matching
 lip-sync/native mode and model/LoRA preset selected; sampling settings and the
 render seed remain editable for new parts. Old media-only runs can still be
