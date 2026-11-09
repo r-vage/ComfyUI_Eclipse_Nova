@@ -246,15 +246,15 @@ def get_scene_job(jobs, index):
     job = jobs.jobs[index]
     context = {**job, "scene": jobs.plan.scenes[job["scene_id"]],
                "instructions": (
-                   "Observe these images in the listed order. Copy scene_id and window_id. "
+                   "Observe these images as one scene window in the listed order. "
                    "The first frame may already be mid-gesture: describe its existing pose separately "
                    "from movement visible within this window. Do not invent an approach, preparation "
                    "or return to rest. Compare visible body, hand/finger and facial motion; "
                    "summarize distinct changes, not one event per sample. State uncertainty "
                    "if the samples do not establish the motion or a boundary pose is not visible. "
-                   "Include performance_prompt in the same JSON response: a concise natural paragraph "
-                   "of framing and meaningful performance, without labels, timing "
-                   "or routine lip-motion instructions. Follow the selected analysis task's appearance "
+                   "Follow the selected task's response format; this context does not require JSON. "
+                   "When the task requests scene_id/window_id, copy them from this context. "
+                   "Follow the selected analysis task's appearance "
                    "policy: motion analysis omits appearance entirely; full T2V description includes it. "
                    "Describe only visible evidence; do not create cuts. "
                    "Times are relative to the trimmed source VIDEO.")}
@@ -274,6 +274,40 @@ _TEXT_FIELDS = ("framing", "camera_motion", "start_pose", "end_pose")
 _LIST_FIELDS = ("actions", "gaze_expression", "uncertainties")
 
 
+def _input_evidence(value):
+    if "input_evidence" not in value:
+        return None
+    evidence = value["input_evidence"]
+    positions = evidence.get("positions") if isinstance(evidence, dict) else None
+    omitted = evidence.get("omitted_black_positions", []) if isinstance(evidence, dict) else None
+    if (not isinstance(positions, list) or not isinstance(omitted, list)
+            or any(type(position) is not int or position < 0 for position in positions + omitted)
+            or positions != sorted(set(positions)) or omitted != sorted(set(omitted))
+            or set(positions).intersection(omitted) or evidence.get("image_count") != len(positions)
+            or (not positions and not (omitted and evidence.get("skipped_reason") == "all_black"))
+            or (positions and evidence.get("skipped_reason") == "all_black")):
+        raise ValueError("Invalid measured input evidence")
+    return evidence
+
+
+def _caption_observation(value):
+    # Public scene_caption v1 envelope: JSON produced by the caller, while the
+    # model writes ordinary task text. Never fabricate a structured pose audit.
+    if type(value.get("version")) is not int or value["version"] != 1:
+        raise ValueError("Expected scene_caption version 1")
+    if value.get("description_mode") != "full":
+        raise ValueError("Scene captions retain task text; description_mode must be full")
+    for key in ("performance_prompt", "source_task", "source_response"):
+        if not isinstance(value.get(key), str) or not value[key].strip():
+            raise ValueError(f"Scene caption {key} must contain text")
+    result = {key: value[key] for key in ("format", "version", "scene_id", "window_id", "description_mode",
+                                        "performance_prompt", "source_task", "source_response")}
+    evidence = _input_evidence(value)
+    if evidence is not None:
+        result["input_evidence"] = evidence
+    return result
+
+
 def validate_observation(raw, scene_id, window_id):
     if not isinstance(raw, str) or len(raw) > 65536:
         raise ValueError("Expected JSON text smaller than 64 KiB")
@@ -283,12 +317,15 @@ def validate_observation(raw, scene_id, window_id):
     try:
         value = json.loads(raw)
     except ValueError as error:
-        raise ValueError("Model response is not complete JSON; increase Max tokens or retry this window") from error
+        raise ValueError("Expected scene JSON. For ordinary image/H3 tasks, enable Scene JSON in Smart LM Loader. "
+                         "For structured scene tasks, check Max tokens or retry this window") from error
     if not isinstance(value, dict):
         raise TypeError("Expected one scene observation object")
     for key, expected in (("scene_id", scene_id), ("window_id", window_id)):
         if type(value.get(key)) is not int or value[key] != expected:
             raise ValueError(f"Response {key} must be {expected}")
+    if value.get("format") == "scene_caption":
+        return _caption_observation(value)
     mode = value.get("description_mode")
     if mode is not None and mode not in ("motion", "full"):
         raise ValueError("Unknown scene description_mode; expected motion or full")
@@ -333,17 +370,8 @@ def validate_observation(raw, scene_id, window_id):
         result["review_warnings"] = _unique(warnings)
     if mode is not None:
         result["description_mode"] = mode
-    if "input_evidence" in value:
-        evidence = value["input_evidence"]
-        positions = evidence.get("positions") if isinstance(evidence, dict) else None
-        omitted = evidence.get("omitted_black_positions", []) if isinstance(evidence, dict) else None
-        if (not isinstance(positions, list) or not isinstance(omitted, list)
-                or any(type(position) is not int or position < 0 for position in positions + omitted)
-                or positions != sorted(set(positions)) or omitted != sorted(set(omitted))
-                or set(positions).intersection(omitted) or evidence.get("image_count") != len(positions)
-                or (not positions and not (omitted and evidence.get("skipped_reason") == "all_black"))
-                or (positions and evidence.get("skipped_reason") == "all_black")):
-            raise ValueError("Invalid measured input evidence")
+    evidence = _input_evidence(value)
+    if evidence is not None:
         result["input_evidence"] = evidence
     return result
 
@@ -415,7 +443,7 @@ def build_scene_analysis(jobs, state):
             raise ValueError(f"Scene {scene['scene_id']} has missing or reordered windows")
         observations = [observation for window in windows for observation in window["observations"]]
         scenes.append({**scene, "windows": windows, "instruction": performance_instruction(observations),
-                       "uncertainties": _unique(value for item in observations for value in item["uncertainties"])})
+                       "uncertainties": _unique(value for item in observations for value in item.get("uncertainties", []))})
     bundle = {"format": "eclipse_scene_analysis", "version": 2, "source": jobs.plan.metadata,
               "sampling": jobs.sampling, "scenes": scenes}
     validate_scene_analysis(bundle)

@@ -31,7 +31,7 @@ The screenshots show the Amber theme; Neutral is the default.
 | Saving and metadata | [Save Images](Readme/Save_Images.md), [Save Video](Readme/Save_Video_Data.md), [Read Prompt Files](Readme/ReadPromptFiles.md), [Save Prompt](Readme/Save_Prompt.md) |
 | Audio and video | [Load Audio](Readme/Load_Audio.md), [Recorder](Readme/System_Audio_Recorder.md), [Load/Preview Video](Readme/Load_Video.md), [Scene and motion analysis](Readme/Scene_Analysis.md), [Upscale Video](Readme/Upscale_Video.md), [Lyric Captions](Readme/Lyric_Captions.md) |
 | Character and timeline workflows | [Character references](Readme/Character_Reference_Nodes.md), [Shot Planner](Readme/Character_Shot_Planner.md), [MiniMax audio planning](Readme/MiniMax_H3_Audio_Planner.md), [MiniMax native clips](Readme/MiniMax_H3_Clips.md), [Frame timelines](Readme/Frame_Timeline.md) |
-| Routing and review | [Set/Get and Bridge](Readme/Set_Get_Bridge.md), [Get First / Get All Active](Readme/GetFirst_GetAllActive.md), [Previews and Stop](Readme/DOM_Previews.md), [Utilities](Readme/Utility_Nodes.md) |
+| Routing and review | [Set/Get and Bridge](Readme/Set_Get_Bridge.md), [Get First / Get All Active](Readme/GetFirst_GetAllActive.md), [Previews and Stop](Readme/DOM_Previews.md), [Prompt Review](Readme/Prompt_Review.md), [Utilities](Readme/Utility_Nodes.md) |
 
 **Reference-video analysis** measures scene boundaries on CPU, limits cut frequency
 when requested, and samples bounded windows from disk or RAM. SmartLLM Nova describes

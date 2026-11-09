@@ -73,7 +73,17 @@ Select **Scene Motion Analysis** for image-to-video. Its prompt focuses on trans
 
 Select **Scene Description (T2V)** for a complete visual description. Its paragraph includes relevant visible appearance, clothing, setting, lighting, framing and movement. The additional `appearance` field is optional supporting metadata: omitting it does not stop collection or request another model call. If it is blank or uses a structured format, it is retained with a review warning. Generation uses the unchanged `performance_prompt` paragraph. The task remains grounded in the supplied images and does not infer sound or unseen events. Both tasks write their paragraph in the same call as the observations; neither needs a separate rewriting pass. The existing single correction attempt remains available for invalid output. Task selection is recorded as `description_mode` by Smart LM, independently of what the model returns.
 
-Connect sampler `context` to the Prompt Pipe's **user_prompt**, not its system_prompt. Context supports both tasks. Keep the same task throughout the loop. A custom system prompt intentionally replaces the selected task instructions, while grouping and sizing remain in effect; it must satisfy the collector contract.
+For ordinary image tasks such as Detailed/Ultra Detailed Description or MiniMax H3,
+enable **Scene JSON** in Smart LM Loader's Mode bar and **Together: On** in Image
+handling. The loader builds a `scene_caption` version-1 JSON envelope in code from
+the task's normal answer, without asking the model for JSON or adding an inference
+call. The collector stores its scene paragraph and full original response, without
+inventing pose/action audit fields. H3 uses its visual-description field for the
+paragraph and retains the full response for review. Choose **include source
+appearance** in Scene Analysis to H3: captions keep the selected task's wording.
+Turning Scene JSON off preserves direct text output for existing workflows.
+
+Connect sampler `context` to the Prompt Pipe's **user_prompt**, not its system_prompt. It supplies scene/window IDs and measured frame information without prescribing an output format. Keep the same task throughout the loop. A custom system prompt intentionally replaces the selected task instructions, while grouping and sizing remain in effect; enable Scene JSON to package its ordinary text for the collector.
 
 Starting and ending poses are snapshots of positions already present. A scene can start partway through a gesture: hands already beside the head do not imply raising them there. Actions describe only the visible continuation between samples, including finger or wrist movement while the arms stay in place. The performance paragraph describes an existing pose and continuing motion naturally, without inventing preparation, a complete gesture cycle or a return to rest.
 
@@ -81,7 +91,7 @@ The collector verifies IDs, fields, required paragraph and window order. Usable 
 
 If the model returns `actions`, `gaze_expression` or `uncertainties` as a text string, Smart LM and the collector accept it as one list item without changing the wording or splitting at commas. A blank string becomes an empty list. This formatting difference needs no correction call and does not stop collection, including for cached responses. The collector keeps its original received response in the recovery file.
 
-Incomplete JSON, missing required text, non-text action/expression/uncertainty values, mismatched IDs or incomplete coverage still stop with a scene/window-specific error and a recovery JSON path. These structural failures use the existing single correction attempt in Smart LM; no scene is silently discarded. Saved **version-2** analyses contain measured boundaries, window selections, observations, warnings and generation paragraphs. New motion results need no appearance field; full descriptions can include it as supporting metadata. Older unmarked results still require text appearance metadata for their legacy export processing. Version-1 exports and observations without `performance_prompt` require a new analysis. Smart LM adds actual request positions and dimensions as `input_evidence`; these are mapped back to source frame IDs/timestamps, so its stride is auditable.
+For the dedicated structured scene tasks, incomplete JSON, missing required text, non-text action/expression/uncertainty values, mismatched IDs or incomplete coverage still stop with a scene/window-specific error and a recovery JSON path. These structural failures use the existing single correction attempt in Smart LM; no scene is silently discarded. Application-built captions instead validate their envelope, text, IDs and available request evidence; formatting inside the model's text cannot break the JSON. Saved **version-2** analyses support both observation types and contain measured boundaries, window selections and generation paragraphs. New motion results need no appearance field; full descriptions can include it as supporting metadata. Older unmarked results still require text appearance metadata for their legacy export processing. Version-1 exports and observations without `performance_prompt` require a new analysis. Smart LM adds actual request positions and dimensions as `input_evidence`; these are mapped back to source frame IDs/timestamps, so its stride is auditable.
 
 Both tasks summarize distinct movements instead of producing one event per sample or listing every speech-like mouth shape. They contain no example pose for the model to copy. Smart LM filters exactly black frames after stride and resizing, before inference. Starting/ending poses refer to the first/last image actually sent. Dark images with any nonzero pixel are kept, and the ordinary IMAGE passthrough is unchanged. Other tasks retain their image behavior.
 
@@ -108,6 +118,14 @@ The default FL2VA setup retains the exact reference image at global frame 0. If 
 The exporter uses ready-written performance paragraphs. Windows within a scene are joined in order, suppressing only identical neighboring paragraphs from shared samples; later recurrences remain. New task-specific paragraphs and explicit edits keep their wording. Older unmarked observations retain bounded appearance and routine mouth-sentence cleanup. All-black selections receive a `Black screen.` paragraph without inference, keeping their part present and measured timing unchanged.
 
 Prompts are single paragraphs so H3's line-based prompt selector keeps each description intact. Save Scene Analysis writes version-2 files that Load Scene Analysis can read directly. Manual prompt inputs can be wired independently of the analysis JSON. Cleanup applies only to older unmarked results and cannot recover an omitted gesture; new task paragraphs retain their wording and review warnings. Review the paragraphs and sampled-frame evidence before rendering.
+
+Use **[Prompt Review](Prompt_Review.md)** between Scene Analysis to H3 and the
+planner to review generated text directly. Connect `first_part_prompt` to its
+`first_prompt` input and `next_part_prompts` to `prompts`; route its corresponding
+outputs onward. Pause defaults to off and passes the original text through.
+Enable Pause before queueing to edit the opening and later prompts together,
+then press Continue to use the edits in that same run. Keep one paragraph per
+scene when joining the list for a line-based H3 planner.
 
 | Adapter output | Destination |
 | --- | --- |

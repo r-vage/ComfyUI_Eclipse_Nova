@@ -177,6 +177,7 @@ class EclipseExtension(ComfyExtension):
         from .py.RvText_DualText import RvText_DualText
         from .py.RvText_MarkdownNote import RvText_MarkdownNote
         from .py.RvText_Multiline import RvText_Multiline
+        from .py.RvText_PromptReview import RvText_PromptReview
         from .py.RvText_PromptStyler import RvText_PromptStyler
         from .py.RvText_ReadPromptFiles import RvText_ReadPromptFiles
         from .py.RvText_ReplaceString import RvText_ReplaceString
@@ -363,6 +364,7 @@ class EclipseExtension(ComfyExtension):
             RvText_DualText,
             RvText_MarkdownNote,
             RvText_Multiline,
+            RvText_PromptReview,
             RvText_PromptStyler,
             RvText_ReadPromptFiles,
             RvText_ReplaceString,

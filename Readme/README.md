@@ -23,6 +23,7 @@ folders. Nova nodes use `[Eclipse Nova]` IDs and the **🌒 Eclipse Nova** menu.
 | [Smart Prompt](Smart_Prompt.md) | Editable folder/file lists, searchable choices, drag ordering, refresh and local/input seeds |
 | [Seed and Dual Seed](Seed.md) | Exact Image/Prompt seed controls, shared 32/64-bit range and 50-entry result histories |
 | [Wildcard Processor](Wildcard_Processor.md) | Populate/Fixed modes, Prompt/Result/Seed sections, substitutions and string/list outputs |
+| [Prompt Review](Prompt_Review.md) | Display incoming prompts, optionally pause to edit them, and continue the same run |
 | [String Multiline](String_Multiline.md) | Text or filtering patterns, preview, Stop, prefix input and per-line list output |
 | [Prompt Styler](Prompt_Styler.md) | Style libraries, positive/negative controls, underscore removal and queue-aware index actions |
 | [Prompt Forge panel](Prompt_Forge_Panel.md) | Mode bar, pinnable text sections, generation controls and seed overrides |

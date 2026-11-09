@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-11-09
+
+### Version: 1.0.31
+
+- **Feat (New)**
+  - Add Prompt Review to display incoming text or prompt lists, optionally pause for direct edits, and Continue the same run without rerunning the source. Pause defaults to off and passes inputs through unchanged; review the optional first prompt with the remaining prompts using the themed dropdown or previous/next arrows.
+- **Fix**
+  - Accept application-built scene captions from Smart LM Loader's Scene JSON mode. Preserve ordinary task text and H3 visual descriptions through collection, saved analysis and H3 export without requiring invented pose fields or model-formatted JSON.
+  - Keep sampler context independent of response format so ordinary image tasks can follow their own instructions. Validate caption IDs and measured frame evidence while retaining the existing structured observation contract.
+- **Docs**
+  - Document prompt review controls, first/later scene connections and same-run continuation.
+  - Explain Scene JSON, Together and appearance-policy selection for ordinary image tasks in scene-analysis loops.
+- **Changed files**
+  - core/prompt_review.py
+  - core/server_endpoints.py
+  - js/eclipse-prompt-review.js
+  - py/RvText_PromptReview.py
+  - README.md
+  - Readme/README.md
+  - Readme/Prompt_Review.md
+  - core/scene_analysis.py
+  - py/RvVideo_SceneAnalysis.py
+  - Readme/Scene_Analysis.md
+  - pyproject.toml
+
 ## 2026-11-08
 
 ### Version: 1.0.30

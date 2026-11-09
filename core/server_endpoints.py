@@ -1372,6 +1372,7 @@ def initialize_endpoints(wildcard_path: str | None = None):
         LoadVideoEndpoints()
         LoopEndpoints()
         VideoRunPromptEndpoints()
+        PromptReviewEndpoints()
         PromptStylerEndpoints()
         ShotPlannerEndpoints()
         ImageSelectorEndpoints()
@@ -1381,6 +1382,46 @@ def initialize_endpoints(wildcard_path: str | None = None):
         log.msg("", "All server endpoints initialized successfully")
     except Exception as e:  # noqa: BLE001 - optional processor initialization boundary
         log.error("", f"Failed to initialize endpoints: {e}")
+
+
+class PromptReviewEndpoints:
+    def __init__(self):
+        from .prompt_review import MAX_REQUEST_BYTES, broker
+        from .request_security import same_origin_browser_request
+
+        async def payload_for(request, max_bytes):
+            if not same_origin_browser_request(request):
+                raise web.HTTPForbidden(text="Cross-origin prompt review request rejected")
+            payload = await read_json_object_request(request, max_bytes=max_bytes)
+            client = payload.get("client_id")
+            if not isinstance(client, str) or not 1 <= len(client) <= 256:
+                raise web.HTTPBadRequest(text="A ComfyUI client_id is required")
+            return payload
+
+        @PromptServer.instance.routes.post("/eclipse-nova/prompt-review/pending")
+        async def pending_reviews(request):
+            payload = await payload_for(request, 4096)
+            workflow = payload.get("workflow_id")
+            if workflow is not None and (not isinstance(workflow, str) or len(workflow) > 256):
+                return web.json_response({"error": "Invalid workflow_id"}, status=400)
+            return web.json_response({"reviews": broker.pending(payload["client_id"], workflow)},
+                                     headers={"Cache-Control": "no-store"})
+
+        @PromptServer.instance.routes.post("/eclipse-nova/prompt-review/respond")
+        async def respond_review(request):
+            payload = await payload_for(request, MAX_REQUEST_BYTES)
+            token, prompt_id = payload.get("token"), payload.get("prompt_id")
+            if (not isinstance(token, str) or not re.fullmatch(r"[a-f0-9]{32}", token)
+                    or not isinstance(prompt_id, str) or not 1 <= len(prompt_id) <= 256):
+                return web.json_response({"error": "A current review token and prompt_id are required"}, status=400)
+            try:
+                accepted = broker.decide(token=token, prompt_id=prompt_id, client_id=payload["client_id"],
+                                         action=payload.get("action"), texts=payload.get("texts"))
+            except (ValueError, TypeError, UnicodeError) as error:
+                return web.json_response({"error": str(error)}, status=400)
+            if not accepted:
+                return web.json_response({"error": "This review is no longer waiting. Refresh its status."}, status=409)
+            return web.json_response({"success": True})
 
 
 class VideoRunPromptEndpoints:
