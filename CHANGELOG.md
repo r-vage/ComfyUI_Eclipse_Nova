@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-10
+
+### Version: 1.0.32
+
+- **Fix**
+  - Accept detailed scene-generation paragraphs without the obsolete 80-word review warning. Retain scene format, evidence and pose validation.
+- **Docs**
+  - Update scene-analysis guidance to allow detail proportional to the observed scene.
+- **Changed files**
+  - core/scene_motion_text.py
+  - Readme/Scene_Analysis.md
+  - pyproject.toml
+
 ## 2026-11-09
 
 ### Version: 1.0.31

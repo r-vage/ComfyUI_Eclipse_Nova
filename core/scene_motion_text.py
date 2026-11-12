@@ -65,8 +65,6 @@ def performance_prompt_issue(text):
     """Validate the public scene paragraph contract without rebuilding audit fields."""
     if not isinstance(text, str) or not text.strip():
         return "performance_prompt is required; rerun Scene Motion Analysis"
-    if len(text.split()) > 80:
-        return "performance_prompt exceeds 80 words; rerun with a concise visual performance paragraph"
     if "\n" in text.strip() or _PERFORMANCE_LABELS.search(text):
         return "performance_prompt must be one natural paragraph without field labels or lists"
     return None
