@@ -3,7 +3,8 @@
 Find **Upscale Video** under **Eclipse Nova → Video**. It loads the selected model,
 reads a small batch of video frames, upscales them, writes the result to a
 temporary video, and releases the batch before continuing. The output is native
-VIDEO with audio and the original frame timing.
+VIDEO with audio and the original frame timing. The input also accepts an exact
+Eclipse frame timeline, including assembled lip-sync runs.
 
 ## Visual tour
 
@@ -55,6 +56,28 @@ Video works as an input too.
 Keep Load Video's Timing bar at **Source** to preserve mixed frame rates. The
 upscaler processes every input frame once, retaining frame order, count and
 duration. It does not repeat frames, interpolate motion, or apply a new FPS.
+
+### H3 frame timelines and optional soundtrack
+
+Connect the assembled H3 result to **video / timeline**. Exact timelines stream
+their stored frames in batches, using the timeline's FPS; no full IMAGE batch or
+preliminary video conversion is needed. Native H3 VIDEO uses the same input.
+
+Connect the saved or selected master soundtrack to the optional **audio** input
+when using a frame timeline. Connected audio replaces a native video's embedded
+soundtrack as well. It starts at zero, is converted to 48 kHz stereo, and is
+trimmed or silence-padded to the video duration. Leave it disconnected to retain
+native VIDEO audio. A timeline without connected audio produces silent video.
+
+In a workflow with optional groups, publish the output through a Set variable
+and use **Get First** downstream: upscaled result first, original result second.
+Muting the whole upscale group then selects the original automatically. Put
+upscaling after the assembled render loop and before captions. Read width and
+height from the processed result with **Video Run Info** so captions use the
+output resolution; give those variables the same original-size fallback.
+
+Use **Load saved run** to upscale existing parts without generating them again.
+The saved generation parts retain their original resolution.
 
 ## Models and devices
 
@@ -126,7 +149,7 @@ released. Preview Video creates a browser-compatible viewing copy. After an
 abrupt backend exit, unneeded intermediate files may remain for normal temp
 cleanup; stop the backend before manually removing them.
 
-The current path supports SDR RGB file, component, and native concatenated VIDEO
-inputs. File trims, crops and display rotation are applied before upscaling.
+The current path supports SDR RGB file, component, native concatenated VIDEO,
+and exact frame timeline inputs. File trims, crops and display rotation are applied before upscaling.
 Convert HDR or composite alpha first. Original source videos and models are
 never overwritten.

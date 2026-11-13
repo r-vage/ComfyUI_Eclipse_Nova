@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from dataclasses import replace
 from itertools import islice
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from torch.nn import functional
 from .frame_timeline import raise_storage_error
 from .logger import log
 from .video_helpers import TemporaryVideo
+from .video_loader import _normalize_component_audio
 from .video_stream import video_frame_source
 from .video_timing import check_media_interrupt, encode_timed_video
 
@@ -278,7 +280,7 @@ def _processed_frames(source, backend, batch_size, width, height):
 
 
 def upscale_video(video, model_name, batch_size=2, resize_to="model", resize_width=1920,
-                  resize_height=1080, device="auto", tile_size=512):
+                  resize_height=1080, device="auto", tile_size=512, *, audio=None):
     if not isinstance(batch_size, int) or not 1 <= batch_size <= 64:
         raise ValueError("Batch size must be between 1 and 64")
     from .devices import device_selection
@@ -288,6 +290,11 @@ def upscale_video(video, model_name, batch_size=2, resize_to="model", resize_wid
     kind, model_path = resolve_model(model_name)
     check_media_interrupt()
     source = video_frame_source(video)
+    if audio is not None:
+        # Exact frame timelines keep their soundtrack separately. Normalize it
+        # only when requested, after the same RAM check as native VIDEO audio.
+        duration = source.timing.duration
+        source = replace(source, audio=lambda: _normalize_component_audio(audio, duration), has_audio=True)
     backend = create_upscaler(kind, model_path, source.width, source.height, batch_size, device, tile_size)
     path = None
     try:
@@ -300,11 +307,11 @@ def upscale_video(video, model_name, batch_size=2, resize_to="model", resize_wid
         if frame_bytes + audio_bytes * 2 > mm.get_free_memory(torch.device("cpu")) * .8:
             raise ValueError("The selected upscale batch and audio exceed the available RAM budget. Reduce batch size or video dimensions.")
         log.msg(_LOG_PREFIX, f"{kind} on {backend.device}: {len(source.timing)} frames, {source.width}x{source.height} → {width}x{height}, batch {batch_size}")
-        audio = source.audio()
+        soundtrack = source.audio()
         directory = folder_paths.get_temp_directory()
         fd, path = tempfile.mkstemp(prefix="EclipseUpscale_", suffix=".mov", dir=directory)
         os.close(fd)
-        encode_timed_video(_processed_frames(source, backend, batch_size, width, height), source.timing, audio,
+        encode_timed_video(_processed_frames(source, backend, batch_size, width, height), source.timing, soundtrack,
                            path, width=width, height=height, preset="veryfast", lossless=True)
         output = TemporaryVideo(path, preview_compatible=False)
         report = (f"Model: {model_name}\nBackend: {kind}; device: {backend.device}; batch size: {batch_size}\n"

@@ -2,6 +2,21 @@
 
 ## 2026-11-13
 
+### Version: 1.0.36
+
+- **Feat**
+  - Let Upscale Video stream exact H3 frame timelines as well as native VIDEO, with an optional separate soundtrack. Preserve frame timing and bounded frame batches; connected audio replaces embedded audio and is aligned to the result duration.
+- **Docs**
+  - Explain H3 upscaling before captions, output dimensions and variable fallback when the optional group is muted.
+- **Changed files**
+  - core/video_stream.py
+  - core/video_upscale.py
+  - py/RvVideo_Upscale.py
+  - Readme/Upscale_Video.md
+  - pyproject.toml
+
+## 2026-11-13
+
 ### Version: 1.0.35
 
 - **Feat**

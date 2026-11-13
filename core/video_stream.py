@@ -31,7 +31,15 @@ class VideoFrameSource:
 
 
 def video_frame_source(video):
+    from .frame_timeline import FrameTimeline
     from .video_clip_append import MemoryClipVideo
+
+    if isinstance(video, FrameTimeline):
+        if video.channels != 3 or not len(video):
+            raise ValueError("Video upscaling requires a nonempty RGB frame timeline")
+        timing = VideoTiming.constant(len(video), video.fps)
+        return VideoFrameSource(video.width, video.height, timing,
+                                lambda: iter(video), lambda: None, False)
 
     if isinstance(video, MemoryClipVideo):
         width, height = video.get_dimensions()
