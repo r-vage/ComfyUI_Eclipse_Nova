@@ -124,6 +124,7 @@ def plan_segments(
         technical_seam_style, "plain_reset"
     )
     technical_cut_instructions = _string_items(technical_cut_instruction)
+    supplied_part_directions = list(technical_cut_instructions)
     empty_scene_directions = isinstance(technical_cut_instruction, (list, tuple)) and not technical_cut_instructions
     if not technical_cut_instructions:
         technical_cut_instructions = [DEFAULT_TECHNICAL_CUT_INSTRUCTION]
@@ -250,6 +251,7 @@ def plan_segments(
     manual_times: list[float] = []
     target_frames: list[int] = []
     continuation_frames: list[int] = []
+    untimed_images = 0
     transition_source = "single_image"
     if image_count > 1:
         manual = parse_manual_transition_times(
@@ -264,6 +266,30 @@ def plan_segments(
         else:
             transition_source = "manual_seconds"
             manual_times, target_frames = manual
+            untimed_images = image_count - 1 - len(target_frames)
+            if untimed_images:
+                last_frame, last_time = target_frames[-1], manual_times[-1]
+                if any(frame < 1 for frame in target_frames) or last_time >= duration:
+                    raise ValueError("manual transition times must be inside the audio timeline.")
+                if total_frames - last_frame <= untimed_images:
+                    raise ValueError(
+                        "Not enough audio after the last specified cut for the remaining images; "
+                        "move that cut earlier or use fewer images."
+                    )
+                # Split only the unassigned remainder, leaving supplied cuts
+                # fixed. Quantize from the actual audio duration, not its ceil.
+                targets = [round((last_time + (duration - last_time) * index
+                                  / (untimed_images + 1)) * H3_FPS) - last_frame
+                           for index in range(1, untimed_images + 1)]
+                spaced, _ = space_transition_frames(targets, total_frames - last_frame)
+                target_frames.extend(last_frame + frame for frame in spaced)
+                transition_source = "manual_seconds_even_remainder"
+                notes.append(
+                    f"Kept {len(manual_times)} supplied image cut times; evenly spaced "
+                    f"{untimed_images} remaining images after {last_time:g}s."
+                )
+                if align_to_activity_gap:
+                    notes.append("Partial image times stay fixed; activity alignment applies only to technical splits.")
     elif manual_transition_times.strip():
         if technical_split_source != "original_image_reset":
             raise ValueError(
@@ -283,7 +309,7 @@ def plan_segments(
     activity_error = "alignment disabled"
     if align_to_activity_gap and transition_source != MANUAL_CAMERA_CUT_SOURCE:
         activity, activity_error = encoded_audio_activity(audio_encoder_output)
-    if activity is not None and image_count > 1:
+    if activity is not None and image_count > 1 and not untimed_images:
         for index, target in enumerate(target_frames):
             aligned, details = align_activity_gap(
                 activity,
@@ -306,7 +332,7 @@ def plan_segments(
                     f"Transition {index + 1}: frame {target} -> {aligned} "
                     f"({transition_edge}); {details}."
                 )
-    elif align_to_activity_gap and image_count > 1:
+    elif align_to_activity_gap and image_count > 1 and not untimed_images:
         notes.append(f"Activity-alignment fallback: {activity_error}.")
 
     transition_frames, spacing_notes = space_transition_frames(
@@ -396,6 +422,15 @@ def plan_segments(
         "resume_hold_duration": resume_hold_duration,
         "tasks": tasks,
     }
+    if image_count > 1:
+        # Keep scene descriptions distinct from the fallback technical-camera
+        # instruction. Empty connected directions mean one shared description.
+        if untimed_images and supplied_part_directions:
+            # Extra reference changes do not imply a return to an earlier scene.
+            supplied_part_directions.extend(
+                [supplied_part_directions[-1]] * max(0, image_count - 1 - len(supplied_part_directions))
+            )
+        plan["image_part_directions"] = supplied_part_directions
     technical_cut_number = 0
     for task in tasks:
         if task_uses_intentional_camera_cut(plan, task):

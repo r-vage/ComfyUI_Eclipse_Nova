@@ -2,6 +2,29 @@
 
 ## 2026-11-13
 
+### Version: 1.0.35
+
+- **Feat**
+  - Extend Scene Detector to detect persistent appearance changes across short blended transitions before sampling separate scene descriptions, with adjustable sensitivity and preserved source timing. Keep its existing node ID and load older workflows with defaults for the added controls.
+  - Accept partial image transition times in the H3 audio planner. Keep supplied cuts fixed and space remaining images evenly through the remaining audio, retaining the last scene description when no later description is supplied.
+- **Fix**
+  - Pair multi-image H3 intervals with their first and subsequent scene descriptions, retaining each description across render-capacity splits. Share a single description when there are no later scenes, and preserve existing saved-plan prompts on resume.
+- **Docs**
+  - Explain blended-transition detection, task-dependent appearance choices, and matching reference images to measured scene boundaries.
+- **Changed files**
+  - core/scene_gradual.py
+  - core/scene_analysis.py
+  - core/minimax_h3_prompts.py
+  - core/minimax_h3_segment_plan.py
+  - core/minimax_h3_segmented_timeline.py
+  - core/minimax_h3_configuration.py
+  - py/RvVideo_SceneAnalysis.py
+  - Readme/Scene_Analysis.md
+  - Readme/MiniMax_H3_Audio_Planner.md
+  - pyproject.toml
+
+## 2026-11-13
+
 ### Version: 1.0.34
 
 - **Feat**

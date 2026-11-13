@@ -14,6 +14,7 @@ import numpy as np
 from .json_store import write_json_object
 from .logger import log
 from .minimax_h3_segment_plan import H3_FPS
+from .scene_gradual import appearance_histogram, gradual_boundaries
 from .scene_motion_text import (
     motion_only_text,
     performance_motion_text,
@@ -46,7 +47,8 @@ class ScenePlan:
 
 
 def detect_scenes(video, longest_side=128, threshold=2.5, window_width=4,
-                  min_content=15.0, min_scene_frames=1):
+                  min_content=15.0, min_scene_frames=1, *, detect_gradual=False,
+                  gradual_threshold=2.3, gradual_min_change=0.2):
     try:
         from scenedetect import FrameTimecode
         from scenedetect.detectors import AdaptiveDetector
@@ -54,6 +56,9 @@ def detect_scenes(video, longest_side=128, threshold=2.5, window_width=4,
         raise RuntimeError("Scene Detector needs scenedetect>=0.7.2 in the ComfyUI environment") from error
     if longest_side < 16 or threshold <= 0 or window_width < 1 or min_content < 0 or min_scene_frames < 1:
         raise ValueError("Invalid scene detector settings")
+    if (not isinstance(detect_gradual, bool) or not math.isfinite(gradual_threshold) or gradual_threshold <= 0
+            or not math.isfinite(gradual_min_change) or not 0 < gradual_min_change <= 1):
+        raise ValueError("Invalid gradual scene detector settings")
     source = video_frame_source(video)
     count = len(source.timing)
     detector = AdaptiveDetector(adaptive_threshold=threshold, min_content_val=min_content,
@@ -62,6 +67,7 @@ def detect_scenes(video, longest_side=128, threshold=2.5, window_width=4,
     size = (max(1, round(source.width * scale)), max(1, round(source.height * scale)))
     rate = Fraction(count, 1) / source.timing.duration
     cuts = []
+    appearances = []
     progress = media_progress(count, stage="Detecting scenes")
     iterator = iter(source.frames())
     decoded = 0
@@ -70,6 +76,8 @@ def detect_scenes(video, longest_side=128, threshold=2.5, window_width=4,
             check_media_interrupt()
             pixels = _rgb_array(frame)
             pixels = cv2.resize(pixels, size, interpolation=cv2.INTER_AREA)
+            if detect_gradual:
+                appearances.append(appearance_histogram(pixels))
             # PySceneDetect expects BGR. Scan every frame; LM sampling is separate.
             stamp = FrameTimecode(index, fps=rate)
             cuts.extend(c.frame_num for c in detector.process_frame(stamp, pixels[..., ::-1]))
@@ -83,6 +91,9 @@ def detect_scenes(video, longest_side=128, threshold=2.5, window_width=4,
         if close:
             close()
     source.timing.validate_count(decoded)
+    gradual_cuts = gradual_boundaries(appearances, cuts, window_width, min_scene_frames,
+                                     gradual_threshold, gradual_min_change) if detect_gradual else []
+    cuts.extend(gradual_cuts)
     boundaries = [0, *sorted({value for value in cuts if 0 < value < count}), count]
     times = (*source.timing.timestamps, source.timing.duration)
     scenes = tuple({"scene_id": index, "start_frame": start, "end_frame_exclusive": end,
@@ -95,6 +106,10 @@ def detect_scenes(video, longest_side=128, threshold=2.5, window_width=4,
                 "detector": {"method": "AdaptiveDetector", "longest_side": longest_side, "threshold": threshold,
                              "window_width": window_width, "min_content": min_content, "min_scene_frames": min_scene_frames},
                 "timing": "presentation timestamps relative to the supplied VIDEO trim; end exclusive"}
+    if detect_gradual:
+        metadata["detector"].update(method="AdaptiveDetector + temporal appearance",
+                                    gradual_threshold=gradual_threshold, gradual_min_change=gradual_min_change,
+                                    gradual_cut_frames=gradual_cuts)
     return ScenePlan(source, metadata, scenes)
 
 

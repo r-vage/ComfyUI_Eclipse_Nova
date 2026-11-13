@@ -36,7 +36,7 @@ class RvVideo_SceneDetector(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         return io.Schema(node_id="Scene Detector [Eclipse Nova]", display_name="Scene Detector", category=_CATEGORY,
-                         description="Scan every source frame on CPU using PySceneDetect AdaptiveDetector. Preserve measured presentation timestamps; LM sampling and sizing are separate.",
+                         description="Detect hard cuts and persistent appearance changes across short blends. Scan every source frame on CPU and preserve source timing for separate scene descriptions; LM sampling and sizing are separate.",
                          inputs=[io.Video.Input("video", tooltip="Reference video to inspect. Cuts are timed from the start of this VIDEO, including its trim. Use matching audio and trim when transferring these timings to generation. A file-backed VIDEO keeps decoding memory bounded."),
                                  io.Int.Input("longest_side", default=128, min=16, max=4096,
                                               tooltip="Longest edge in pixels for CPU scene detection. Start with 128; increase it if subtle visual changes are missed. This is separate from Smart LM's Longest side setting for faces and gestures."),
@@ -45,17 +45,27 @@ class RvVideo_SceneDetector(io.ComfyNode):
                                  io.Int.Input("window_width", default=4, min=1, max=30,
                                               tooltip="Number of neighbouring source frames on each side used to estimate the local change baseline. This affects cut detection; Scene Analysis Plan controls how many frames reach the LM."),
                                  io.Float.Input("min_content", default=15, min=0, max=255,
-                                                tooltip="Minimum absolute visual change needed for a cut, in addition to the adaptive threshold. Raise it to suppress tiny changes; values that are too high can miss cuts between similar shots."),
+                                                tooltip="Minimum absolute visual change for adaptive hard cuts, in addition to the adaptive threshold. Raise it to suppress tiny changes; values that are too high can miss cuts between similar shots. Gradual transitions use the separate gradual controls."),
                                  io.Int.Input("min_scene_frames", default=1, min=1, max=10000,
-                                              tooltip="Minimum spacing between detected scenes, measured in original video frames. At 30 FPS, 30 frames is about one second. For a limit in seconds independent of source FPS, use Scene Cut Limit.")],
+                                              tooltip="Minimum spacing between detected scenes, measured in original video frames. At 30 FPS, 30 frames is about one second. For a limit in seconds independent of source FPS, use Scene Cut Limit."),
+                                 io.Float.Input("gradual_threshold", default=2.3, min=0.1, max=100, step=0.1, optional=True,
+                                                tooltip="How strongly appearance must change compared with surrounding motion. Lower values accept weaker blends but can add false cuts."),
+                                 io.Float.Input("gradual_min_change", default=0.2, min=0.01, max=1, step=0.01, optional=True,
+                                                tooltip="Minimum persistent colour-distribution change for a blended transition. Lower values find subtler changes. Motion and lighting can still cause false detections; review the resulting scenes.")],
                          outputs=[io.Custom(PLAN_TYPE).Output("scene_plan", tooltip="Measured scene boundaries and the reference source. Connect to Scene Cut Limit, or directly to Scene Analysis Plan when no cut-rate limit is needed."),
                                   io.Int.Output("scene_count", tooltip="Number of detected scenes. The number of cuts is one less. Use Scene Analysis Plan's window_count to drive the description loop, since one scene can need several windows."),
                                   io.String.Output("report", tooltip="Detection summary with scene, cut and source-frame counts. Connect to Show Any to review it.")])
 
     @classmethod
-    def execute(cls, video, longest_side=128, threshold=2.5, window_width=4, min_content=15, min_scene_frames=1):
-        plan = detect_scenes(video, longest_side, threshold, window_width, min_content, min_scene_frames)
-        return io.NodeOutput(plan, len(plan.scenes), f"{len(plan.scenes)} scenes / {len(plan.scenes) - 1} cuts from {plan.metadata['frame_count']} frames; detector longest side {longest_side}px.")
+    def execute(cls, video, longest_side=128, threshold=2.5, window_width=4, min_content=15,
+                min_scene_frames=1, gradual_threshold=2.3, gradual_min_change=0.2):
+        plan = detect_scenes(video, longest_side, threshold, window_width, min_content, min_scene_frames,
+                             detect_gradual=True, gradual_threshold=gradual_threshold,
+                             gradual_min_change=gradual_min_change)
+        added = len(plan.metadata['detector']['gradual_cut_frames'])
+        return io.NodeOutput(plan, len(plan.scenes),
+                             f"{len(plan.scenes)} scenes / {len(plan.scenes) - 1} cuts; "
+                             f"{added} blended transitions; {plan.metadata['frame_count']} source frames.")
 
 
 class RvVideo_SceneCutLimit(io.ComfyNode):

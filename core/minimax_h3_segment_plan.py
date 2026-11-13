@@ -75,10 +75,9 @@ def parse_manual_transition_times(
     parts = [part.strip() for part in stripped.split(",")]
     if any(not part for part in parts):
         raise ValueError("manual_transition_times contains an empty value.")
-    if image_count > 1 and len(parts) != image_count - 1:
+    if image_count > 1 and len(parts) > image_count - 1:
         raise ValueError(
-            "manual_transition_times must contain one time for every image "
-            "after the first."
+            "manual_transition_times contains more times than available image transitions."
         )
     try:
         times = [float(part) for part in parts]
@@ -707,6 +706,11 @@ def validate_segment_plan(plan: Any) -> tuple[dict[str, Any], list[dict[str, Any
     max_render = _require_int(plan, "max_render_frames")
     if image_count < 1 or total_frames < 1:
         raise ValueError("Plan image_count and total_frames must be positive.")
+    if "image_part_directions" in plan:
+        directions = plan["image_part_directions"]
+        if (image_count < 2 or not isinstance(directions, list)
+                or any(not isinstance(item, str) or not item.strip() for item in directions)):
+            raise ValueError("Plan image_part_directions must be a list of non-blank scene descriptions.")
     if min(sample_rate, sample_count, conditioning_rate, conditioning_count) < 1:
         raise ValueError("Plan audio metadata must be positive.")
     if not is_h3_frame_count(max_render):

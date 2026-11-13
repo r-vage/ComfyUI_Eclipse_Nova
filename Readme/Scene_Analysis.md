@@ -32,6 +32,36 @@ For saved results, connect **Load Scene Analysis** directly to **Scene Analysis 
 
 Scene Detector scans **every decoded source frame**, on CPU, at a default longest side of **128 px**. It uses PySceneDetect AdaptiveDetector with threshold 2.5, window width 4, minimum content 15 and minimum scene length 1 frame. Install `scenedetect>=0.7.2,<0.8` in the ComfyUI environment. The detector preserves presentation timing from native VIDEO, including trims and variable frame durations. Cuts are measured boundaries, not language-model guesses. Sensitivity is adjustable; fades, very similar shots and flashes can need different settings.
 
+**Scene Detector** also uses a temporal appearance check for short blended
+transitions, including an outfit change hidden in continuous movement. It combines
+adaptive hard-cut results with colour-distribution comparisons before and after
+each candidate. A persistent change can start a new scene even when adjacent
+frames change too gradually for adaptive cut detection. Existing Scene Detector
+workflows retain their node ID and settings; the added controls use their defaults
+when absent from an older workflow.
+
+- `gradual_threshold` defaults to **2.3** and compares the appearance change with
+  surrounding variation. Lower values accept weaker changes.
+- `gradual_min_change` defaults to **0.2** and requires a minimum difference
+  between the before/after distributions. Lower values accept subtler changes.
+- `window_width` also controls the temporal comparison: with its default of 4,
+  each side averages eight source frames beyond a four-frame gap. This is a
+  source-frame window, so its duration depends on the source frame rate.
+
+The check runs on CPU without a model download and stores small colour summaries
+per frame. It ignores luminance changes alone and suppresses extra candidates
+near existing hard cuts. It is a heuristic: reframing or changing illumination
+can still resemble a transition, while similar colours or long dissolves can be
+missed. Review detected boundaries before describing or rendering a new source.
+The report counts added blended transitions separately.
+
+Detection happens **before** Scene Analysis Plan and the description loop. Each
+side of a detected transition receives its own sampled window and description;
+motion within one unchanged appearance does not automatically require a new
+description. Keep the selected LM task and matching appearance policy appropriate
+to the intended output. Loading an old saved analysis reuses its old boundaries;
+rerun live analysis to use newly detected transitions.
+
 Optional **Scene Cut Limit → max_cuts_per_second** filters the detected plan before sampling. Zero passes it through unchanged; 1 keeps cuts at least one second apart, 2 requires half a second, and 0.5 requires two seconds. It keeps the earliest candidate meeting the interval measured from the previous retained boundary, including the source start. It never moves a cut. The final scene may be shorter than that interval, so the full source duration remains covered.
 
 Excluded cuts merge adjacent scenes. The plan records their source frame positions, and any analysis window crossing one tells the LM that a sudden pose change across that edit does not prove physical movement. A stricter limit can omit brief events from a uniform sample budget; review the merged descriptions. Changing this node reuses cached detection but reruns sampling and descriptions for the new scene ranges. Use **0 = unlimited** to preserve every detected boundary.
@@ -135,7 +165,9 @@ scene when joining the list for a line-based H3 planner.
 | `first_part_prompt` | Both base and extension MiniMax H3 Segmented Conditioning → `first_part_prompt` |
 | `report` | Show Any or another text preview for counts and review warnings |
 
-Keep one appearance reference image, use the same source audio/trim and choose original-image resets at manual cuts. The source video supplies performance, not replacement identity. The adapter checks H3's 24 FPS quantization and rejects cuts that collapse to the same frame. Timing is not automatically stretched to unrelated audio. Load Scene Analysis validates a saved file so later rendering does not rerun detection or the LM. Review descriptions and uncertainties before an expensive render.
+For one appearance reference, use the same source audio/trim and choose original-image resets at manual cuts. For multiple references, connect the measured times to switch images at the matching boundaries. New plans pair image 1 with the first description, image 2 with the first next-part description, and so on. If more images are supplied than scenes, the remaining image changes are spaced evenly after the last measured cut and retain the last description unless additional descriptions are supplied. Extra render splits within an image's interval keep its description. Without measured or manual times, images are distributed evenly. If the analysis has only one scene, its description is shared across all image intervals.
+
+The selected task determines whether descriptions include source appearance; reference images still supply the requested identities and appearances for image-conditioned generation. The adapter checks H3's 24 FPS quantization and rejects cuts that collapse to the same frame. Timing is not automatically stretched to unrelated audio. Load Scene Analysis validates a saved file so later rendering does not rerun detection or the LM. Review descriptions and uncertainties before an expensive render.
 
 ## Choosing detail and memory settings
 

@@ -125,8 +125,41 @@ retained range together; warmup continues to use the actual preceding audio.
 Original `image_batch` entries are timeline states. Connect
 `manual_transition_times` from **String Multiline [Eclipse Nova]** and keep the
 comma-separated value on one line. A disconnected or blank input distributes
-images evenly; otherwise provide one strictly increasing second value per image
-after the first. Transition frame `T` always belongs to the destination interval.
+images evenly. Otherwise, supply strictly increasing seconds for image changes
+in order. If fewer times are supplied than image changes, the remaining images
+are spaced evenly between the last supplied time and the end of the audio.
+Supplied times stay fixed in this partial-timing case, including with Activity
+gaps enabled; activity may still adjust technical splits inside an image interval.
+Transition frame `T` always belongs to the destination interval.
+
+For example, with three images, a 9.84-second soundtrack and one supplied cut at
+3.72 seconds, the image starts are 0, 3.72 and 6.78 seconds before rounding to
+native 24 FPS frames. The planner uses frames 0, 89 and 163. No times still
+distributes all images across the entire soundtrack. If too little audio remains
+to give every image at least one frame, move the last cut earlier or use fewer
+images. Too many times, empty comma entries and invalid times are rejected.
+
+For multiple images with a `first_part_prompt`, new plans pair that description
+with the first image and pair the `technical_cut_instruction` descriptions with
+subsequent images in order. The global performance prompt remains shared, or
+uses the existing indexed prompt selection. Capacity splits within an image's
+interval keep its scene description. When missing image times are filled,
+images without another supplied description retain the last description. For
+fully timed or entirely evenly spaced plans, fewer later descriptions retain
+their existing cycling behaviour. An empty list of later descriptions shares the first
+description across all image intervals. Without a first-part description,
+existing indexed prompt and technical-camera-cut behaviour remains unchanged.
+Saved plans from before this mapping retain their original prompts on resume;
+start a new run to use the new mapping.
+
+To switch outfits or other reference appearances at a source transition, supply
+references in scene order and connect the measured cut times from
+**Scene Analysis to H3**. Extra references are spaced through the final scene
+and reuse its description unless you provide additional descriptions.
+Two images alone still divide the timeline in half.
+**Scene Detector** includes a temporal appearance check for short blended
+transitions. Rerun analysis to create separate descriptions before and after
+newly detected transitions.
 
 With **one image**, manual times instead create camera cuts that reuse that same
 source image. Supply any number of increasing times inside the audio clip, select
