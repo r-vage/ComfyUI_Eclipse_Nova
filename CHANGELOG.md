@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-13
+
+### Version: 1.0.33
+
+- **Fix**
+  - Preserve empty prompt lists through Video Run Gate so single-scene H3 analysis without cuts reaches prompt review and planning without a list-index error. Keep disabled sources skipped and preserve list order and per-item controls.
+- **Changed files**
+  - py/RvVideo_RunStorage.py
+  - pyproject.toml
+
 ## 2026-11-10
 
 ### Version: 1.0.32

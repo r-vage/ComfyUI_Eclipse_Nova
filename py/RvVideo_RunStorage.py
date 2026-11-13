@@ -92,19 +92,37 @@ class RvVideo_RunGate(io.ComfyNode):
         return io.Schema(node_id="Video Run Gate [Eclipse Nova]", display_name="Video Run Gate",
             category=CATEGORY.MAIN.value + CATEGORY.VIDEO.value,
             description="Skip an independent output and its dependencies while disabled. Use prepare for fresh source/analysis/planning outputs, generate for new or resumed rendering, or Video Loop Start's render output for per-part previews.",
+            is_input_list=True,
             inputs=[io.AnyType.Input("value", optional=True, lazy=True, tooltip="Source feeding a preview, report or save node. Its upstream nodes are skipped when generate is false. A muted or absent optional source passes None while enabled."),
                     io.Boolean.Input("generate", default=True, tooltip="Connect Storage's prepare (new only), generate (new/resume), or Video Loop Start's render (an iteration is needed). False blocks this branch without requesting its source.")],
-            outputs=[io.AnyType.Output("value", tooltip="Unchanged source while enabled, otherwise an execution blocker.")])
+            outputs=[io.AnyType.Output("value", is_output_list=True, tooltip="Unchanged source, including empty lists, while enabled; otherwise an execution blocker.")])
 
     @classmethod
     def check_lazy_status(cls, generate=True, **kwargs):
-        return ["value"] if generate and "value" in kwargs and kwargs["value"] is None else []
+        flags = generate if isinstance(generate, (list, tuple)) else [generate]
+        value = kwargs.get("value")
+        # ComfyUI supplies unresolved list inputs as (None,). A resolved empty
+        # list (no later scenes) or [None] must not request its source again.
+        unresolved = value is None or (isinstance(value, tuple) and len(value) == 1 and value[0] is None)
+        return ["value"] if any(flags) and "value" in kwargs and unresolved else []
 
     @classmethod
     def execute(cls, generate=True, value=None):
         from comfy_execution.graph_utils import ExecutionBlocker
 
-        return io.NodeOutput(value if generate else ExecutionBlocker(None))
+        flags = generate if isinstance(generate, (list, tuple)) else [generate]
+        values = value if isinstance(value, (list, tuple)) else [value]
+        if not flags:
+            return io.NodeOutput([])
+        if not values:
+            # Preserve no subsequent prompts while enabled. Disabled gates must
+            # still block output nodes, even when a cached source is empty.
+            return io.NodeOutput([] if any(flags) else [ExecutionBlocker(None)])
+        # Retain ComfyUI's repeat-last mapping for nonempty value/control lists.
+        return io.NodeOutput([
+            values[min(index, len(values) - 1)] if flags[min(index, len(flags) - 1)] else ExecutionBlocker(None)
+            for index in range(max(len(flags), len(values)))
+        ])
 
 
 class RvVideo_RunInfo(io.ComfyNode):
