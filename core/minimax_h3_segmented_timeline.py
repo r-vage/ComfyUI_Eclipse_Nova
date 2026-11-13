@@ -17,6 +17,7 @@ from .image_helpers import flatten_images, unwrap_value
 from .logger import log
 from .minimax_h3_segment_plan import (
     CONDITIONING_FAMILIES,
+    CONTINUITY_FRAMES,
     DEFAULT_TECHNICAL_CUT_INSTRUCTION,
     H3_FPS,
     MANUAL_CAMERA_CUT_SOURCE,
@@ -96,6 +97,7 @@ def plan_segments(
     manual_transition_times=None,
     technical_seam_style="plain_reset",
     technical_cut_instruction=DEFAULT_TECHNICAL_CUT_INSTRUCTION,
+    opening_warmup_seconds=0.0,
 ):
     audio = unwrap_value(audio)
     conditioning_family = unwrap_value(
@@ -103,6 +105,7 @@ def plan_segments(
     )
     segment_strategy = unwrap_value(segment_strategy, "warmup_reset")
     warmup_seconds = unwrap_value(warmup_seconds, 2.0)
+    opening_warmup_seconds = unwrap_value(opening_warmup_seconds, 0.0)
     reset_anchor = unwrap_value(reset_anchor, "first_only")
     technical_split_source = unwrap_value(
         technical_split_source, "original_image_reset"
@@ -121,6 +124,7 @@ def plan_segments(
         technical_seam_style, "plain_reset"
     )
     technical_cut_instructions = _string_items(technical_cut_instruction)
+    empty_scene_directions = isinstance(technical_cut_instruction, (list, tuple)) and not technical_cut_instructions
     if not technical_cut_instructions:
         technical_cut_instructions = [DEFAULT_TECHNICAL_CUT_INSTRUCTION]
 
@@ -152,6 +156,9 @@ def plan_segments(
         raise TypeError("manual_transition_times must be a string.")
     warmup_seconds = _number(
         warmup_seconds, "warmup_seconds", minimum=0.0, maximum=10.0
+    )
+    opening_warmup_seconds = _number(
+        opening_warmup_seconds, "opening_warmup_seconds", minimum=0.0, maximum=10.0
     )
     search_window_seconds = _number(
         search_window_seconds,
@@ -199,6 +206,13 @@ def plan_segments(
     if not images:
         raise ValueError("image_batch must contain at least one image.")
     image_count = len(images)
+    # A connected empty scene list means one continuous shot. Keep its prompt
+    # and use generated FL2VA context instead of independently resetting it.
+    keep_opening_direction = image_count == 1 and not manual_transition_times.strip() and empty_scene_directions
+    if keep_opening_direction:
+        technical_seam_style = "plain_reset"
+        if conditioning_family == "fl2va_keyframes":
+            technical_split_source = "generated_continuation"
     master_waveform, sample_rate = audio_shape(audio)
     duration = audio_duration_seconds(audio)
     guide_audio = audio if conditioning_audio is None else conditioning_audio
@@ -213,8 +227,11 @@ def plan_segments(
     if total_frames < 1:
         raise ValueError("Audio must contain at least one output video frame.")
     warmup_frames = round(warmup_seconds * H3_FPS)
+    opening_warmup_frames = round(opening_warmup_seconds * H3_FPS)
     if warmup_frames >= max_render_frames:
         raise ValueError("warmup_seconds leaves no room in max_render_frames.")
+    if conditioning_family == "fl2va_keyframes" and opening_warmup_frames >= max_render_frames:
+        raise ValueError("opening_warmup_seconds leaves no room in max_render_frames.")
     if (
         technical_seam_style == "intentional_camera_cut"
         and conditioning_family == "fl2va_keyframes"
@@ -226,6 +243,10 @@ def plan_segments(
         )
 
     notes: list[str] = []
+    if keep_opening_direction:
+        notes.append("No later scene directions: capacity splits retain the opening prompt.")
+        if conditioning_family == "fl2va_keyframes":
+            notes.append("No planned cuts: capacity splits continue from the preceding 22 generated frames.")
     manual_times: list[float] = []
     target_frames: list[int] = []
     continuation_frames: list[int] = []
@@ -319,6 +340,7 @@ def plan_segments(
         conditioning_family=conditioning_family,
         segment_strategy=segment_strategy,
         warmup_frames=warmup_frames,
+        opening_warmup_frames=opening_warmup_frames,
         reset_anchor=reset_anchor,
         technical_split_source=technical_split_source,
         technical_seam_style=technical_seam_style,
@@ -331,6 +353,11 @@ def plan_segments(
         resume_hold_duration=resume_hold_duration,
     )
     notes.extend(technical_notes)
+    if any(task["has_continuity"] and task["output_start_frame"] < CONTINUITY_FRAMES for task in tasks):
+        raise ValueError(
+            "Opening warmup leaves fewer than 22 retained frames for generated continuation. "
+            "Reduce opening_warmup_seconds or increase max_render_frames."
+        )
     if image_count > 1 and activity is not None:
         continuation_frames = [
             task["output_start_frame"] for task in tasks if task["is_technical_seam"]
@@ -349,6 +376,8 @@ def plan_segments(
         "segment_strategy": segment_strategy,
         "warmup_seconds": warmup_seconds,
         "warmup_frames": warmup_frames,
+        "opening_warmup_seconds": opening_warmup_seconds,
+        "opening_warmup_frames": opening_warmup_frames,
         "reset_anchor": reset_anchor,
         "technical_split_source": technical_split_source,
         "technical_seam_style": technical_seam_style,
@@ -396,6 +425,10 @@ def plan_segments(
             f"Warmup: {warmup_frames} frames ({warmup_seconds:g}s); "
             f"technical splits: {technical_split_source}; seam style: "
             f"{technical_seam_style}"
+        ),
+        (
+            f"Opening crop: {tasks[0]['crop_start_frames']} frames "
+            f"({tasks[0]['crop_start_frames'] / H3_FPS:g}s); retained audio starts at 0s"
         ),
         (
             f"Master: {master_waveform.shape[-1]} samples at {sample_rate} Hz; "

@@ -171,11 +171,12 @@ def _task_prefix(
     technical_split_source: str,
     technical_seam_style: str,
     warmup_frames: int,
+    opening_warmup_frames: int = 0,
 ) -> tuple[int, bool, bool, str]:
     if conditioning_family == "ref2va_active_reference":
         return warmup_frames, False, False, "reference_warmup"
     if is_first_task:
-        return 0, True, False, "initial_source"
+        return opening_warmup_frames, True, False, "initial_warmup" if opening_warmup_frames else "initial_source"
     if is_transition_start:
         if segment_strategy == "hard_cut":
             return 0, True, False, "hard_cut"
@@ -330,6 +331,7 @@ def build_segment_tasks(
     technical_seam_style: str,
     ref_image_size: str,
     max_render_frames: int,
+    opening_warmup_frames: int = 0,
     activity: torch.Tensor | None = None,
     transition_edge: str = "activity_resume",
     search_window_seconds: float = 5.0,
@@ -366,6 +368,7 @@ def build_segment_tasks(
             technical_split_source=technical_split_source,
             technical_seam_style=technical_seam_style,
             warmup_frames=warmup_frames,
+            opening_warmup_frames=opening_warmup_frames,
         )
         later_prefix, later_has_start, later_continuity, later_role = _task_prefix(
             is_first_task=False,

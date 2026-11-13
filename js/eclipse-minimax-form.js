@@ -37,6 +37,7 @@ export class MiniMaxForm {
             if (!this.ref) this.choice(body, 'segment_strategy', 'Strategy');
             else this.note(body, 'Ref2VA uses warm resets with the active original reference.');
             this.number(body, 'warmup_seconds');
+            if (!this.ref && this.state.spec.numbers.opening_warmup_seconds) this.number(body, 'opening_warmup_seconds');
             this.textarea(body, 'manual_transition_times');
             this.note(body, 'Comma-separated seconds. One image: exact camera cuts using that image. Multiple images: one transition per later image. Audio defines the retained 24 FPS timeline.');
         });

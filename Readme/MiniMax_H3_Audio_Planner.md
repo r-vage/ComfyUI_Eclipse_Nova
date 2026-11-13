@@ -135,6 +135,16 @@ directions. These boundaries stay at the nearest native 24 FPS frame even when
 Activity gaps is enabled. Times that collapse onto the same frame are rejected.
 Leave the times blank to retain the existing automatic single-image splitting.
 
+When a connected scene analysis or Prompt Review supplies an empty list of later
+scene directions and no cut times, capacity splits keep the opening description.
+They do not substitute the default camera-change instruction for a missing scene.
+For a single FL2VA image, these splits automatically use the preceding 22 generated
+frames as continuity, with the matching audio overlap, instead of resetting from
+the original image. This also applies when an opening warmup makes another render
+part necessary. The report identifies the effective `generated_continuation`
+source. Explicit cut times, non-empty directions, disconnected directions and
+Ref2VA retain their configured reset behavior.
+
 Connect multiline text, **String Multiline** `string_list` or **Wildcard Processor**
 `list`, with one complete cut instruction per non-empty line. Joined text uses
 the same line boundaries as a list; each shot receives only its selected line.
@@ -159,7 +169,16 @@ The planner controls are:
   `ref2va_active_reference`.
 - `segment_strategy`: `hard_cut`, `first_last_bridge`, or `warmup_reset`.
 - `warmup_seconds`: hidden generated context before a warm-reset visible range;
-  default `2.0`.
+  default `2.0`. Shown as **Reset warmup seconds**; applies to later FL2VA
+  resets and all Ref2VA parts.
+- `opening_warmup_seconds`: **Opening warmup seconds**, for the first FL2VA
+  part only. Default `0.0` keeps the original image opening, including when an
+  older saved workflow has no opening option. A value such as `1.0` renders a
+  hidden lead-in before audio time zero with silent guide padding, then discards
+  those frames. The complete original soundtrack and output duration remain
+  unchanged. The report shows the actual opening crop separately from reset
+  warmup. Hidden opening frames count toward the render limit, so a long clip
+  can need another render part. Ref2VA continues to use Reset warmup seconds.
 - `reset_anchor`: `first_only` or the hidden
   `same_first_last_experimental` endpoint.
 - `technical_split_source`: default `original_image_reset`, or optional
@@ -275,7 +294,9 @@ warmup remains a failed transition and should be checked in the rendered result.
 The intentional instruction is never added to task 0, image transitions,
 first/last bridges, or generated-continuation tasks. `generated_continuation` is
 never used to cross an image transition.
-Global frame 0 in the default FL2VA path retains the first original source.
+With Opening warmup seconds at zero, global frame 0 in the default FL2VA path
+retains the first original source. A positive opening warmup keeps that guide
+inside the discarded lead-in instead.
 `same_first_last_experimental` adds only a discarded same-source endpoint and
 never replaces a real bridge destination.
 

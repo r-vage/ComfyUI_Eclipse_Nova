@@ -18,7 +18,8 @@ TITLES = {
 }
 NUMBERS = {
     "max_render_frames": number("Max render frames", 362, 124, 362, 17),
-    "warmup_seconds": number("Warmup seconds", 2.0, 0, 10, 0.1),
+    "warmup_seconds": number("Reset warmup seconds", 2.0, 0, 10, 0.1),
+    "opening_warmup_seconds": number("Opening warmup seconds", 0.0, 0, 10, 0.1),
     "search_window_seconds": number("Search radius (seconds)", 5.0, 0, 10, 0.05),
     "min_gap_duration": number("Minimum gap (seconds)", 0.25, 0.02, 5, 0.01),
     "resume_hold_duration": number("Resume hold (seconds)", 0.15, 0.02, 5, 0.01),
@@ -49,7 +50,7 @@ TOGGLES = {"align_to_activity_gap": ("Activity gaps", True), "has_start_guide": 
 _ACTIVITY = ["align_to_activity_gap", "transition_edge", "search_window_seconds", "min_gap_duration", "resume_hold_duration"]
 _CANVAS = ["width", "height"]
 FIELDS = {
-    "segmented_timeline": ["conditioning_family", "segment_strategy", "warmup_seconds", "reset_anchor", "technical_split_source", "ref_image_size", "manual_transition_times", "max_render_frames", *_ACTIVITY, "technical_seam_style", "technical_cut_instruction"],
+    "segmented_timeline": ["conditioning_family", "segment_strategy", "warmup_seconds", "opening_warmup_seconds", "reset_anchor", "technical_split_source", "ref_image_size", "manual_transition_times", "max_render_frames", *_ACTIVITY, "technical_seam_style", "technical_cut_instruction"],
     "segmented_step": ["task_index"],
     "segmented_conditioning": ["prompts", "prompt_index", "conditioning_family", "has_start_guide", "start_guide_frame_index", "has_last_image", "endpoint_frame_index", *_CANVAS, "ref_image_size", "visual_condition_strength"],
 }
@@ -63,9 +64,10 @@ LIST_TEXT_FIELDS = {"prompts", "technical_cut_instruction"}
 TIPS = {
     "conditioning_family": "Choose the family matching your H3 checkpoint. FL2VA uses positional guides; Ref2VA uses only the active reference.",
     "segment_strategy": "Warm reset discards a lead-in. Hard cut retains the destination at the cut. Bridge hides its endpoint at the first discarded frame. Ref2VA supports warm reset only.",
-    "warmup_seconds": "Discarded lead-in uses the preceding real guide audio. Hidden frames consume render capacity.",
+    "warmup_seconds": "Discarded lead-in for later resets uses the preceding real guide audio. Ref2VA also uses this for its opening. Hidden frames consume render capacity.",
+    "opening_warmup_seconds": "FL2VA opening only. Render a hidden lead-in with silence before audio time zero, then discard it. Zero retains the original image opening. Output duration and audio timing stay unchanged; hidden frames can require extra render parts.",
     "reset_anchor": "First + last adds an experimental hidden same-source endpoint when no bridge destination exists. FL2VA only.",
-    "technical_split_source": "Original image resets reduce recursive drift. Generated continuity uses the preceding 22 retained frames; FL2VA only.",
+    "technical_split_source": "Original image resets reduce recursive drift. Generated continuity uses the preceding 22 retained frames; FL2VA only. One image with a connected empty scene list and no cut times automatically uses generated continuity.",
     "technical_seam_style": "Camera cut appends instructions only at same-image original reset tasks, with non-zero FL2VA warmup.",
     "technical_cut_instruction": "Describe the new framing and the subject's motion through each shot. Directions cycle across cuts. With one image and manual times, each cut selects one direction; capacity splits within that shot reuse it. Connected text or lists override the panel.",
     "manual_transition_times": "Comma-separated seconds. One image: any number of exact camera cuts reusing that image, with Original image resets; enable Camera cut for per-shot directions. Multiple images: one time per image after the first; blank distributes images evenly. Connected empty text clears local times.",
@@ -141,7 +143,10 @@ def validate_configuration(raw, kind):
     require_fields(c, ("version", "kind", "parameters"))
     if type(c["version"]) is not int or c["version"] != 1 or c["kind"] != kind:
         raise ValueError(f"Expected version 1 {TITLES[kind]} configuration.")
-    require_fields(c["parameters"], FIELDS[kind])
+    optional = ["opening_warmup_seconds"] if kind == "segmented_timeline" else []
+    require_fields(c["parameters"], [key for key in FIELDS[kind] if key not in optional], optional)
+    if optional:
+        c["parameters"].setdefault("opening_warmup_seconds", 0.0)
     c["parameters"] = {k: _parameter(k, v) for k, v in c["parameters"].items()}
     return c
 

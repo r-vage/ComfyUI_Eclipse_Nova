@@ -12,6 +12,10 @@ export class MiniMaxState {
     constructor(raw, spec, editor = {}) {
         this.config = typeof raw === 'string' ? JSON.parse(raw) : clone(raw); this.spec = spec; this.editor = clone(editor);
         const c = this.config;
+        // Saved version-1 planners retain their original opening unless enabled.
+        if (c?.kind === 'segmented_timeline' && c.parameters && typeof c.parameters === 'object'
+            && !Array.isArray(c.parameters) && spec.keys.includes('opening_warmup_seconds')
+            && !Object.hasOwn(c.parameters, 'opening_warmup_seconds')) c.parameters.opening_warmup_seconds = 0;
         if (!fieldsMatch(c, ['version', 'kind', 'parameters']) || c.version !== 1 || c.kind !== spec.kind
             || !fieldsMatch(c.parameters, spec.keys)
             || Object.keys(spec.texts).some(key => typeof c.parameters[key] !== 'string')

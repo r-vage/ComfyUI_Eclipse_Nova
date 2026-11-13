@@ -2,6 +2,25 @@
 
 ## 2026-11-13
 
+### Version: 1.0.34
+
+- **Feat**
+  - Add an independent FL2VA opening warmup that discards generated lead-in frames with silent audio padding while retaining the complete soundtrack and output duration. Show the opening crop separately; existing workflows keep their original opening until enabled.
+- **Fix**
+  - Keep the opening scene description across capacity splits when connected analysis supplies no later scenes or cuts. Continue single-image FL2VA shots from the preceding 22 generated frames instead of restarting from the original image or inserting a default camera change.
+- **Docs**
+  - Explain opening versus reset warmup and how hidden frames affect render capacity.
+- **Changed files**
+  - core/minimax_h3_configuration.py
+  - core/minimax_h3_segment_plan.py
+  - core/minimax_h3_segmented_timeline.py
+  - js/eclipse-minimax-form.js
+  - js/eclipse-minimax-state.js
+  - Readme/MiniMax_H3_Audio_Planner.md
+  - pyproject.toml
+
+## 2026-11-13
+
 ### Version: 1.0.33
 
 - **Fix**
