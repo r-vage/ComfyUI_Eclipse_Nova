@@ -1,6 +1,6 @@
 # Native H3 text, reference and first-last-image clips with an optional soundtrack.
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from fractions import Fraction
 from itertools import pairwise
 
@@ -16,7 +16,7 @@ from .minimax_h3_segment_plan import (
 
 CLIP_PLAN_TYPE = "ECLIPSE_H3_CLIP_PLAN"
 REFERENCE_MODES = ("first_and_last", "first_only", "last_only", "adjacent_pairs",
-                   "reference_images", "text_only", "first_per_scene")
+                   "reference_images", "text_only", "first_per_scene", "first_middle_first")
 FPS = 24
 
 
@@ -36,6 +36,12 @@ class H3ClipPlan:
     audio_source: str
     audio: dict | None = field(repr=False)
     report: str
+    # Original directions, supplied cuts and render capacity are needed if a
+    # later Loop Start selects FMF. Clear these hints once resolved; checkpoints store
+    # authoritative per-clip prompts, including later manual edits.
+    part_prompts: tuple[str, ...] | None = field(default=None, repr=False, compare=False)
+    explicit_cuts: tuple[int, ...] | None = field(default=None, repr=False, compare=False)
+    max_clip_frames: int | None = field(default=None, repr=False, compare=False)
 
 
 def _text(value):
@@ -47,8 +53,58 @@ def _text(value):
     return value
 
 
+def _plan_report(clips, total, source):
+    parts = len({clip.part for clip in clips})
+    return (f"{len(clips)} clips; {parts} parts; {total} frames at 24 FPS "
+            f"({total / FPS:.3f}s). Audio: {source}. "
+            "Render padding is removed after sampling; cut positions stay on the shared clock.")
+
+
+def prepare_reference_plan(plan, mode):
+    # FMF assigns images by scene, never by a technical render-capacity split.
+    if mode not in REFERENCE_MODES:
+        raise ValueError("Unknown reference image mode.")
+    if mode != "first_middle_first":
+        return plan
+    scenes = [clip for index, clip in enumerate(plan.clips)
+              if not index or clip.part != plan.clips[index - 1].part]
+    cuts = list(plan.explicit_cuts) if plan.explicit_cuts is not None else [scene.start for scene in scenes[1:]]
+    if len(cuts) >= 2:
+        if plan.part_prompts:
+            clips = tuple(replace(clip, prompt=plan.part_prompts[min(clip.part, len(plan.part_prompts) - 1)])
+                          for clip in plan.clips)
+            return replace(plan, clips=clips, part_prompts=None, explicit_cuts=None, max_clip_frames=None)
+        return plan
+    total = plan.total_frames
+    if not cuts:
+        if total < 3:
+            raise ValueError("FMF needs at least three retained frames for image 1 → image 2 → image 1.")
+        cuts = [total // 3, 2 * total // 3]
+        detail = "No scene cuts: divided the duration into three equal sections."
+    else:
+        first_cut = cuts[0]
+        if total - first_cut < 2:
+            raise ValueError("FMF needs room after the first cut for the middle image and return. Move that cut earlier.")
+        cuts = [first_cut, first_cut + (total - first_cut) // 2]
+        detail = "Kept the first cut and divided the remaining duration between the middle image and return."
+    # Keep the selected render limit. Older externally constructed plans have
+    # no planning hints; their largest render is a conservative fallback.
+    capacity = plan.max_clip_frames or max(clip.render for clip in plan.clips)
+    clips = []
+    for part, (start, end) in enumerate(pairwise([0, *cuts, total])):
+        original = max((scene for scene in scenes if scene.start <= start), key=lambda scene: scene.start)
+        prompt = plan.part_prompts[min(part, len(plan.part_prompts) - 1)] if plan.part_prompts else original.prompt
+        for position in range(start, end, capacity):
+            keep = min(capacity, end - position)
+            clips.append(H3Clip(position, keep, aligned_h3_length(keep), part, prompt))
+    report = _plan_report(clips, total, plan.audio_source) + " FMF: " + detail
+    if plan.part_prompts and len(plan.part_prompts) > 3:
+        report += f" {len(plan.part_prompts) - 3} extra scene prompts are unused."
+    return replace(plan, clips=tuple(clips), report=report, part_prompts=None, explicit_cuts=None, max_clip_frames=None)
+
+
 def plan_clips(duration, max_clip_frames, cut_times, prompt, first_prompt,
-               next_prompts, audio=None, reference_video=None):
+               next_prompts, audio=None, reference_video=None, *, reference_mode="first_and_last"):
     if not is_h3_frame_count(max_clip_frames):
         raise ValueError("Max clip frames must be on H3's 17k+5 grid, from 124 to 362.")
     if not math.isfinite(duration) or duration <= 0:
@@ -98,9 +154,7 @@ def plan_clips(duration, max_clip_frames, cut_times, prompt, first_prompt,
         for position in range(start, end, max_clip_frames):
             keep = min(max_clip_frames, end - position)
             clips.append(H3Clip(position, keep, aligned_h3_length(keep), part, text))
-    report = (f"{len(clips)} clips; {len(cuts) + 1} parts; {total} frames at 24 FPS "
-              f"({total / FPS:.3f}s). Audio: {source}. "
-              "Render padding is removed after sampling; cut positions stay on the shared clock.")
+    report = _plan_report(clips, total, source)
     if automatic_scenes:
         report += f" Distributed {len(parts)} untimed scene prompts evenly across the selected duration."
     if len(all_cuts) != len(cuts):
@@ -109,7 +163,10 @@ def plan_clips(duration, max_clip_frames, cut_times, prompt, first_prompt,
         report += " Long parts are split into independent clips using the same part prompt."
     if len(parts) > len(cuts) + 1:
         report += " Extra part prompts beyond the selected duration are unused."
-    return H3ClipPlan(tuple(clips), total, source, audio, report)
+    part_prompts = tuple(" ".join(value.strip() for value in (prompt, specific) if value.strip()) for specific in parts)
+    explicit_cuts = tuple(cuts) if requested_times else ()
+    return prepare_reference_plan(H3ClipPlan(tuple(clips), total, source, audio, report,
+        part_prompts=part_prompts, explicit_cuts=explicit_cuts, max_clip_frames=max_clip_frames), reference_mode)
 
 
 def clip_at(plan, index):
@@ -126,6 +183,10 @@ def reference_pair(images, mode, part):
     if mode in ("reference_images", "text_only"):
         return None, None
     frames = flatten_images(images)
+    if mode == "first_middle_first":
+        if len(frames) != 2:
+            raise ValueError("FMF requires exactly two reference images, used in the order 1 → 2 → 1.")
+        return frames[1 if part == 1 else 0], None
     if not frames:
         return None, None
     if mode == "first_only":
@@ -150,6 +211,8 @@ def clip_conditioning(plan, index, clip, vae, width, height, seed,
     )
 
     item = clip_at(plan, index)
+    if reference_mode == "first_middle_first" and len({item.part for item in plan.clips}) < 3:
+        raise ValueError("FMF needs three planned scenes. Select first_middle_first in Clip Planner or Video Loop Start before conditioning.")
     first, last = reference_pair(images, reference_mode, item.part)
     if item.keep == 1 and first is not None:
         last = None

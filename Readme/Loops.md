@@ -24,8 +24,8 @@ part of the loop. Get/Set routing works after normal frontend link resolution.
 
 ## Video rendering and recovery
 
-Use **Video Run Storage** to choose **New run**, **Resume saved run** or
-**Load saved run**, and RAM, temporary disk or persistent output. For resumable
+Use **Video Run Storage** to choose **New run**, **Resume saved run**,
+**Update selected run** or **Load saved run**, and RAM, temporary disk or persistent output. For resumable
 runs, enable **Disk** and **Keep files**.
 New run creates a new run on each queue; choose Load saved run for downstream
 caption or export changes that should reuse completed media.
@@ -43,8 +43,9 @@ flowchart LR
 ```
 
 Connect Load Video Run's **source** and **run_path** to Start's **previous** and
-**run_path**. It is requested only on resume. The saved-run dropdown is the sole
-selection control. Connect fresh resolved inputs for New run, then use Start's
+**run_path**. It is requested on Resume and Update. The saved-run dropdown
+chooses the folder; the loader's **backup** selector can preview an earlier version
+inside it. Connect fresh resolved inputs for New run, then use Start's
 outputs for downstream conditioning, dimensions, prompts, reference images,
 audio, reference mode and storage. These outputs come from the saved checkpoint
 on resume. Start's **index** includes retained parts and goes directly to both
@@ -77,6 +78,70 @@ continues; **N** keeps parts 1 through N−1 and replaces N onward. Persistent r
 creates a new revision and leaves the original files intact. End reports its
 saved path. A completed resume returns the existing result without sampling.
 
+### Replace one part and keep the ending
+
+Choose **Update selected run** in Video Run Storage and set **Restart part**
+to the saved part's number, starting at **1**. The loop restores the selected run's
+inputs, generates exactly that part, then reattaches the later saved parts before
+returning its result. **Parts per queue** does not change this one-part scope.
+
+For part 13 of a 34-part run, the updated run contains original parts 1–12,
+the new part 13, and original parts 14–34. Keep **Disk + Keep in output** enabled
+and the loader's **backup** on **Current run**. The same folder stays selected for
+the next correction; its previous version is saved as a backup.
+Reused parts retain their exact media and generation seeds;
+the replacement keeps its saved duration, canvas, FPS and audio placement.
+
+Use Part Prompt Editor to change only the selected part's prompt, and change the
+render seed if desired. Pending edits to other retained parts must be cleared;
+their saved prompts must continue to describe their saved media. Existing saved
+edits are preserved. Native generated audio remains in each retained clip; an
+external master soundtrack stays unchanged.
+
+The selected part must already exist. A partially completed run keeps all of its
+saved parts and remains partial; ordinary Resume can later generate its unfinished
+ending. If an update is interrupted or fails, its current version stays intact;
+keep **Current run** selected and queue Update again.
+
+When the following lip-sync part used generated continuation, it still contains
+motion based on the old part. The planning report identifies this case; review
+the join after replacing. The mode always preserves that following part.
+
+### Update the same run and restore a backup
+
+Choose **Update selected run**, enable **Disk + Keep in output**, and leave the
+loader's **backup** on **Current run**. Set **Restart part = N** to an already saved
+part and queue. Exactly that part is regenerated and every other saved part is
+retained. The selected folder stays the same, so the next correction builds on
+the updated run without refreshing or choosing another folder. **Parts per queue**
+does not change the one-part scope.
+
+The update becomes current only after its replacement and retained ending are
+valid. Before switching, the previous media, prompts, seeds, checkpoint and
+workflow metadata are saved under `.backups/` inside the run. Interrupted or failed
+updates leave the current version available; keep **Current run** selected and
+retry. If another operation updates or restores the run during rendering, the
+older operation cannot overwrite it.
+
+In **Load Video Run**, click **Refresh runs** to refresh the backup list. Choose a
+backup and use **Load saved run** to preview/export it, or **Read selected run** to
+inspect its prompts. Selecting a backup does not change the current run. Click
+**Restore selected backup** to make it current without generation. Restore backs
+up the version it replaces, returns the selector to **Current run**, and reloads
+connected prompt editors with pending edits reset and Apply off. The previous
+editor draft remains available through workflow undo. To edit a backup, restore
+it first; backups themselves are read-only.
+
+Both complete and partial runs are supported; restoring a partial backup restores
+only its saved parts. Ordinary Resume can generate the unfinished ending. Backups
+start with the first Update; older sibling run folders remain separate runs.
+
+Keep the entire run folder when moving it. `run.json` points to the active media
+and checkpoint inside `.versions/`; root-level metadata from the initial run is
+historical after an update. Unchanged media uses hard links where supported, with
+copies as a fallback. History is retained until you remove the run; do not delete
+individual files or hidden folders that a current version or backup may need.
+
 ### Edit the prompt for one render part
 
 Connect Load Video Run's **run_path** to **Part Prompt Editor → run_path**, and
@@ -86,7 +151,9 @@ uses the loader's existing selection; it has no second run picker.
 
 1. Select the saved run, then click **Read selected run** in the editor. This reads
    prompt text and part ranges without loading models, references or audio arrays.
-2. Choose the **Render part** and edit its prompt. Numbers match **Restart part**;
+2. Choose the **Render part** from the themed dropdown or use **◀ / ▶** beside it.
+   Switching parts preserves pending edits; arrows stop at the first and last part.
+   Edit its prompt. Numbers match **Restart part**;
    a long scene may span several render parts with independently editable prompts.
 3. Enable **Apply edits**, choose **Resume saved run**, and set **Restart part**
    to the earliest completed part you changed. Leave it at `0` for upcoming parts.
@@ -97,17 +164,21 @@ The field contains the combined global and scene text for that part. Its edit
 **replaces the full prompt**, so conflicting original instructions are not added
 back. Keep any global direction or native H3 sound instructions you still want.
 Reference-image conditioning, timing, audio selection and lip-sync warmup remain
-as saved. Unedited parts keep their original prompts. Replacing part N still
-retains only parts before N and renders from N onward; it does not splice a new
-part into a retained ending.
+as saved. Unedited parts keep their original prompts. **Resume saved run** renders
+from N onward. To keep the later media, choose **Update selected run** for the same
+folder with backups and edit just the selected part as described above.
 
-The edited plan is saved with the new persistent revision, including changes to
-upcoming parts. Select that revision to continue; the corrections remain even
-when Apply edits is off. Reading its prompts again clears edits already saved
+Resume saves the edited plan with its new persistent revision, including changes
+to upcoming parts. Select that revision to continue. Update saves its corrected
+prompt in the selected run. Corrections remain even when Apply edits is off.
+Reading the saved prompts again clears edits already saved
 there. **Reset this part** restores the text read from the selected revision;
 **Clear edits** discards all pending edits and switches Apply off. Neither changes
 saved files. Clear drafts before reading a different run, or disable Apply to use
 that run without them. New run and Load saved run do not apply this editor.
+Update automatically reloads the saved prompts in connected editors. If the run
+changed since a draft was read, read the selected version again before applying
+new changes.
 
 Queueing captures the edits. Stop first to change a prompt for the next queue.
 Editing the ordinary upstream prompt boxes affects New run; use this editor to

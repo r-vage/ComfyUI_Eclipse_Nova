@@ -170,7 +170,7 @@ Select the generated or loaded source **together with its matching soundtrack**
 through a lazy **IF A Else B**. Use **Video Run Storage → generate** as its
 condition. Use **prepare** to gate independent analysis, source and planning
 previews/reports: it is true only for **New run**. Use **generate** for outputs
-that should also run during resume. Place **Video Run Gate** before these outputs;
+that should also run during Resume and Update. Place **Video Run Gate** before these outputs;
 they otherwise request their upstream work
 even when the final selector chooses the loaded branch. A disabled gate returns
 an execution blocker without requesting its source. Get/Set can carry these
@@ -193,6 +193,22 @@ planning. **Restart part = 0** continues after the last completed part.
 **Restart part = N** retains parts 1 through N−1 and replaces N onward. Use the
 one-based part numbers in Video Run Info; do not delete original part files.
 A completed run with Restart part 0 returns the saved result without sampling.
+
+**Update selected run** uses **Restart part = N** to regenerate just one
+already saved part. Parts before and after N are retained, and the same folder
+stays selected for another correction. This mode always renders exactly one
+part, regardless of Parts per queue. It preserves the saved part lengths, FPS,
+dimensions, soundtrack and native clip audio. A partial source remains partial
+after its saved parts are reassembled. See [single-part replacement](Loops.md#replace-one-part-and-keep-the-ending).
+
+Update requires **Disk + Keep in output** and **backup = Current run**. A successful
+update saves the previous version inside `.backups/`, including its prompts and
+media. Interrupted updates leave the current version intact. The loader's backup
+selector previews an older version; **Restore selected backup** makes it current
+and backs up the version it replaces. Restoring reloads connected prompt editors
+and resets pending edits. See [update and restore](Loops.md#update-the-same-run-and-restore-a-backup).
+After updates, follow `run.json` to the active checkpoint and retain the complete
+folder, including `.versions/` and `.backups/`, when moving it.
 
 Start's **index** is already absolute. Connect it to conditioning and Video Part
 Seed. Its **previous** carries the accumulated media; its **storage** output
@@ -238,9 +254,9 @@ guessed from old workflow snapshots. An interrupted sampling pass restarts that
 part from the beginning. See [Eclipse loops](Loops.md) for full wiring.
 
 Part ranges use zero-based **[start, end)** frame numbers. A capacity split can
-create several parts within one scene. This resumes from whole-part boundaries;
-an arbitrary In/Out replacement that keeps a later suffix needs a separate
-splice operation and matching motion context.
+create several parts within one scene. Resume and Update use whole saved parts;
+arbitrary In/Out ranges are not supported. If the retained following part used
+generated continuation, review its join with the new part.
 
 ## If disk space runs low
 

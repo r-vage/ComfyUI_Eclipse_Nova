@@ -1430,10 +1430,9 @@ class VideoRunPromptEndpoints:
         async def read_part_prompts(request):
             import asyncio
 
-            import folder_paths
-
             from .request_security import same_origin_browser_request
             from .video_part_prompts import prompt_catalog
+            from .video_run_history import selected_run_path
 
             if not same_origin_browser_request(request):
                 return web.json_response({"error": "Cross-origin prompt request rejected"}, status=403)
@@ -1442,11 +1441,41 @@ class VideoRunPromptEndpoints:
             if not isinstance(selected, str) or not selected or len(selected) > 4096:
                 return web.json_response({"error": "Select a saved run first."}, status=400)
             try:
-                root = Path(folder_paths.get_output_directory()).resolve()
-                path = (root / selected).resolve()
-                if not path.is_relative_to(root) or path.name != "run.json":
-                    raise ValueError("Select a run.json inside ComfyUI output.")
+                path = selected_run_path(selected, payload.get("backup"))
                 result = await asyncio.to_thread(prompt_catalog, path)
+                return web.json_response(result, headers={"Cache-Control": "no-store"})
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                return web.json_response({"error": str(error)}, status=400)
+
+        @PromptServer.instance.routes.post("/eclipse-nova/video_run/backups")
+        async def read_backups(request):
+            import asyncio
+
+            from .request_security import same_origin_browser_request
+            from .video_run_history import backup_catalog
+
+            if not same_origin_browser_request(request):
+                return web.json_response({"error": "Cross-origin backup request rejected"}, status=403)
+            payload = await read_json_object_request(request, max_bytes=8192)
+            try:
+                result = await asyncio.to_thread(backup_catalog, payload.get("saved_run"))
+                return web.json_response(result, headers={"Cache-Control": "no-store"})
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                return web.json_response({"error": str(error)}, status=400)
+
+        @PromptServer.instance.routes.post("/eclipse-nova/video_run/restore")
+        async def restore_run_backup(request):
+            import asyncio
+
+            from .video_run_history import restore_backup
+
+            denial = global_mutation_denial(request)
+            if denial is not None:
+                return denial
+            payload = await read_json_object_request(request, max_bytes=8192)
+            try:
+                result = await asyncio.to_thread(restore_backup, payload.get("saved_run"),
+                                                payload.get("backup"), payload.get("revision"))
                 return web.json_response(result, headers={"Cache-Control": "no-store"})
             except (OSError, ValueError, KeyError, TypeError) as error:
                 return web.json_response({"error": str(error)}, status=400)

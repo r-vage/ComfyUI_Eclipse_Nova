@@ -1,4 +1,5 @@
 # Persistent, relocatable video runs. Loading never owns or deletes saved files.
+import hashlib
 import json
 import math
 import os
@@ -16,6 +17,13 @@ from .json_store import read_json_object, write_json_object
 STORAGE_TYPE = "ECLIPSE_VIDEO_STORAGE"
 MANIFEST = "run.json"
 NO_SAVED_RUNS = "(no saved runs found)"
+UPDATE_PART_MODE = "Update selected run"
+RUN_MODES = ("New run", "Resume saved run", UPDATE_PART_MODE, "Load saved run")
+
+
+def normalize_run_mode(value):
+    # Older workflow/API values now use the same-folder operation with backups.
+    return UPDATE_PART_MODE if value == "Replace selected part only" else value
 
 
 def available_video_runs():
@@ -50,10 +58,11 @@ class VideoStorage:
     run_directory: str | None = None
 
     def __post_init__(self):
+        object.__setattr__(self, "run_mode", normalize_run_mode(self.run_mode))
         if self.mode not in ("memory", "temporary", "persistent"):
             raise ValueError("Choose memory, temporary or persistent video storage.")
-        if self.run_mode not in ("New run", "Resume saved run", "Load saved run"):
-            raise ValueError("Choose New run, Resume saved run or Load saved run.")
+        if self.run_mode not in RUN_MODES:
+            raise ValueError("Choose a supported video run operation.")
 
 
 @dataclass(frozen=True)
@@ -129,6 +138,8 @@ def save_run(run_directory, *, kind, fps, width, height, entries, audio=None, dt
                 value = {node_id: {k: v for k, v in node.items() if k != "is_changed"}
                          if isinstance(node, dict) else node for node_id, node in value.items()}
             write_json_object(root / f"{key}.json", value)
+        if (root / f"{key}.json").is_file():
+            manifest[key] = f"{key}.json"
     write_json_object(root / MANIFEST, manifest)
     return str(root / MANIFEST)
 
@@ -169,6 +180,15 @@ def _positive_int(value, label, allow_zero=False):
     return value
 
 
+def run_revision(path, manifest=None):
+    root = manifest_path(str(path)).parent
+    value = read_json_object(root / MANIFEST) if manifest is None else manifest
+    digest = hashlib.sha256(json.dumps(value, sort_keys=True, allow_nan=False).encode())
+    if value.get("checkpoint"):
+        digest.update(_contained_file(root, value["checkpoint"]).read_bytes())
+    return digest.hexdigest()
+
+
 def load_video_run(path):
     from .frame_timeline import FrameChunk, FrameTimeline
 
@@ -180,6 +200,7 @@ def load_video_run(path):
             or value.get("kind") not in ("frames", "clips")):
         raise ValueError("Unsupported saved video run format.")
     root = manifest_file.parent
+    revision = run_revision(manifest_file, value)
     fps = value.get("fps")
     if type(fps) not in (int, float) or not math.isfinite(fps) or fps <= 0:
         raise ValueError("Saved run FPS must be positive and finite.")
@@ -248,13 +269,14 @@ def load_video_run(path):
         size += file.stat().st_size
     if chunks:
         source = FrameTimeline(tuple(chunks), height, width, channels, dtype, float(fps),
-                               "persistent", str(root))
+                               "persistent", str(root), revision)
     else:
         from comfy_api.latest import InputImpl
 
         source = InputImpl.VideoFromList(clips, complete_audio=audio)
         source._eclipse_run_directory = str(root)
         source._eclipse_run_entries = tuple(entries)
+        source._eclipse_run_revision = revision
     report = (f"{len(entries)} parts; {total} frames; {total / fps:.3f}s at {fps:g} FPS; "
               f"{width}×{height}; {size / 1024**3:.3f} GiB.\n{manifest_file}")
     return source, audio, float(fps), width, height, total, report

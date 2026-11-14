@@ -7,7 +7,7 @@ from dataclasses import replace
 from .minimax_h3_clips import H3ClipPlan
 from .minimax_h3_prompts import segment_prompt
 from .minimax_h3_segment_plan import validate_segment_plan
-from .video_run import _contained_file, manifest_path
+from .video_run import _contained_file, manifest_path, run_revision
 
 EDITS_TYPE = "ECLIPSE_PART_PROMPT_EDITS"
 WIDGET_TYPE = "ECLIPSE_NOVA_PART_PROMPTS"
@@ -21,11 +21,14 @@ def validate_configuration(raw):
     if not isinstance(raw, str) or len(raw) > 1048576:
         raise ValueError("Part prompt configuration must be JSON text under 1 MiB.")
     value = json.loads(raw)
-    if (not isinstance(value, dict) or set(value) != {"version", "enabled", "source", "edits"}
+    fields = {"version", "enabled", "source", "edits"}
+    if (not isinstance(value, dict) or set(value) not in (fields, fields | {"revision"})
             or value["version"] != 1 or type(value["enabled"]) is not bool
             or not isinstance(value["source"], str) or len(value["source"]) > 128
             or not isinstance(value["edits"], dict) or len(value["edits"]) > 1000):
         raise ValueError("Invalid version 1 part prompt configuration.")
+    if "revision" in value and (not isinstance(value["revision"], str) or len(value["revision"]) > 64):
+        raise ValueError("Invalid saved prompt revision.")
     for part, prompt in value["edits"].items():
         if not part.isascii() or not part.isdigit() or not 1 <= int(part) <= 1000000 or str(int(part)) != part:
             raise ValueError("Prompt edits use one-based part numbers.")
@@ -49,9 +52,9 @@ def prompt_catalog(run_path):
     # Reading this catalog never loads saved references, audio or video arrays.
     root = manifest_path(str(run_path)).parent
     manifest = json.loads((root / "run.json").read_text(encoding="utf-8"))
-    if not isinstance(manifest, dict) or manifest.get("format") != "eclipse_video_run" or manifest.get("checkpoint") != "checkpoint.json":
+    if not isinstance(manifest, dict) or manifest.get("format") != "eclipse_video_run" or not manifest.get("checkpoint"):
         raise ValueError("This run has no saved input checkpoint. Select a run created with Video Loop Start.")
-    path = _contained_file(root, "checkpoint.json")
+    path = _contained_file(root, manifest["checkpoint"])
     if path.stat().st_size > 32 * 1048576:
         raise ValueError("The saved prompt plan exceeds the 32 MiB review limit.")
     value = json.loads(path.read_text(encoding="utf-8"))
@@ -71,12 +74,12 @@ def prompt_catalog(run_path):
             or any(type(start) is not int or type(count) is not int or start < 0 or count < 1
                    or not isinstance(text, str) for start, count, text in items)):
         raise ValueError("Invalid saved part timing or prompt text.")
-    return {"source": source_key(value), "run": str(root), "completed": len(manifest["chunks"]),
+    return {"source": source_key(value), "run": str(root), "revision": run_revision(root, manifest), "completed": len(manifest["chunks"]),
             "parts": [{"part": i + 1, "start": start / fps, "end": (start + count) / fps, "prompt": text}
                       for i, (start, count, text) in enumerate(items)]}
 
 
-def apply_prompt_edits(data, edits, start):
+def apply_prompt_edits(data, edits, start, end=None, revision=None):
     if not edits or not edits["enabled"] or not edits["edits"]:
         return data
     if edits["source"] != data.prompt_source_id:
@@ -92,8 +95,12 @@ def apply_prompt_edits(data, edits, start):
             data.prompts, part["prompt_index"], data.first_part_prompt, data.plan, part)
         if current == text:
             continue  # An edited revision can continue with the same editor still enabled.
+        if revision and edits.get("revision") and edits["revision"] != revision:
+            raise ValueError("This run changed since its prompts were read. Read selected run again before applying new edits.")
         if index < start:
             raise ValueError(f"Part {number} is being retained. Set Restart part to {number} or earlier to change its prompt.")
+        if end is not None and index >= end:
+            raise ValueError(f"Part {number} is being retained. Update selected run can edit part {start + 1}; clear the other edits or use Resume saved run.")
         parts[index] = replace(part, prompt=text) if native else {**part, "prompt_override": text}
     plan = replace(data.plan, clips=tuple(parts)) if native else {**data.plan, "tasks": parts}
     return replace(data, plan=plan)

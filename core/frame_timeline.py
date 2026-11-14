@@ -73,6 +73,7 @@ class FrameTimeline:
     fps: float
     storage: str = "temporary"
     run_directory: str | None = None
+    run_revision: str | None = None
 
     def __deepcopy__(self, memo):
         # Immutable graph copies share the same file owners.

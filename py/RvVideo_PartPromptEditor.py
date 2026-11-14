@@ -1,4 +1,4 @@
-# Per-part text edits are consumed only when resuming a saved run.
+# Per-part text edits are consumed when resuming or replacing a saved part.
 import json
 
 from comfy_api.latest import io
@@ -18,12 +18,12 @@ class RvVideo_PartPromptEditor(io.ComfyNode):
         return io.Schema(
             node_id="Part Prompt Editor [Eclipse Nova]", display_name="Part Prompt Editor",
             category=CATEGORY.MAIN.value + CATEGORY.VIDEO.value,
-            description="Read final part prompts from the connected Load Video Run, edit selected parts, and apply the replacements on Resume. Uses the same part numbers as Restart part. Timing, references, audio and retained media are unchanged; edits are saved in the new revision.",
+            description="Read final part prompts from the connected Load Video Run or its selected backup. Apply edits on Resume or Update selected run. Uses the same part numbers as Restart part. Timing, references, audio and retained media stay unchanged. Restoring a backup reloads its prompts and resets pending edits.",
             inputs=[io.String.Input("run_path", optional=True, force_input=True, lazy=True,
                                    tooltip="Connect Load Video Run's run_path directly or through Get/Set. Read selected run loads prompt text only; no models or media arrays."),
                     io.String.Input("configuration", socketless=True, default=json.dumps(default_configuration()),
                                     extra_dict={"widgetType": WIDGET_TYPE, "editorSpec": {}})],
-            outputs=[io.Custom(EDITS_TYPE).Output("prompt_edits", tooltip="Connect to Video Loop Start's prompt_edits input. Used only on Resume. Set Restart part to the first changed completed part, or 0 to edit upcoming parts.")])
+            outputs=[io.Custom(EDITS_TYPE).Output("prompt_edits", tooltip="Connect to Video Loop Start's prompt_edits input. Resume can edit upcoming parts or regenerate from Restart part onward. Update changes only the selected saved part.")])
 
     @classmethod
     def validate_inputs(cls, configuration):

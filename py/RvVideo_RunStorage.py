@@ -6,12 +6,15 @@ from comfy_api.latest import io
 from ..core import CATEGORY
 from ..core.video_run import (
     NO_SAVED_RUNS,
+    RUN_MODES,
     STORAGE_TYPE,
     VideoStorage,
     available_video_runs,
     load_video_run,
-    manifest_path,
+    normalize_run_mode,
+    run_revision,
 )
+from ..core.video_run_history import CURRENT_VERSION, selected_run_path
 
 
 class RvVideo_RunStorage(io.ComfyNode):
@@ -21,21 +24,28 @@ class RvVideo_RunStorage(io.ComfyNode):
             node_id="Video Run Storage [Eclipse Nova]", display_name="Video Run Storage",
             category=CATEGORY.MAIN.value + CATEGORY.VIDEO.value,
             description="One storage control for frame timelines and native video clips. Disk off keeps decoded parts in CPU RAM. Disk on uses temporary files or persistent run folders. Preview/export still create video files in all modes.",
-            inputs=[io.Combo.Input("run_mode", options=["New run", "Resume saved run", "Load saved run"], default="New run",
-                        tooltip="New run prepares inputs and samples. Resume restores saved inputs and generates remaining/replacement parts. Load saved run exports existing media without planning or sampling."),
+            inputs=[io.Combo.Input("run_mode", options=list(RUN_MODES), default="New run",
+                        tooltip="Update selected run replaces one saved part in the same folder and backs up the previous version. Requires Disk + Keep in output. Choose its one-based Restart part number; all other saved parts are kept. Resume generates from Restart part onward in a new folder. Load saved run exports the selected current version or backup without sampling."),
                     io.Boolean.Input("disk_timeline", default=True, label_on="Disk", label_off="RAM",
                         tooltip="Off: retain generated parts in CPU RAM, without frame/clip cache files. Requires more RAM, not more VRAM. On: retain parts on disk."),
                     io.Boolean.Input("keep_files", default=True, label_on="Keep in output", label_off="Temporary",
                         tooltip="Used with Disk enabled. On saves each completed part and a run.json manifest for reuse after restart. Off lets cached outputs own and clean temporary files. RAM ignores this option."),
                     io.String.Input("output_directory", default="video_runs",
                         tooltip="Persistent run parent folder, relative to ComfyUI output or an absolute path. Each new generation receives its own subfolder. Saved runs remain until you explicitly remove their folders.")],
-            outputs=[io.Custom(STORAGE_TYPE).Output("storage"), io.Boolean.Output("generate", tooltip="True for New and Resume; select generated versus loaded final output."),
+            outputs=[io.Custom(STORAGE_TYPE).Output("storage"), io.Boolean.Output("generate", tooltip="True for New, Resume and Update; select generated versus loaded final output."),
                      io.Boolean.Output("prepare", tooltip="True only for New run. Gate independent analysis, source and planning previews/reports with this output so resume does not recompute them.")])
+
+    @classmethod
+    def validate_inputs(cls, run_mode):
+        # Accept the retired scalar value in saved API prompts without exposing
+        # it in the combo or bypassing validation of the other inputs.
+        return True if isinstance(run_mode, str) and normalize_run_mode(run_mode) in RUN_MODES else "Choose a supported video run operation."
 
     @classmethod
     def execute(cls, disk_timeline=True, keep_files=True, output_directory="video_runs", run_mode="New run"):
         mode = "memory" if not disk_timeline else "persistent" if keep_files else "temporary"
-        return io.NodeOutput(VideoStorage(mode, output_directory, run_mode), run_mode != "Load saved run", run_mode == "New run")
+        storage = VideoStorage(mode, output_directory, run_mode)
+        return io.NodeOutput(storage, storage.run_mode != "Load saved run", storage.run_mode == "New run")
 
 
 class RvVideo_LoadRun(io.ComfyNode):
@@ -49,7 +59,9 @@ class RvVideo_LoadRun(io.ComfyNode):
             inputs=[io.Combo.Input("saved_run", options=runs, default=runs[0],
                         tooltip="Select a saved run under ComfyUI output, including partially completed runs. Refresh runs after generating or moving a run; the current selection is preserved. Keep the whole run folder together when moving it."),
                     io.Custom(STORAGE_TYPE).Input("storage", optional=True,
-                        tooltip="Optional shared storage control. RAM loads the saved parts into memory; Disk streams the existing files. Loading never creates another persistent copy.")],
+                        tooltip="Optional shared storage control. RAM loads the saved parts into memory; Disk streams the existing files. Loading never creates another persistent copy."),
+                    io.Combo.Input("backup", options=[CURRENT_VERSION], default=CURRENT_VERSION, optional=True,
+                        tooltip="Current run loads the active version. Choose a backup to preview its saved media and prompts. Restore selected backup makes it current and backs up the version it replaces. Refresh runs updates this list.")],
             outputs=[io.AnyType.Output("source", tooltip="Exact frame timeline for lip-sync runs or VIDEO for native clips. Connect to Preview, captions or Save Video."),
                      io.Audio.Output("audio", tooltip="Saved master soundtrack. Native runs without an override retain their generated audio inside VIDEO."),
                      io.Float.Output("fps"), io.Int.Output("width"), io.Int.Output("height"),
@@ -58,32 +70,35 @@ class RvVideo_LoadRun(io.ComfyNode):
                      io.Custom("PIPE").Output("caption_context", tooltip="Saved full recording and excerpt start for IO Lyric Captions. Media-only older runs use their soundtrack from zero.")])
 
     @classmethod
-    def validate_inputs(cls, saved_run):
+    def validate_inputs(cls, saved_run, backup=CURRENT_VERSION):
         # ComfyUI validates inactive lazy branches too. Check availability only
         # when this loader executes; keep validation of other inputs intact.
-        return True if isinstance(saved_run, str) else "Select a saved run from the dropdown."
+        return True if isinstance(saved_run, str) and (backup is None or isinstance(backup, str)) else "Select a saved run and backup from the dropdowns."
 
     @classmethod
-    def fingerprint_inputs(cls, saved_run, **kwargs):
-        path = manifest_path(saved_run)
-        stat = path.stat() if path.is_file() else None
-        return (str(path), stat.st_mtime_ns, stat.st_size) if stat else str(path)
+    def fingerprint_inputs(cls, saved_run, backup=CURRENT_VERSION, **kwargs):
+        try:
+            path = selected_run_path(saved_run, backup)
+            return str(path), run_revision(path)
+        except (OSError, ValueError):
+            return saved_run, backup
 
     @classmethod
-    def execute(cls, saved_run, storage=None):
+    def execute(cls, saved_run, storage=None, backup=CURRENT_VERSION):
         if not saved_run or saved_run == NO_SAVED_RUNS:
             raise ValueError("No saved runs found. Generate with Disk and Keep files enabled under ComfyUI output, then click Refresh runs.")
         if saved_run not in available_video_runs():
             raise ValueError(f"Saved run '{saved_run}' is not available on this system. Click Refresh runs and select a local run, or switch the workflow to New run.")
-        values = list(load_video_run(saved_run))
+        path = selected_run_path(saved_run, backup)
+        values = list(load_video_run(str(path)))
         from ..core.video_checkpoint import load_caption_context
 
-        captions = load_caption_context(saved_run, values[1])
+        captions = load_caption_context(str(path), values[1])
         if storage is not None and storage.mode == "memory":
             from ..core.video_run import memory_source
 
             values[0] = memory_source(values[0])
-        return io.NodeOutput(*values, str(manifest_path(saved_run)), captions)
+        return io.NodeOutput(*values, str(path), captions)
 
 
 class RvVideo_RunGate(io.ComfyNode):

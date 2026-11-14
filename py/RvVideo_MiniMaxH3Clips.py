@@ -34,6 +34,8 @@ class RvVideo_MiniMaxH3ClipPlanner(io.ComfyNode):
                                 tooltip="One subsequent scene prompt per line. With cut times, prompts follow those scenes; without times, first_prompt plus these lines share the duration evenly. Long scenes retain their prompt across capacity splits. Missing prompts use global direction alone."),
                 io.Audio.Input("audio", optional=True, tooltip="Highest-priority soundtrack; supplies duration and guides generation. Save using selected_audio to retain this exact recording."),
                 io.Video.Input("reference_video", optional=True, tooltip="Second-priority audio and timing source. Use the same trimmed VIDEO for scene analysis. A silent/muted video retains its duration and lets H3 generate audio."),
+                io.Combo.Input("reference_mode", options=list(REFERENCE_MODES), default=REFERENCE_MODES[0], optional=True,
+                               tooltip="FMF (first_middle_first) uses supplied scene cuts or creates three equal sections when no cuts are supplied. One supplied cut is kept and the remaining duration is halved. Other modes preserve the ordinary plan. Match Clip Conditioning's mode. Video Loop Start also applies FMF automatically for new runs."),
             ],
             outputs=[io.Custom(CLIP_PLAN_TYPE).Output("plan"), io.Int.Output("clip_count"),
                      io.Int.Output("total_frames"), io.Audio.Output("selected_audio", tooltip="Original loaded/reference audio, or None when H3 generates audio."),
@@ -42,8 +44,9 @@ class RvVideo_MiniMaxH3ClipPlanner(io.ComfyNode):
 
     @classmethod
     def execute(cls, duration, max_clip_frames, cut_times, prompt, first_prompt, next_prompts,
-                audio=None, reference_video=None):
-        plan = plan_clips(duration, max_clip_frames, cut_times, prompt, first_prompt, next_prompts, audio, reference_video)
+                audio=None, reference_video=None, reference_mode=REFERENCE_MODES[0]):
+        plan = plan_clips(duration, max_clip_frames, cut_times, prompt, first_prompt, next_prompts, audio, reference_video,
+                          reference_mode=reference_mode)
         return io.NodeOutput(plan, len(plan.clips), plan.total_frames, plan.audio, plan.report)
 
 
@@ -61,7 +64,7 @@ class RvVideo_MiniMaxH3ClipConditioning(io.ComfyNode):
                     io.Int.Input("height", default=768, min=32, max=8192, step=32),
                     io.Int.Input("seed", default=0, min=0, max=2**64-1, tooltip="Base seed; each clip adds its loop index."),
                     io.Combo.Input("reference_mode", options=list(REFERENCE_MODES), default=REFERENCE_MODES[0],
-                                   tooltip="first_and_last reuses the first/last images for every clip; one image anchors only the start. first_only/last_only use one endpoint. first_per_scene uses image 1 for scene 1, image 2 for scene 2, then holds the final image; capacity splits keep the same scene image. adjacent_pairs uses images 1→2, 2→3 per scene, then holds the final image. reference_images uses up to 9 images as native visual references without fixing endpoints; <Picture 1>, etc. can identify them in the prompt. text_only ignores images."),
+                                   tooltip="first_and_last reuses the first/last images for every clip; one image anchors only the start. first_only/last_only use one endpoint. first_per_scene uses image 1 for scene 1, image 2 for scene 2, then holds the final image. first_middle_first (FMF) requires two images: image 1 for scene 1, image 2 for scene 2, image 1 for later scenes; choose FMF in Clip Planner or Video Loop Start to create missing sections. Capacity splits keep the same scene image. adjacent_pairs uses images 1→2, 2→3 per scene, then holds the final image. reference_images uses up to 9 visual references; <Picture 1>, etc. can identify them in the prompt. text_only ignores images."),
                     io.Image.Input("images", optional=True, tooltip="Connect Load Image Timeline's resized IMAGE output. Mute that input group or select text_only for T2VA. Slot fades do not blend the generated clips."),
                     io.Vae.Input("audio_vae", optional=True, tooltip="Required with an external/reference soundtrack. The native audio VAE encodes each clip's guide; it also decodes generated audio downstream.")],
             outputs=[io.Conditioning.Output("positive"), io.Latent.Output("latent"),

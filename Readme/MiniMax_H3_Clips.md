@@ -90,6 +90,18 @@ render seed before the next queue to vary replacement clips while retaining the
 earlier saved parts. See
 [resume controls](Frame_Timeline.md#resume-or-replace-the-remaining-parts).
 
+To regenerate one saved clip while keeping the ending, choose **Update selected
+run** and set **Restart part** to its one-based number. The loop renders
+one clip, reuses every other saved clip and keeps the same folder selected.
+Retained clips keep their generated audio;
+an external master soundtrack stays unchanged.
+
+Use **Update selected run** with **Disk + Keep in output** to keep the same folder
+selected across corrections. Each successful replacement backs up the previous
+version. Load Video Run can preview a selected backup or restore it, including its
+saved prompts and generated clip audio. Restore preserves the displaced version
+as another backup. See [update and restore](Loops.md#update-the-same-run-and-restore-a-backup).
+
 ## Reference images
 
 Connect **Load Image Timeline → images** to Clip Conditioning. Its shared canvas
@@ -104,6 +116,7 @@ at least one enabled image.
 | first_only | First enabled image anchors each clip's start |
 | last_only | Last enabled image anchors each clip's end |
 | first_per_scene | Image 1 starts scene 1, image 2 starts scene 2, etc.; reuse the final image if scenes outnumber images |
+| first_middle_first | FMF: exactly two images, used as image 1 → image 2 → image 1; later scenes keep image 1 |
 | adjacent_pairs | Images 1→2, 2→3, etc. per part; after the images are exhausted, the final image anchors the start |
 | reference_images | Up to 9 enabled images supply native visual references without fixing the first or last frame |
 | text_only | Ignore connected images and generate from the prompt |
@@ -114,11 +127,40 @@ adds a short direction to use the supplied images as visual references. With no
 images, it uses text-to-video-and-audio. **text_only** ignores images even when
 the loader is enabled; muting the loader also avoids loading them.
 
-Scenes come from cut times or the untimed prompt list. Image slots do not create
-scene boundaries themselves. Capacity splits retain the same scene number, so
-**first_per_scene** and **adjacent_pairs** keep the scene's image assignment
+Scenes normally come from cut times or the untimed prompt list. Image slots do not create
+scene boundaries themselves; **first_middle_first** adds missing sections as described below.
+Capacity splits retain the same scene number, so **first_per_scene**, **first_middle_first**
+and **adjacent_pairs** keep the scene's image assignment
 throughout those renders. Clips remain independent generations; reusing an image
 does not guarantee continuous motion or generated sound across their joins.
+
+### FMF: first, middle, first
+
+For a brief alternate appearance followed by a return, enable exactly two image
+slots and choose **first_middle_first** in **Video Loop Start → reference_mode**.
+The loop applies FMF to the incoming native H3 plan before saving its inputs.
+In a standalone planner/conditioner chain, select the mode in **both Clip Planner
+and Clip Conditioning**, and use the planner's updated clip count.
+
+- With two or more detected/manual cuts, their positions are preserved. Image 1
+  starts scene 1, image 2 starts scene 2, then image 1 starts every remaining scene.
+- With no supplied cuts, the duration is divided into three equal sections on
+  H3's 24 FPS clock. Up to three scene descriptions are used; additional untimed
+  descriptions are reported as unused.
+- With one supplied cut, it stays fixed and the remaining duration is divided
+  between the middle image and the return. Each section must retain at least one frame.
+
+A single description is reused throughout FMF. Separate descriptions stay in
+scene order; if a later description is missing, the last supplied one is reused.
+Technical capacity splits keep the scene's reference image and prompt. The loop
+report shows the resulting cut times. Saved runs retain their resolved FMF plan,
+images and prompts on Resume, including later Part Prompt Editor changes.
+
+FMF is a native H3 scene assignment, not a visible crossfade or an extra image
+keyframe inside one render. Each scene still renders at least 124 frames before
+padding is removed. Use short manual intervals for a brief preview; equal thirds
+give the alternate image a third of the video. This mode does not change lip-sync
+image assignment or scene-detector sensitivity.
 
 The conditioner places the last image at the **retained** endpoint, even when
 the model renders padding beyond it. A one-frame part with both references uses

@@ -11,15 +11,28 @@ import torch
 from .frame_timeline import FrameTimeline
 from .image_helpers import flatten_images, unwrap_value
 from .json_store import read_json_object, write_json_object
-from .minimax_h3_clips import REFERENCE_MODES, H3Clip, H3ClipPlan
+from .minimax_h3_clips import (
+    REFERENCE_MODES,
+    H3Clip,
+    H3ClipPlan,
+    prepare_reference_plan,
+    reference_pair,
+)
 from .minimax_h3_segment_plan import audio_shape
 from .video_part_prompts import apply_prompt_edits, source_key
-from .video_resume import plan_ranges, prepare_resume
+from .video_resume import (
+    PartReplacement,
+    attach_saved_ending,
+    plan_ranges,
+    prepare_resume,
+)
 from .video_run import (
+    UPDATE_PART_MODE,
     _contained_file,
     _save_array,
     create_run_directory,
     manifest_path,
+    run_revision,
 )
 
 CHECKPOINT = "checkpoint.json"
@@ -40,6 +53,7 @@ class RenderInputs:
     caption_audio: object = None
     caption_start: float = 0.0
     prompt_source_id: str = field(default_factory=lambda: uuid4().hex)
+    replacement: PartReplacement | None = field(default=None, repr=False, compare=False)
 
     @property
     def fps(self):
@@ -51,6 +65,8 @@ def render_inputs(plan, width, height, **kwargs):
     kind, _, _ = plan_ranges(plan)
     if any(type(v) is not int or v < 16 for v in (width, height)):
         raise ValueError("Render width and height must be integers of at least 16 pixels.")
+    if kind == "clips":
+        plan = prepare_reference_plan(plan, kwargs.get("reference_mode", "first_and_last"))
     data = RenderInputs(plan, width, height, **kwargs)
     if data.reference_mode not in REFERENCE_MODES:
         raise ValueError("Unknown reference-image mode in the run inputs.")
@@ -62,6 +78,8 @@ def render_inputs(plan, width, height, **kwargs):
     ):
         raise ValueError("Run prompts must be text or a list of text.")
     if kind == "clips":
+        if data.reference_mode == "first_middle_first":
+            reference_pair(data.images, data.reference_mode, 0)
         data = replace(data, audio=plan.audio)
     else:
         for name, rate_key, count_key in (("audio", "sample_rate", "sample_count"),
@@ -93,9 +111,9 @@ def caption_context(data):
 def load_caption_context(run_path, audio=None):
     root = manifest_path(run_path).parent
     manifest = read_json_object(root / "run.json")
-    if manifest.get("checkpoint") != CHECKPOINT:
+    if not manifest.get("checkpoint"):
         return {"audio": audio, "trim_start": 0.0}
-    value = read_json_object(_contained_file(root, CHECKPOINT))
+    value = read_json_object(_contained_file(root, manifest["checkpoint"]))
     item = value.get("caption_audio")
     if item is None:
         return {"audio": audio, "trim_start": 0.0}
@@ -149,9 +167,9 @@ def load_checkpoint(run_path):
     manifest = manifest_path(run_path)
     root = manifest.parent
     recorded = read_json_object(manifest)
-    if recorded.get("checkpoint") != CHECKPOINT:
+    if not recorded.get("checkpoint"):
         raise ValueError("This run has no resolved render checkpoint. It can still be loaded/exported; start a new run with Video Loop Start to enable resume.")
-    value = read_json_object(_contained_file(root, CHECKPOINT))
+    value = read_json_object(_contained_file(root, recorded["checkpoint"]))
     if value.get("format") != "eclipse_render_checkpoint" or value.get("version") != 1:
         raise ValueError("Unsupported render checkpoint.")
     audios = {}
@@ -186,27 +204,52 @@ def load_checkpoint(run_path):
 
 
 def prepare_video_loop(storage, restart_part, previous=None, run_path=None, prompt_edits=None, **inputs):
-    if storage.run_mode == "Resume saved run":
+    keep_following = storage.run_mode == UPDATE_PART_MODE
+    if keep_following and storage.mode != "persistent":
+        raise ValueError("Update selected run requires Disk and Keep in output.")
+    if storage.run_mode == "Resume saved run" or keep_following:
         if not run_path or previous is None:
             raise ValueError("Resume requires source and run_path from Load Video Run.")
+        revision = run_revision(run_path)
+        loaded_revision = getattr(previous, "run_revision", None) or getattr(previous, "_eclipse_run_revision", None)
+        if loaded_revision and loaded_revision != revision:
+            raise ValueError("The selected run changed since it was loaded. Queue again to load its current version.")
         data = load_checkpoint(run_path)
+        if run_revision(run_path) != revision:
+            raise ValueError("The selected run changed while loading its inputs. Queue again.")
         if type(restart_part) is not int or restart_part < 0:
             raise ValueError("Restart part must be 0 (continue) or a one-based part number.")
         completed = len(previous.chunks) if hasattr(previous, "chunks") else len(getattr(previous, "_eclipse_run_entries", ()))
-        data = apply_prompt_edits(data, prompt_edits, restart_part - 1 if restart_part else completed)
+        if keep_following and not 1 <= restart_part <= completed:
+            raise ValueError("Update selected run requires Restart part to select an already saved part, starting at 1.")
+        data = apply_prompt_edits(data, prompt_edits, restart_part - 1 if restart_part else completed,
+                                 end=restart_part if keep_following else None, revision=revision)
+        if keep_following:
+            target = str(manifest_path(run_path).resolve())
+            data = replace(data, replacement=PartReplacement(previous, restart_part, completed, target, revision))
+            from .video_run_history import update_directory
+
+            storage = replace(storage, directory=str(update_directory(run_path)), run_directory=None)
         previous, start, remaining, report = prepare_resume(data.plan, True, restart_part, previous,
-            storage, data.width, data.height, allow_complete=True)
+            storage, data.width, data.height, allow_complete=True, keep_following=keep_following)
+        if keep_following:
+            report = report.replace("The original run is unchanged.", "Update the selected run after success; save its previous version as a backup.")
     elif storage.run_mode == "New run":
         data = render_inputs(**inputs)
         previous, start = None, 0
         remaining = len(plan_ranges(data.plan)[2])
         report = f"New run: {remaining} parts."
+        if isinstance(data.plan, H3ClipPlan) and data.reference_mode == "first_middle_first":
+            fps = data.fps
+            starts = [clip.start / fps for index, clip in enumerate(data.plan.clips)
+                      if index and clip.part != data.plan.clips[index - 1].part]
+            report += f" FMF images 1 → 2 → 1; scene cuts at {', '.join(f'{start:g}s' for start in starts)}. Later scenes keep image 1."
     else:
-        raise ValueError("Video Loop Start is for New run or Resume saved run; route Load saved run directly to output.")
+        raise ValueError("Video Loop Start is for New, Resume or Update; route Load saved run directly to output.")
     if storage.mode == "persistent" and remaining:
         root = (getattr(previous, "run_directory", None) or getattr(previous, "_eclipse_run_directory", None)
                 or create_run_directory(storage))
-        save_checkpoint(root, data, run_path if storage.run_mode == "Resume saved run" else None)
+        save_checkpoint(root, data, run_path if storage.run_mode != "New run" else None)
         manifest = Path(root) / "run.json"
         if manifest.is_file():
             value = read_json_object(manifest)
@@ -215,6 +258,25 @@ def prepare_video_loop(storage, restart_part, previous=None, run_path=None, prom
             write_json_object(manifest, value)
         storage = replace(storage, run_directory=str(root))
     return data, previous, start, start + remaining, storage, report
+
+
+def finish_replacement(data, values, storage):
+    replacement = data.replacement
+    result = attach_saved_ending(values[0], replacement, storage, data.audio)
+    if replacement.target:
+        from .video_run_history import commit_update
+
+        staged = getattr(result, "run_directory", None) or result._eclipse_run_directory
+        manifest, _ = commit_update(replacement.target, staged, replacement.revision, part=replacement.part)
+        root = str(Path(replacement.target).parent)
+        revision = run_revision(replacement.target, manifest)
+        if isinstance(result, FrameTimeline):
+            result = replace(result, run_directory=root, run_revision=revision)
+        else:
+            result._eclipse_run_directory = root
+            result._eclipse_run_entries = tuple(manifest["chunks"])
+            result._eclipse_run_revision = revision
+    return [result], replacement.completed
 
 
 def verify_part(data, values, completed, storage):

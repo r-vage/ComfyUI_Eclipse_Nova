@@ -148,9 +148,24 @@ def close_loop(state, value, dynprompt, unique_id, incomplete="return partial"):
     next_index = state.index + int(active)
     path = ""
     if state.render is not None:
-        from .video_checkpoint import verify_part
+        from .video_checkpoint import finish_replacement, verify_part
 
         path = verify_part(state.render, carry, next_index, state.storage)
+        if active and state.render.replacement is not None:
+            carry, next_index = finish_replacement(state.render, carry, state.storage)
+            path = verify_part(state.render, carry, next_index, state.storage)
+            if state.render.replacement.target:
+                from pathlib import Path
+
+                import folder_paths
+                from server import PromptServer
+
+                run = Path(path).resolve()
+                output_root = Path(folder_paths.get_output_directory()).resolve()
+                selected = run.relative_to(output_root).as_posix() if run.is_relative_to(output_root) else str(run)
+                PromptServer.instance.send_sync("eclipse-nova.video-run", {
+                    "saved_run": selected, "run": str(run.parent), "operation": "replace",
+                }, PromptServer.instance.client_id)
     done = next_index >= state.end
     stopped = next_index >= state.queue_end or state.control.stop.is_set()
     if done or stopped:
@@ -164,6 +179,10 @@ def close_loop(state, value, dynprompt, unique_id, incomplete="return partial"):
 
         captions = caption_context(state.render) if state.render is not None else None
         report = f"{'Complete' if done else 'Stopped'}: {next_index} / {state.end} parts."
+        if state.render is not None and state.render.replacement is not None:
+            report = f"Replaced part {state.render.replacement.part}; retained all other saved parts. " + report
+            if state.render.replacement.target:
+                report += " Updated the selected run; its previous version is available in Load Video Run's backup list."
         if path:
             report += f"\nSaved run: {path}"
         return io.NodeOutput(output, next_index, done, path,

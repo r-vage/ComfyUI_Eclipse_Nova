@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-11-14
+
+### Version: 1.0.37
+
+- **Feat**
+  - Add native H3 first_middle_first (FMF) assignment for two images used as 1 → 2 → 1. Preserve supplied scene cuts, create equal thirds without cuts, or fill the return after one cut. Reuse a single description, retain scene-specific directions across capacity splits, and restore the resolved assignment on Resume.
+  - Add Update selected run to regenerate one saved lip-sync or native H3 part while keeping the same folder selected, retaining the saved beginning and ending with their audio and seeds. Restore saved inputs without fresh analysis and limit prompt edits to the selected part. Publish completed updates atomically and retain previous versions inside the run. Load Video Run can preview and restore backups with their media, prompts and checkpoint metadata; restoring also backs up the displaced version. Refresh connected prompt editors after updates and restore, and reject stale edits or conflicting updates.
+  - Consolidate one-part corrections into Update selected run. Remove the separate-folder replacement choice and interpret its older saved value as Update; Resume still creates a new revision when continuing or regenerating an ending.
+  - Match Part Prompt Editor navigation to Prompt Review with a themed render-part dropdown and previous/next arrows. Retain pending edits while switching parts and disable arrows at the ends.
+- **Docs**
+  - Explain FMF timing, image requirements, standalone planning and short-preview render cost.
+- **Changed files**
+  - core/frame_timeline.py
+  - core/loop.py
+  - core/minimax_h3_clips.py
+  - core/server_endpoints.py
+  - core/video_checkpoint.py
+  - core/video_part_prompts.py
+  - core/video_resume.py
+  - core/video_run.py
+  - core/video_run_history.py
+  - js/eclipse-part-prompts.js
+  - js/eclipse-video-run.js
+  - py/RvVideo_MiniMaxH3Clips.py
+  - py/RvVideo_PartPromptEditor.py
+  - py/RvVideo_Resume.py
+  - py/RvVideo_RunStorage.py
+  - Readme/Frame_Timeline.md
+  - Readme/Loops.md
+  - Readme/MiniMax_H3_Clips.md
+  - pyproject.toml
+
 ## 2026-11-13
 
 ### Version: 1.0.36
