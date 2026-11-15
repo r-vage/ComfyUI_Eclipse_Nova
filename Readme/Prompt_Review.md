@@ -22,9 +22,15 @@ run without returning partial prompts. ComfyUI's interrupt control also works.
 The pause setting applies when the queued node executes; changing an idle node's
 setting does not change an already queued request.
 
+After Continue, unchanged queues reuse the completed review and its approved text
+from ComfyUI's cache. Confirming a downstream **Image Selector** therefore continues
+without pausing here or regenerating the same images. Changed upstream inputs
+require a fresh review. Restarting ComfyUI or clearing/evicting its cache also
+requires review again.
+
 The editor retains its text when saving the workflow. When Pause is on, saved edits
-can prefill a review only if every input prompt and its order still match. Changed
-input starts a fresh review. Continue is always required again. **Refresh status**
+can prefill a fresh review only if every input prompt and its order still match.
+Saved drafts alone do not approve a run. **Refresh status**
 reconnects the editor to a review still waiting in the same browser session, for
 example after reloading the saved workflow. A stale review cannot continue a later
 run. If the waiting editor is unavailable, use ComfyUI's interrupt control.

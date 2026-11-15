@@ -16,12 +16,21 @@ export class PromptReviewState {
         const c = this.config;
         if (c?.version !== 1 || typeof c.pause !== 'boolean' || typeof c.source !== 'string'
             || !Array.isArray(c.edits) || c.edits.some(t => typeof t !== 'string')) throw Error('Invalid prompt review configuration.');
+        // Review results are saved editor state, not changed execution inputs.
+        // Otherwise a selector's continuation invalidates this node and every
+        // downstream sampler even though the approved prompts are unchanged.
+        const draft = this.editor.draft;
+        if (typeof draft?.source !== 'string' || !Array.isArray(draft.edits)
+            || draft.edits.some(t => typeof t !== 'string')) {
+            this.editor.draft = { source: c.source, edits: [...c.edits] };
+        }
     }
     value() { return JSON.stringify(this.config); }
+    get draft() { return this.editor.draft; }
     load(packet, preserveDraft = false) {
-        const same = this.config.source === packet.source && this.config.edits.length === packet.texts.length;
-        if (!preserveDraft || !same) this.config.edits = [...packet.texts];
-        this.config.source = packet.source;
+        const same = this.draft.source === packet.source && this.draft.edits.length === packet.texts.length;
+        if (!preserveDraft || !same) this.draft.edits = [...packet.texts];
+        this.draft.source = packet.source;
         this.editor.originals = [...packet.originals];
         this.editor.hasFirst = packet.has_first;
         if (!same || !Number.isInteger(this.editor.selected) || this.editor.selected < 0 || this.editor.selected >= packet.texts.length) this.editor.selected = 0;
@@ -53,7 +62,7 @@ class PromptReviewForm {
             const response = await api.fetchApi('/eclipse-nova/prompt-review/respond', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: request.signal,
                 body: JSON.stringify({ token: current.token, prompt_id: current.prompt_id,
-                    client_id: api.clientId, action, texts: [...this.state.config.edits] }),
+                    client_id: api.clientId, action, texts: [...this.state.draft.edits] }),
             });
             const data = await response.json();
             if (!response.ok) throw Error(data.error || 'Could not submit this review.');
@@ -76,7 +85,7 @@ class PromptReviewForm {
         const cancel = button('■ Cancel run', 'Cancel the waiting run. Nothing is sent downstream.', () => this.respond('cancel'));
         cancel.disabled = !this.active || !!this.request;
         bar.append(pause, play, cancel); content.append(bar);
-        const texts = config.edits;
+        const texts = state.draft.edits;
         if (texts.length) {
             const label = element('div', 'en-panel-field'), select = element('select');
             select.setAttribute('aria-label', 'Prompt to review');
@@ -88,7 +97,7 @@ class PromptReviewForm {
             select.onchange = () => c.edit(s => { s.editor.selected = Number(select.value); });
             const navigation = element('div', 'en-panel-bar en-review-navigation');
             const previous = button('◀', 'Previous prompt', () => c.edit(s => { s.editor.selected = Math.max(0, s.selected - 1); }));
-            const next = button('▶', 'Next prompt', () => c.edit(s => { s.editor.selected = Math.min(s.config.edits.length - 1, s.selected + 1); }));
+            const next = button('▶', 'Next prompt', () => c.edit(s => { s.editor.selected = Math.min(s.draft.edits.length - 1, s.selected + 1); }));
             previous.className = next.className = 'en-review-step';
             previous.disabled = state.selected === 0;
             next.disabled = state.selected === texts.length - 1;
@@ -99,10 +108,10 @@ class PromptReviewForm {
         text.setAttribute('aria-label', 'Prompt text'); text.spellcheck = false;
         text.value = texts[state.selected] ?? ''; text.readOnly = !this.active || !!this.request;
         text.placeholder = 'Incoming prompts appear here when the node runs.';
-        text.oninput = () => c.edit(s => { s.config.edits[s.selected] = text.value; }, false);
+        text.oninput = () => c.edit(s => { s.draft.edits[s.selected] = text.value; }, false);
         field.append(text); content.append(field);
         const actions = element('div', 'en-panel-bar');
-        const reset = button('Reset this prompt', 'Restore the text received from the source.', () => c.edit(s => { s.config.edits[s.selected] = s.editor.originals[s.selected]; }));
+        const reset = button('Reset this prompt', 'Restore the text received from the source.', () => c.edit(s => { s.draft.edits[s.selected] = s.editor.originals[s.selected]; }));
         reset.disabled = !this.active || !!this.request;
         actions.append(reset, button('Refresh status', 'Reconnect to a waiting review after reloading the workflow.', () => syncPending())); content.append(actions);
         this.status = element('div', 'en-panel-note'); this.status.setAttribute('role', 'status'); content.append(this.status);
@@ -110,7 +119,7 @@ class PromptReviewForm {
         c.root.replaceChildren(content); this.syncSummaries(); c.measure();
     }
     syncSummaries() {
-        if (this.status) this.status.textContent = this.message || (this.state.config.pause ? 'Will pause when prompts arrive.' : 'Pause off · input passes through unchanged.');
+        if (this.status) this.status.textContent = this.message || (this.state.config.pause ? 'Pause on · review new inputs; reuse completed reviews.' : 'Pause off · input passes through unchanged.');
     }
     dispose() { this.request?.abort(); this.request = null; }
 }

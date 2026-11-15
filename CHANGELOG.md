@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-15
+
+### Version: 1.0.38
+
+- **Fix**
+  - Reuse completed Prompt Review approvals on unchanged queues so confirming a downstream Image Selector continues without another prompt pause or image generation. Preserve saved editor drafts without invalidating the execution cache, keep separate review nodes independent, and require review again when upstream inputs change.
+- **Changed files**
+  - js/eclipse-prompt-review.js
+  - py/RvText_PromptReview.py
+  - Readme/Prompt_Review.md
+  - pyproject.toml
+
 ## 2026-11-14
 
 ### Version: 1.0.37

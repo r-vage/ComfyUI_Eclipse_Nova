@@ -17,7 +17,7 @@ class RvText_PromptReview(io.ComfyNode):
         return io.Schema(
             node_id="Prompt Review [Eclipse Nova]", display_name="Prompt Review",
             category=CATEGORY.MAIN.value + CATEGORY.TEXT.value,
-            description="Display incoming prompts. Pause off passes the exact input through. Enable Pause before queueing to edit the prompts here, then Continue the same run with your edits.",
+            description="Display incoming prompts. Pause off passes the exact input through. Enable Pause before queueing to edit the prompts here, then Continue the same run with your edits. Unchanged inputs reuse the completed review when continuing from a downstream stop.",
             is_input_list=True, is_output_node=True,
             inputs=[
                 io.String.Input("prompts", force_input=True, optional=True,
@@ -41,8 +41,10 @@ class RvText_PromptReview(io.ComfyNode):
 
     @classmethod
     def fingerprint_inputs(cls, configuration, **kwargs):
-        # A selected review must not disappear into an earlier queue's cache.
-        return float("nan") if validate_configuration(configuration)["pause"] else False
+        # Keep completed approvals cacheable across downstream selector queues.
+        # V3 hidden UNIQUE_ID is not included by every ComfyUI cache version;
+        # explicitly separate identical review nodes so each can be approved.
+        return cls.hidden.unique_id if validate_configuration(configuration)["pause"] else False
 
     @classmethod
     def execute(cls, configuration, prompts=None, first_prompt=None):
