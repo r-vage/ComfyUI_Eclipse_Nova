@@ -17,7 +17,7 @@ class RvText_PromptReview(io.ComfyNode):
         return io.Schema(
             node_id="Prompt Review [Eclipse Nova]", display_name="Prompt Review",
             category=CATEGORY.MAIN.value + CATEGORY.TEXT.value,
-            description="Display incoming prompts. Pause off passes the exact input through. Enable Pause before queueing to edit the prompts here, then Continue the same run with your edits. Unchanged inputs reuse the completed review when continuing from a downstream stop.",
+            description="Display and edit incoming prompts. Queue again to use edited text, with Pause on or off. Enable Pause to hold a changed run for review, then Continue the same run. Unchanged inputs reuse the completed review when continuing from a downstream stop. Edits apply only to the matching source prompts.",
             is_input_list=True, is_output_node=True,
             inputs=[
                 io.String.Input("prompts", force_input=True, optional=True,
@@ -53,7 +53,7 @@ class RvText_PromptReview(io.ComfyNode):
         if config["pause"] and packet["texts"]:
             packet = review_prompts(packet, cls.hidden)
         else:
-            packet["status"] = "passed"
+            packet["status"] = "edited" if packet["texts"] != packet["originals"] else "passed"
         return io.NodeOutput(*outputs(packet), ui={"prompt_review": [
             {key: packet[key] for key in ("source", "has_first", "originals", "texts", "status")}
         ]})

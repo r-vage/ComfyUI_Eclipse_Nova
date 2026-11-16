@@ -27,9 +27,26 @@ export class PromptReviewState {
     }
     value() { return JSON.stringify(this.config); }
     get draft() { return this.editor.draft; }
+    saveEdits() {
+        if (!this.draft.source || !this.draft.edits.length) return;
+        this.config.source = this.draft.source;
+        this.config.edits = [...this.draft.edits];
+        this.editor.pendingEdits = true;
+    }
+    editText(value, forNextQueue) {
+        if (!this.draft.edits.length || this.draft.edits[this.selected] === value) return;
+        this.draft.edits[this.selected] = value;
+        if (forNextQueue) this.saveEdits();
+    }
+    togglePause() {
+        this.config.pause = !this.config.pause;
+        if (!this.config.pause) this.saveEdits();
+    }
     load(packet, preserveDraft = false) {
         const same = this.draft.source === packet.source && this.draft.edits.length === packet.texts.length;
-        if (!preserveDraft || !same) this.draft.edits = [...packet.texts];
+        const applied = same && this.draft.edits.every((text, index) => text === packet.texts[index]);
+        if ((!preserveDraft && !this.editor.pendingEdits) || !same) this.draft.edits = [...packet.texts];
+        if (!same || applied) delete this.editor.pendingEdits;
         this.draft.source = packet.source;
         this.editor.originals = [...packet.originals];
         this.editor.hasFirst = packet.has_first;
@@ -50,7 +67,8 @@ class PromptReviewForm {
         if (packet.status === 'waiting' && this.active?.token === packet.token) return;
         this.active = packet.status === 'waiting' ? packet : null;
         this.message = packet.status === 'waiting' ? 'Paused · edit the prompts, then Continue.'
-            : packet.status === 'continued' ? 'Continued with the reviewed prompts.' : 'Passed through unchanged.';
+            : packet.status === 'continued' ? 'Continued with the reviewed prompts.'
+                : packet.status === 'edited' ? 'Using edited prompts.' : 'Passed through unchanged.';
         this.controller.edit(s => s.load(packet, packet.status === 'waiting'));
     }
     async respond(action) {
@@ -78,7 +96,7 @@ class PromptReviewForm {
     render() {
         const c = this.controller, state = this.state, config = state.config;
         const content = element('div', 'en-panel-content'), bar = element('div', 'en-panel-bar');
-        const pause = button('⏸ Pause', 'Enable before queueing to review prompts here. Off passes incoming text through unchanged.', () => { this.message = ''; c.edit(s => { s.config.pause = !s.config.pause; }); });
+        const pause = button('⏸ Pause', 'Enable before queueing to pause for review. Off sends the current text without stopping. Displayed prompts can be edited in either mode.', () => { this.message = ''; c.edit(s => s.togglePause()); });
         pause.setAttribute('aria-pressed', String(config.pause)); pause.disabled = !!this.active || !!this.request;
         const play = button('▶ Continue', 'Send these edits downstream and continue this run. The prompt source is not rerun.', () => this.respond('continue'));
         play.disabled = !this.active || !!this.request;
@@ -106,20 +124,24 @@ class PromptReviewForm {
         }
         const field = element('label', 'en-panel-field en-review-text'), text = element('textarea');
         text.setAttribute('aria-label', 'Prompt text'); text.spellcheck = false;
-        text.value = texts[state.selected] ?? ''; text.readOnly = !this.active || !!this.request;
+        text.value = texts[state.selected] ?? ''; text.readOnly = !texts.length || !!this.request;
         text.placeholder = 'Incoming prompts appear here when the node runs.';
-        text.oninput = () => c.edit(s => { s.draft.edits[s.selected] = text.value; }, false);
+        const editText = value => {
+            if (!this.active) this.message = 'Edits saved · queue again to use them.';
+            c.edit(s => s.editText(value, !this.active), false);
+        };
+        text.oninput = () => editText(text.value);
         field.append(text); content.append(field);
         const actions = element('div', 'en-panel-bar');
-        const reset = button('Reset this prompt', 'Restore the text received from the source.', () => c.edit(s => { s.draft.edits[s.selected] = s.editor.originals[s.selected]; }));
-        reset.disabled = !this.active || !!this.request;
+        const reset = button('Reset this prompt', 'Restore the text received from the source.', () => { editText(state.editor.originals[state.selected]); this.render(); });
+        reset.disabled = !texts.length || !!this.request;
         actions.append(reset, button('Refresh status', 'Reconnect to a waiting review after reloading the workflow.', () => syncPending())); content.append(actions);
         this.status = element('div', 'en-panel-note'); this.status.setAttribute('role', 'status'); content.append(this.status);
         for (const control of content.querySelectorAll('button:not(.en-review-step)')) control.setAttribute('aria-label', control.textContent);
         c.root.replaceChildren(content); this.syncSummaries(); c.measure();
     }
     syncSummaries() {
-        if (this.status) this.status.textContent = this.message || (this.state.config.pause ? 'Pause on · review new inputs; reuse completed reviews.' : 'Pause off · input passes through unchanged.');
+        if (this.status) this.status.textContent = this.message || (this.state.config.pause ? 'Pause on · review changed inputs; reuse completed reviews.' : 'Pause off · edit the displayed text and queue again to use it.');
     }
     dispose() { this.request?.abort(); this.request = null; }
 }

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-16
+
+### Version: 1.0.39
+
+- **Fix**
+  - Keep displayed Prompt Review text editable with Pause on or off, and send edits on the next queue. Preserve reviewed text when disabling Pause, keep unchanged Image Selector continuations cached, and retain the separate H3 first prompt and ordered prompt list. Apply saved edits only to their matching source and preserve pending edits across workflow reloads.
+- **Changed files**
+  - core/prompt_review.py
+  - js/eclipse-prompt-review.js
+  - py/RvText_PromptReview.py
+  - Readme/Prompt_Review.md
+  - pyproject.toml
+
 ## 2026-11-15
 
 ### Version: 1.0.38

@@ -22,6 +22,14 @@ def validate_texts(values):
     return list(values)
 
 
+def validate_edits(originals, texts):
+    if len(texts) != len(originals):
+        raise ValueError("Keep one text entry per incoming prompt, in the original order.")
+    for before, after in zip(originals, texts, strict=True):
+        if before.strip() and not after.strip():
+            raise ValueError("A nonempty prompt cannot be cleared; reset it or enter replacement text.")
+
+
 def validate_configuration(raw):
     if isinstance(raw, list) and len(raw) == 1:
         raw = raw[0]
@@ -47,10 +55,12 @@ def prepare_review(prompts, first_prompt, config):
         raise ValueError("Connect exactly one first prompt; connect prompt lists to prompts.")
     originals = validate_texts((first_prompt if has_first else []) + prompts)
     source = hashlib.sha256(json.dumps([has_first, originals], ensure_ascii=False).encode("utf-8")).hexdigest()
-    # Pause off is an exact passthrough, including after a previous edited run.
-    edits = config["edits"] if config["pause"] and config["source"] == source else originals
+    # Pause controls the review gate. Explicit edits apply in either mode, but
+    # only to the exact source and list layout the user saw in the editor.
+    edits = config["edits"] if config["source"] == source else originals
     if len(edits) != len(originals):
         edits = originals
+    validate_edits(originals, edits)
     return {"source": source, "has_first": has_first, "originals": originals, "texts": list(edits)}
 
 
@@ -100,11 +110,7 @@ class ReviewBroker:
                     or review.packet["prompt_id"] != prompt_id):
                 return False
             if action == "continue":
-                if len(texts) != len(review.packet["originals"]):
-                    raise ValueError("Keep one text entry per incoming prompt, in the original order.")
-                for before, after in zip(review.packet["originals"], texts, strict=True):
-                    if before.strip() and not after.strip():
-                        raise ValueError("A nonempty prompt cannot be cleared; reset it or enter replacement text.")
+                validate_edits(review.packet["originals"], texts)
             review.action, review.texts = action, texts
             review.event.set()
         return True
