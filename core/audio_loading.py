@@ -103,6 +103,8 @@ def load_audio_excerpt(audio, start_time=0.0, duration=0.0, audio_in=None, stop_
             raise ValueError("Audio excerpt is empty.")
         ui = {"audio_source": ["file"]}
     loaded_duration = out["waveform"].shape[-1] / sample_rate
+    out["eclipse_excerpt"] = {"start_time": start_time, "duration": duration,
+                              "loaded_duration": loaded_duration}
     ui["audio_trim"] = [{"start_time": start_time, "duration": duration}]
     if stop_review:
         import nodes  # type: ignore

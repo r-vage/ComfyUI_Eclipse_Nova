@@ -1,5 +1,68 @@
 # MiniMax H3 native clips
 
+## Video-only planning with Clip Planner_v2
+
+**MiniMax H3 Clip Planner_v2** keeps video timing independent of the soundtrack.
+It works with the existing Clip Conditioning, Video Loop Start, and Append Video
+Clip nodes. Its resolved image assignments override the older reference-mode
+selectors; the original planner remains available with its existing behavior.
+
+| Inputs | Logical clips | Duration |
+| --- | --- | --- |
+| Loaded video playlist, with or without images | One per enabled source clip | 0 preserves trimmed source timing; a positive value overrides each clip |
+| Images without video | One per enabled image | Positive duration per image |
+| Neither images nor video | One text-only clip | Positive duration |
+
+Images cycle in enabled loader order by **source clip**, not detected scene.
+One image is reused for all clips; excess images are unused. Each detected scene
+and technical render split keeps its source clip's image. A positive duration
+scales scene cuts proportionally within each source clip. A duration too short
+to retain every scene produces an error. Generation uses the 24 FPS frame grid.
+
+Connect the same Load Video output to the planner and scene analysis. Place
+**Scene Source Boundaries_v2** after Scene Cut Limit and before Scene Analysis
+Plan to retain playlist boundaries even when adjacent clips look alike. Keep
+playlist transitions set to Cut. Other VIDEO producers without Eclipse playlist
+provenance are treated as a single source clip.
+
+**Describe images** is independent of video scene detection in
+`MMH3_Unified_TFL2VA.json`. Select the desired Smart LM task and edit its image
+instructions; images are processed individually. Review results before they
+reach the planner's `image_prompts` input. Keep one description per enabled
+image, in loader order. With video analysis enabled, these descriptions combine
+with scene action/framing and global direction. Select the video analysis task
+and the Scene Analysis to H3 appearance mode manually: **Scene Motion Analysis**
+with **exclude source appearance** when images supply the appearance, or
+**Scene Description (T2V)** with **include source appearance** for full textual
+descriptions. Disable both analysis options to use manual prompts.
+
+**Part source → Final generation prompts** displays the combined text from the
+planner, including each image's LLM description, scene/manual directions, and
+global direction. Queue the workflow to populate the display. Use its prompt
+selector to inspect each scene; technical render splits share that scene's text.
+Pause is off by default. Edits use the existing Prompt Review behavior and feed
+**H3 Reviewed Plan_v2** before generation, preserving timing and image assignments.
+No separate prompt file is written.
+
+The workflow's **Duration per clip/image** control is in the Canvas group.
+Disable Images, Reference video, and Live analysis for text-only generation.
+Enable Images and Describe images, with Live analysis disabled, to describe and
+animate a single image without scene detection.
+
+Audio priority is a dedicated recording, then unmuted source-video audio, then
+H3-generated sound. Use Load Audio's **Start** and **Duration** to select a
+dedicated excerpt; audio Duration 0 means the remainder of the recording.
+The selected excerpt loops when short and is trimmed when long. Looping never
+uses material outside that excerpt. Audio is attached during assembly and is
+not passed as a lip-sync or native audio guide. Muted/missing source tracks permit
+generated sound; an intentional silent recording remains a selected recording.
+
+Persistent runs save resolved clip timing, source/image assignments, prompts,
+soundtrack, and audio-excerpt settings. Resume restores them without fresh
+analysis. Existing runs keep their saved planning and conditioning behavior.
+
+## Original Clip Planner
+
 **MiniMax H3 Clip Planner** and **MiniMax H3 Clip Conditioning** support native
 text-to-video-and-audio, visual-reference and first/last-image generation. They
 call ComfyUI's `MiniMaxH3ImageToVideo` or `MiniMaxH3ReferenceToVideo` and, when a

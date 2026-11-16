@@ -7,6 +7,7 @@ import os
 import tempfile
 import threading
 import weakref
+from bisect import bisect_left
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -563,6 +564,19 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
     # The encoded playlist always has an audio track, including synthesized
     # silence. Retain source availability for consumers offering generated audio.
     video.eclipse_source_has_audio = any(not clip.row["mute"] and bool(clip.info["audio"]) for clip in clips)
+    # Preserve playlist identity before encoding removes the individual clips.
+    # Fixed-FPS conversion moves clip boundaries to the next retained frame.
+    # Publish those same positions for scene sampling and native planning.
+    offset = Fraction()
+    source_clips = []
+    encoded_times = (*encoded_timing.timestamps, encoded_timing.duration)
+    for clip in clips:
+        end = offset + clip.timing.duration
+        start_time = encoded_times[min(bisect_left(encoded_times, offset), len(encoded_times) - 1)]
+        end_time = encoded_times[min(bisect_left(encoded_times, end), len(encoded_times) - 1)]
+        source_clips.append({"id": clip.row["id"], "start": str(start_time), "end": str(end_time)})
+        offset = end
+    video.eclipse_source_clips = tuple(source_clips)
     report.append(f"Result: {width}x{height}, fit={fit}, {len(timing)} source frames, {float(timing.duration):.9f}s.")
     report.append("Frames streamed to VIDEO. Audio: first track per file, 48000 Hz stereo; missing or muted intervals are silence.")
     for index, window in enumerate(windows):

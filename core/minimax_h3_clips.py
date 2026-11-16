@@ -27,6 +27,8 @@ class H3Clip:
     render: int
     part: int
     prompt: str
+    source_index: int | None = None
+    image_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,9 @@ class H3ClipPlan:
     part_prompts: tuple[str, ...] | None = field(default=None, repr=False, compare=False)
     explicit_cuts: tuple[int, ...] | None = field(default=None, repr=False, compare=False)
     max_clip_frames: int | None = field(default=None, repr=False, compare=False)
+    # V2 resolves image assignment independently of scene/technical split indices.
+    soundtrack_only: bool = False
+    source_metadata: dict | None = None
 
 
 def _text(value):
@@ -62,6 +67,8 @@ def _plan_report(clips, total, source):
 
 def prepare_reference_plan(plan, mode):
     # FMF assigns images by scene, never by a technical render-capacity split.
+    if plan.soundtrack_only:
+        return plan
     if mode not in REFERENCE_MODES:
         raise ValueError("Unknown reference image mode.")
     if mode != "first_middle_first":
@@ -211,12 +218,19 @@ def clip_conditioning(plan, index, clip, vae, width, height, seed,
     )
 
     item = clip_at(plan, index)
-    if reference_mode == "first_middle_first" and len({item.part for item in plan.clips}) < 3:
+    if not plan.soundtrack_only and reference_mode == "first_middle_first" and len({item.part for item in plan.clips}) < 3:
         raise ValueError("FMF needs three planned scenes. Select first_middle_first in Clip Planner or Video Loop Start before conditioning.")
-    first, last = reference_pair(images, reference_mode, item.part)
+    if plan.soundtrack_only:
+        frames = flatten_images(images)
+        if item.image_index is not None and not 0 <= item.image_index < len(frames):
+            raise ValueError("The planned reference image is missing from the saved inputs.")
+        first = frames[item.image_index] if item.image_index is not None else None
+        last = None
+    else:
+        first, last = reference_pair(images, reference_mode, item.part)
     if item.keep == 1 and first is not None:
         last = None
-    references = flatten_images(images) if reference_mode == "reference_images" else []
+    references = flatten_images(images) if reference_mode == "reference_images" and not plan.soundtrack_only else []
     if references:
         if len(references) > 9:
             raise ValueError("H3 reference_images supports at most 9 images; select fewer timeline slots.")
@@ -241,7 +255,7 @@ def clip_conditioning(plan, index, clip, vae, width, height, seed,
             if guide["resolved_frame_index"] == item.render - 1 else dict(guide)
             for guide in metadata.get("minimax_keyframes", [])
         ]}] for embedding, metadata in positive]
-    if plan.audio is not None:
+    if plan.audio is not None and not plan.soundtrack_only:
         if audio_vae is None:
             raise ValueError("An audio VAE is required to guide H3 with the selected soundtrack.")
         waveform, rate = audio_shape(plan.audio)

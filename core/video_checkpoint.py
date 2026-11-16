@@ -78,7 +78,7 @@ def render_inputs(plan, width, height, **kwargs):
     ):
         raise ValueError("Run prompts must be text or a list of text.")
     if kind == "clips":
-        if data.reference_mode == "first_middle_first":
+        if not plan.soundtrack_only and data.reference_mode == "first_middle_first":
             reference_pair(data.images, data.reference_mode, 0)
         data = replace(data, audio=plan.audio)
     else:
@@ -134,7 +134,8 @@ def save_checkpoint(root, data, parent=None):
     root = Path(root)
     kind, fps, ranges = plan_ranges(data.plan)
     plan = ({"clips": [asdict(clip) for clip in data.plan.clips], "total_frames": data.plan.total_frames,
-             "audio_source": data.plan.audio_source, "report": data.plan.report}
+             "audio_source": data.plan.audio_source, "report": data.plan.report,
+             "soundtrack_only": data.plan.soundtrack_only, "source_metadata": data.plan.source_metadata}
             if kind == "clips" else data.plan)
     value = {"format": "eclipse_render_checkpoint", "version": 1, "kind": kind,
              "plan": plan, "fps": fps, "width": data.width, "height": data.height,
@@ -188,7 +189,9 @@ def load_checkpoint(run_path):
     plan = value["plan"]
     if value["kind"] == "clips":
         plan = H3ClipPlan(tuple(H3Clip(**item) for item in plan["clips"]), plan["total_frames"],
-                          plan["audio_source"], audios["audio"], plan["report"])
+                          plan["audio_source"], audios["audio"], plan["report"],
+                          soundtrack_only=plan.get("soundtrack_only", False),
+                          source_metadata=plan.get("source_metadata"))
     elif value["kind"] != "frames":
         raise ValueError("Unsupported checkpoint render kind.")
     data = render_inputs(plan, value["width"], value["height"], images=images or None, **audios,

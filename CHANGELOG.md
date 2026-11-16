@@ -2,6 +2,26 @@
 
 ## 2026-11-16
 
+### Version: 1.0.40
+
+- **Feat**
+  - Add MiniMax H3 Clip Planner_v2 for native video generation with independent image descriptions, cyclic image assignment by loaded source clip, and per-clip duration overrides. Preserve scene cuts and image assignments through render splits and saved-run resume. Keep dedicated audio excerpts separate from video timing, looping or trimming the selected recording as a soundtrack without audio conditioning.
+  - Add H3 Image Inputs_v2 and Scene Source Boundaries_v2 to select appearance-aware analysis and retain original playlist cuts before scene description. Preserve source-clip timing through video loading and fixed-FPS conversion.
+  - Expose each native scene's combined generation prompt for display and optional review, including image descriptions and global direction. Apply reviewed text through H3 Reviewed Plan_v2 while retaining timing, image assignments, and technical splits.
+- **Docs**
+  - Document native video-only planning, image description, timing overrides, and audio excerpt selection.
+- **Changed files**
+  - core/audio_loading.py
+  - core/minimax_h3_clips.py
+  - core/minimax_h3_native_plan.py
+  - core/video_checkpoint.py
+  - core/video_loader.py
+  - py/RvVideo_MiniMaxH3NativePlan.py
+  - Readme/MiniMax_H3_Clips.md
+  - pyproject.toml
+
+## 2026-11-16
+
 ### Version: 1.0.39
 
 - **Fix**
