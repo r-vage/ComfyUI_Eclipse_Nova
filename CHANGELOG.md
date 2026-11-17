@@ -2,6 +2,19 @@
 
 ## 2026-11-17
 
+### Version: 1.0.42
+
+- **Fix**
+  - Prevent smooth zooms and pans from creating blended scene cuts merely because their colour balance changes. Require a concentrated change around the proposed boundary while preserving adaptive hard-cut detection and existing node settings.
+- **Docs**
+  - Explain the blended-transition motion check and its limitations.
+- **Changed files**
+  - core/scene_gradual.py
+  - Readme/Scene_Analysis.md
+  - pyproject.toml
+
+## 2026-11-17
+
 ### Version: 1.0.41
 
 - **Fix**

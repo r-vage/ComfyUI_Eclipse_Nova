@@ -20,6 +20,7 @@ def gradual_boundaries(features, hard_cuts, window_width, min_scene_frames,
     if len(features) <= 2 * radius:
         return []
     values = np.asarray(features, dtype=np.float32)
+    steps = np.abs(np.diff(values, axis=0)).sum(axis=1) / 2
     blocked = np.zeros(len(values), dtype=bool)
     for cut in hard_cuts:
         blocked[max(0, cut - radius):min(len(values), cut + radius + 1)] = True
@@ -33,7 +34,15 @@ def gradual_boundaries(features, hard_cuts, window_width, min_scene_frames,
         variation = float(np.abs(before - left).sum(axis=1).mean()
                           + np.abs(after - right).sum(axis=1).mean()) / 2
         if change >= min_change and change / max(0.01, variation) >= threshold:
-            candidates.append(index)
+            # A steady zoom/pan changes the colour balance persistently too.
+            # Require the change to concentrate around the boundary: at least
+            # 50% faster than BOTH flanks, so starting/stopping motion alone
+            # cannot pass by comparing with its quieter side.
+            middle_rate = steps[index - gap:index + gap].mean()
+            surrounding_rate = max(steps[index - radius:index - gap].mean(),
+                                   steps[index + gap:index + radius].mean())
+            if middle_rate > 1.5 * surrounding_rate:
+                candidates.append(index)
     # One event per contiguous appearance change. Anchor it to the largest
     # adjacent histogram change in that event, not to the averaging-window edge.
     events = []

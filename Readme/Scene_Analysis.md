@@ -50,10 +50,16 @@ when absent from an older workflow.
 
 The check runs on CPU without a model download and stores small colour summaries
 per frame. It ignores luminance changes alone and suppresses extra candidates
-near existing hard cuts. It is a heuristic: reframing or changing illumination
-can still resemble a transition, while similar colours or long dissolves can be
-missed. Review detected boundaries before describing or rendering a new source.
-The report counts added blended transitions separately.
+near existing hard cuts. A blended candidate must also change faster around its
+boundary than on either side: the average frame-to-frame colour change across
+the central gap must exceed each outer window's rate by 50%. This rejects steady
+colour drift from smooth zooms or pans, including when that movement starts or
+stops, while retaining short, concentrated appearance changes. Hard-cut detection
+is unaffected. It remains a heuristic: abrupt reframing or changing illumination
+can still resemble a transition, while similar colours, long dissolves or edits
+during strong surrounding motion can be missed. Review detected boundaries before
+describing or rendering a new source. The report counts added blended transitions
+separately.
 
 Detection happens **before** Scene Analysis Plan and the description loop. Each
 side of a detected transition receives its own sampled window and description;
