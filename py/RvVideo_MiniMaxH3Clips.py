@@ -5,6 +5,7 @@ from ..core import CATEGORY
 from ..core.minimax_h3_clips import (
     CLIP_PLAN_TYPE,
     REFERENCE_MODES,
+    clip_at,
     clip_conditioning,
     plan_clips,
 )
@@ -74,5 +75,26 @@ class RvVideo_MiniMaxH3ClipConditioning(io.ComfyNode):
     @classmethod
     def execute(cls, plan, index, clip, vae, width, height, seed,
                 reference_mode=REFERENCE_MODES[0], images=None, audio_vae=None):
+        if clip_at(plan, index).crop_start:
+            raise ValueError("Use MiniMax H3 Clip Conditioning_v2 and connect crop_start to Append Video Clip_v2 for warmup.")
         return io.NodeOutput(*clip_conditioning(plan, index, clip, vae, width, height, seed,
                                                reference_mode, images, audio_vae))
+
+
+class RvVideo_MiniMaxH3ClipConditioningV2(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        # Keep V3's cached RETURN_TYPES separate from the four-output original.
+        schema = RvVideo_MiniMaxH3ClipConditioning.define_schema()
+        schema.node_id = "MiniMax H3 Clip Conditioning_v2 [Eclipse Nova]"
+        schema.display_name = "MiniMax H3 Clip Conditioning_v2"
+        schema.description = "Native H3 clip conditioning with planned prompt-settling warmup. The scene prompt applies to the hidden lead-in and retained video. Connect both crop_start and keep_frames to Append Video Clip_v2."
+        schema.outputs.append(io.Int.Output("crop_start", tooltip="Discard this many decoded video frames and matching generated audio samples before retaining keep_frames."))
+        return schema
+
+    @classmethod
+    def execute(cls, plan, index, clip, vae, width, height, seed,
+                reference_mode=REFERENCE_MODES[0], images=None, audio_vae=None):
+        item = clip_at(plan, index)
+        return io.NodeOutput(*clip_conditioning(plan, index, clip, vae, width, height, seed,
+                                               reference_mode, images, audio_vae), item.crop_start)

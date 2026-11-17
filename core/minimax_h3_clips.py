@@ -29,6 +29,8 @@ class H3Clip:
     prompt: str
     source_index: int | None = None
     image_index: int | None = None
+    # Hidden prompt-settling frames; absent in older saved runs.
+    crop_start: int = 0
 
 
 @dataclass(frozen=True)
@@ -181,7 +183,13 @@ def clip_at(plan, index):
         raise TypeError("Expected a MiniMax H3 Clip Plan.")
     if index < 0 or index >= len(plan.clips):
         raise ValueError("Clip index is outside the plan.")
-    return plan.clips[index]
+    item = plan.clips[index]
+    if (type(item.crop_start) is not int or item.crop_start < 0
+            or item.crop_start + item.keep > item.render):
+        raise ValueError("The planned warmup and retained frames must fit the render window.")
+    if item.crop_start and not plan.soundtrack_only:
+        raise ValueError("Clip warmup requires a native Clip Planner_v2 or H3 Prompt Plan_v2 plan.")
+    return item
 
 
 def reference_pair(images, mode, part):

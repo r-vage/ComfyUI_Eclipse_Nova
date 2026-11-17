@@ -81,12 +81,21 @@ class MemoryClipVideo(Input.Video):
 
 
 def append_video_clip(images, keep_frames, fps, audio=None, previous=None, soundtrack=None,
-                      storage=None, metadata=None, generation_seed=None):
+                      storage=None, metadata=None, generation_seed=None, *, crop_start=0):
     if not isinstance(images, torch.Tensor) or images.ndim != 4 or images.shape[-1] != 3:
         raise ValueError("Append Video Clip expects an RGB IMAGE batch.")
-    if not 1 <= keep_frames <= images.shape[0]:
-        raise ValueError("Keep frames must fit the decoded clip.")
+    if (type(crop_start) is not int or crop_start < 0 or keep_frames < 1
+            or crop_start + keep_frames > images.shape[0]):
+        raise ValueError("Warmup crop and keep frames must fit the decoded clip.")
     timing = VideoTiming.constant(keep_frames, fps)
+    images = images[crop_start:crop_start + keep_frames]
+    if crop_start and audio is not None:
+        # Only the per-render generated audio follows the hidden image prefix.
+        # A selected full soundtrack remains anchored at output time zero.
+        rate = audio["sample_rate"]
+        start = round(timing.durations[0] * crop_start * rate)
+        count = round(timing.duration * rate)
+        audio = {**audio, "waveform": audio["waveform"][..., start:start + count]}
     height, width = images.shape[1:3]
     if previous is not None and tuple(previous.get_dimensions()) != (width, height):
         raise ValueError("All clips must have the same dimensions.")

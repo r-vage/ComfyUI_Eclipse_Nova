@@ -38,6 +38,10 @@ class RvVideo_MiniMaxH3ClipPlannerV2(io.ComfyNode):
                                 tooltip="One independently generated description per enabled image, in loader order."),
                 io.Audio.Input("audio", optional=True, tooltip="Selected excerpt. Loop this excerpt if short, trim if long; it never sets video duration."),
                 io.Video.Input("reference_video", optional=True),
+                io.Float.Input("opening_warmup_seconds", default=0, min=0, max=10, step=0.1, optional=True,
+                               tooltip="Hidden lead-in for the first render. The opening prompt applies throughout; discard this prefix before keeping the full planned scene. Zero keeps the reference-image opening."),
+                io.Float.Input("warmup_seconds", default=0, min=0, max=10, step=0.1, optional=True,
+                               tooltip="Hidden lead-in for every later independent render, including long-scene splits. Lets its prompt establish camera and pose before the visible clip. Consumes render capacity without changing duration or cuts. Requires Clip Conditioning_v2 and Append Video Clip_v2."),
             ],
             outputs=[io.Custom(CLIP_PLAN_TYPE).Output("plan"), io.Int.Output("clip_count"),
                      io.Int.Output("total_frames"), io.Audio.Output("selected_audio"), io.String.Output("report"),
@@ -46,10 +50,13 @@ class RvVideo_MiniMaxH3ClipPlannerV2(io.ComfyNode):
 
     @classmethod
     def execute(cls, duration, max_clip_frames, cut_times, prompt, first_prompt,
-                next_prompts=None, images=None, image_prompts=None, audio=None, reference_video=None):
+                next_prompts=None, images=None, image_prompts=None, audio=None, reference_video=None,
+                opening_warmup_seconds=0.0, warmup_seconds=0.0):
         plan = plan_native_clips(unwrap_value(duration), unwrap_value(max_clip_frames),
                                  unwrap_value(cut_times), unwrap_value(prompt), unwrap_value(first_prompt),
-                                 next_prompts, images, image_prompts, unwrap_value(audio), unwrap_value(reference_video))
+                                 next_prompts, images, image_prompts, unwrap_value(audio), unwrap_value(reference_video),
+                                 opening_warmup_seconds=unwrap_value(opening_warmup_seconds),
+                                 warmup_seconds=unwrap_value(warmup_seconds))
         return io.NodeOutput(plan, len(plan.clips), plan.total_frames, plan.audio, plan.report, native_scene_prompts(plan))
 
 
@@ -89,11 +96,14 @@ class RvVideo_H3PromptPlanV2(RvVideo_MiniMaxH3ClipPlannerV2):
 
     @classmethod
     def execute(cls, duration, max_clip_frames, cut_times, prompt, first_prompt,
-                next_prompts=None, images=None, audio=None, reference_video=None):
+                next_prompts=None, images=None, audio=None, reference_video=None,
+                opening_warmup_seconds=0.0, warmup_seconds=0.0):
         plan = plan_native_clips(unwrap_value(duration), unwrap_value(max_clip_frames),
                                  unwrap_value(cut_times), unwrap_value(prompt), unwrap_value(first_prompt),
                                  next_prompts, images, audio=unwrap_value(audio),
-                                 reference_video=unwrap_value(reference_video), prompt_timing=True)
+                                 reference_video=unwrap_value(reference_video), prompt_timing=True,
+                                 opening_warmup_seconds=unwrap_value(opening_warmup_seconds),
+                                 warmup_seconds=unwrap_value(warmup_seconds))
         return io.NodeOutput(plan, len(plan.clips), plan.total_frames, plan.audio, plan.report, native_scene_prompts(plan))
 
 

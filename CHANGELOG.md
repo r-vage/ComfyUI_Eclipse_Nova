@@ -2,12 +2,31 @@
 
 ## 2026-11-17
 
+### Version: 1.0.44
+
+- **Feat**
+  - Add separate opening and later-render warmup controls to native H3 v2 planners. Generate each hidden lead-in with its scene prompt, then preserve the planned visible duration, cut times and image assignment.
+  - Add Clip Conditioning_v2 and Append Video Clip_v2 to crop hidden video and generated audio together, preserving selected soundtrack timing and saved-run recovery. Existing nodes and older checkpoints remain supported.
+- **Docs**
+  - Document native H3 warmup controls, render-capacity costs and saved-run behavior.
+- **Changed files**
+  - core/minimax_h3_clips.py
+  - core/minimax_h3_native_plan.py
+  - core/video_clip_append.py
+  - py/RvVideo_AppendClip.py
+  - py/RvVideo_MiniMaxH3Clips.py
+  - py/RvVideo_MiniMaxH3NativePlan.py
+  - Readme/MiniMax_H3_Clips.md
+  - pyproject.toml
+
+## 2026-11-17
+
 ### Version: 1.0.43
 
 - **Fix**
   - Allow zero duration in Smart Folder's editor and validation, passing it through the existing PIPE to preserve source-video timing in native H3 workflows.
 - **Docs**
-  - Rewrite the TF2VA Nova.3 workflow guide for per-clip image/text prompts, optional video analysis, soundtrack excerpts, final prompt review and saved-run recovery. Clarify first-frame-only conditioning and Smart Folder's zero-duration option for source-video timing.
+  - Document Smart Folder's zero-duration setting and its downstream interpretation.
 - **Changed files**
   - core/smart_folder.py
   - Readme/Smart_Folder.md

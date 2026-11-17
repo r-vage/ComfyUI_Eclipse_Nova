@@ -6,6 +6,15 @@ from ..core.video_clip_append import append_video_clip
 from ..core.video_run import STORAGE_TYPE
 
 
+def _append_result(cls, images, keep_frames, fps, audio, previous, soundtrack, storage, generation_seed, crop_start):
+    metadata = {"workflow": (getattr(cls.hidden, "extra_pnginfo", None) or {}).get("workflow"),
+                "prompt": getattr(cls.hidden, "prompt", None)} if storage and storage.mode == "persistent" else None
+    result = append_video_clip(images, keep_frames, fps, audio, previous, soundtrack, storage, metadata, generation_seed,
+                               crop_start=crop_start)
+    run = getattr(result, "_eclipse_run_directory", None)
+    return io.NodeOutput(result, f"{run}/run.json" if run else "")
+
+
 class RvVideo_AppendClip(io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -29,9 +38,26 @@ class RvVideo_AppendClip(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, images, keep_frames, fps, audio=None, previous=None, soundtrack=None, storage=None, generation_seed=None):
-        metadata = {"workflow": (getattr(cls.hidden, "extra_pnginfo", None) or {}).get("workflow"),
-                    "prompt": getattr(cls.hidden, "prompt", None)} if storage and storage.mode == "persistent" else None
-        result = append_video_clip(images, keep_frames, fps, audio, previous, soundtrack, storage, metadata, generation_seed)
-        run = getattr(result, "_eclipse_run_directory", None)
-        return io.NodeOutput(result, f"{run}/run.json" if run else "")
+    def execute(cls, images, keep_frames, fps, audio=None, previous=None, soundtrack=None, storage=None, generation_seed=None,
+                crop_start=0):
+        return _append_result(cls, images, keep_frames, fps, audio, previous, soundtrack, storage, generation_seed, crop_start)
+
+
+class RvVideo_AppendClipV2(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        schema = RvVideo_AppendClip.define_schema()
+        schema.node_id = "Append Video Clip_v2 [Eclipse Nova]"
+        schema.display_name = "Append Video Clip_v2"
+        schema.description = "Discard planned warmup from decoded video and generated audio, retain keep_frames, and append to the saved run. A selected soundtrack stays aligned to the output timeline."
+        schema.inputs.append(io.Int.Input("crop_start", default=0, min=0, max=1000000,
+                                          tooltip="Connect Clip Conditioning_v2's crop_start. Hidden lead-in frames and matching generated audio are discarded; zero retains the opening."))
+        for field in schema.inputs:
+            if field.id == "keep_frames":
+                field.tooltip = "Retain exactly this many frames after crop_start. Connect Clip Conditioning_v2's keep_frames."
+        return schema
+
+    @classmethod
+    def execute(cls, images, keep_frames, fps, audio=None, previous=None, soundtrack=None, storage=None, generation_seed=None,
+                crop_start=0):
+        return _append_result(cls, images, keep_frames, fps, audio, previous, soundtrack, storage, generation_seed, crop_start)

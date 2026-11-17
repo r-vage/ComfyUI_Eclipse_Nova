@@ -66,6 +66,32 @@ retain playlist boundaries even when adjacent clips look alike. Keep playlist
 transitions set to Cut. VIDEO producers without Eclipse playlist provenance are
 treated as a single source clip.
 
+## Hidden warmup for camera and pose
+
+H3 Prompt Plan_v2 and Clip Planner_v2 provide **opening_warmup_seconds** and
+**warmup_seconds**. Both default to zero for existing graphs. The updated TF2VA
+workflow sets each to one second; set either to zero to disable that lead-in.
+
+The opening setting applies to the first render. The later setting applies to
+every subsequent independent render, including capacity splits of a long scene.
+Each render uses its scene's complete reviewed prompt throughout. Its assigned
+image anchors the hidden opening; the visible clip begins after the discarded
+lead-in, giving the prompt time to establish its requested camera and pose.
+This also works with multiple images and text-only clips. Settling time varies
+with the model and prompt; this does not guarantee a completed pose change.
+
+Use **MiniMax H3 Clip Conditioning_v2**, then connect both **crop_start** and
+**keep_frames** to **Append Video Clip_v2**. The latter discards the same time
+range from decoded video and generated audio. Existing conditioning and append
+nodes remain available for graphs without warmup.
+
+Visible scene durations, cut positions and selected soundtrack timing remain
+unchanged. Hidden frames consume the Max clip frames budget and may add render
+parts. For example, five visible seconds with one second of warmup requires
+144 frames before H3 grid padding, then retains 120 frames after discarding 24.
+Warmup crops the initial transition; renders still independently use their
+assigned image and do not acquire motion continuation from a previous clip.
+
 ## Soundtrack and saved runs
 
 Audio priority is a dedicated recording, then unmuted source-video audio, then
@@ -77,8 +103,10 @@ not passed as a lip-sync or native audio guide. Muted/missing source tracks perm
 generated sound; an intentional silent recording remains a selected recording.
 
 Persistent runs save resolved clip timing, source/image assignments, prompts,
-soundtrack, and audio-excerpt settings. Resume restores them without fresh
-analysis. Existing runs keep their saved planning and conditioning behavior.
+soundtrack, audio-excerpt settings and per-render warmup crops. Resume restores
+them without fresh analysis; part prompt edits preserve those crops. Existing
+runs without warmup metadata retain zero crop. Start a New run to apply changed
+warmup settings; Resume and Update keep the saved render layout.
 
 **Clip Planner_v2** retains its earlier contract: independent image descriptions
 are appended with global and scene directions, with one source clip per image

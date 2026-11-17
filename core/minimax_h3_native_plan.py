@@ -107,11 +107,19 @@ def _prompt_spans(duration, image_count, parts, times):
 
 def plan_native_clips(duration, max_clip_frames=362, cut_times="", prompt="", first_prompt="",
                       next_prompts=None, images=None, image_prompts=None, audio=None, reference_video=None,
-                      *, prompt_timing=False):
+                      *, prompt_timing=False, opening_warmup_seconds=0.0, warmup_seconds=0.0):
     if not math.isfinite(duration) or not 0 <= duration <= 86400:
         raise ValueError("Duration must be finite and between 0 and 86400 seconds.")
     if not is_h3_frame_count(max_clip_frames):
         raise ValueError("Max clip frames must be on H3's 17k+5 grid, from 124 to 362.")
+    warmups = {}
+    for name, seconds in (("opening_warmup_seconds", opening_warmup_seconds), ("warmup_seconds", warmup_seconds)):
+        if (isinstance(seconds, bool) or not isinstance(seconds, (int, float))
+                or not math.isfinite(seconds) or not 0 <= seconds <= 10):
+            raise ValueError(f"{name} must be finite and between 0 and 10 seconds.")
+        warmups[name] = round(seconds * FPS)
+        if warmups[name] >= max_clip_frames:
+            raise ValueError(f"{name} leaves no visible frames. Reduce warmup or increase max_clip_frames.")
     frames = flatten_images(images)
     descriptions = list(image_prompts or [])
     if descriptions and len(descriptions) != len(frames):
@@ -179,10 +187,15 @@ def plan_native_clips(duration, max_clip_frames=362, cut_times="", prompt="", fi
             specific = parts[prompt_index] if prompt_index < len(parts) else ""
             description = descriptions[image_index] if descriptions and image_index is not None else ""
             text = "\n\n".join(s.strip() for s in (_text(prompt), description, specific) if s.strip())
-            for position in range(a, b, max_clip_frames):
-                keep = min(max_clip_frames, b - position)
-                clips.append(H3Clip(position, keep, aligned_h3_length(keep), scene_index, text,
-                                    source_index=source_index, image_index=image_index))
+            position = a
+            while position < b:
+                # Each independent render starts from its assigned reference.
+                # Reserve the hidden lead-in before choosing visible capacity.
+                crop = warmups["opening_warmup_seconds" if not clips else "warmup_seconds"]
+                keep = min(max_clip_frames - crop, b - position)
+                clips.append(H3Clip(position, keep, aligned_h3_length(crop + keep), scene_index, text,
+                                    source_index=source_index, image_index=image_index, crop_start=crop))
+                position += keep
             scene_index += 1
         output_start = output_end
     if prompt_timing and any(text.strip() and index not in used_prompts for index, text in enumerate(parts)):
@@ -192,12 +205,18 @@ def plan_native_clips(duration, max_clip_frames=362, cut_times="", prompt="", fi
     audio = fit_soundtrack(audio, total)
     report = _plan_report(clips, total, source)
     report += f" {len(spans)} source clips; images cycle by source clip, not scene. Audio is soundtrack only."
+    if any(warmups.values()):
+        report += (f" Hidden warmup: opening {warmups['opening_warmup_seconds']} frames; "
+                   f"later renders {warmups['warmup_seconds']} frames, including capacity splits. "
+                   "Visible duration and cut times are unchanged. Use Clip Conditioning_v2 and Append Video Clip_v2.")
     if len(frames) > len(spans):
         report += f" {len(frames) - len(spans)} extra images are unused."
     if cuts and cuts[-1] >= spans[-1][2]:
         report += " Cuts outside the source timeline are ignored."
     return H3ClipPlan(tuple(clips), total, source, audio, report, soundtrack_only=True,
-                      source_metadata={"clips": metadata, "duration_override": duration, "audio_excerpt": excerpt})
+                      source_metadata={"clips": metadata, "duration_override": duration, "audio_excerpt": excerpt,
+                                       "opening_warmup_seconds": opening_warmup_seconds,
+                                       "warmup_seconds": warmup_seconds})
 
 
 def add_source_boundaries(scene_plan, video):
