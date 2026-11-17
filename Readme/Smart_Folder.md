@@ -44,7 +44,13 @@ Video always includes frame rate. Additional Include buttons enable:
 | **VHS** | Frame load cap, Skip first frames and Select every nth. A cap of 0 means no limit. |
 | **Context** | Context length; initially enabled in Video mode. With VHS enabled, adds Skip contexts and its After queue control. |
 | **Loop** | Loop count and overlap. Enables Context and prevents disabling it while Loop is active. |
-| **Duration** | Duration metadata in seconds, shown beside frame rate. It does not calculate frame counts. |
+| **Duration** | Duration metadata in seconds, from 0 to 180, shown beside frame rate. It does not calculate frame counts. |
+
+Duration defaults to **15 seconds** and supports **0**. Zero is passed unchanged
+through the PIPE and **Pipe Out Smart Folder**; the consuming node decides what
+it means. In the native H3 prompt planner, **0 preserves loaded reference-video
+timing**, while image/text-only clips require a positive duration. Keep the
+existing duration connection when using this option.
 
 With VHS, Context and a positive Loop count, the effective frame load cap is `Context length × Loop count`; the manual cap is retained but disabled. With VHS and Context, effective skipped frames are `Skip first frames + Context length × Skip contexts`. The collapsed Frame loading summary shows these effective values.
 

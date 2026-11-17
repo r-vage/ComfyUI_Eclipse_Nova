@@ -2,6 +2,19 @@
 
 ## 2026-11-17
 
+### Version: 1.0.43
+
+- **Fix**
+  - Allow zero duration in Smart Folder's editor and validation, passing it through the existing PIPE to preserve source-video timing in native H3 workflows.
+- **Docs**
+  - Rewrite the TF2VA Nova.3 workflow guide for per-clip image/text prompts, optional video analysis, soundtrack excerpts, final prompt review and saved-run recovery. Clarify first-frame-only conditioning and Smart Folder's zero-duration option for source-video timing.
+- **Changed files**
+  - core/smart_folder.py
+  - Readme/Smart_Folder.md
+  - pyproject.toml
+
+## 2026-11-17
+
 ### Version: 1.0.42
 
 - **Fix**
