@@ -7,6 +7,7 @@ from ..core.minimax_h3_clips import CLIP_PLAN_TYPE
 from ..core.minimax_h3_native_plan import (
     add_source_boundaries,
     apply_native_scene_prompts,
+    native_description_inputs,
     native_scene_prompts,
     plan_native_clips,
 )
@@ -67,6 +68,48 @@ class RvVideo_H3ReviewedPlanV2(io.ComfyNode):
     @classmethod
     def execute(cls, plan, prompts):
         return io.NodeOutput(apply_native_scene_prompts(unwrap_value(plan), prompts))
+
+
+class RvVideo_H3PromptPlanV2(RvVideo_MiniMaxH3ClipPlannerV2):
+    @classmethod
+    def define_schema(cls):
+        schema = super().define_schema()
+        schema.node_id = "H3 Prompt Plan_v2 [Eclipse Nova]"
+        schema.display_name = "H3 Prompt Plan_v2"
+        schema.description = "Plan timing and complete directions before optional LLM description. Multiple images use one clip each; a single image or text-only uses the first/next prompt list. Reviewed LLM results replace these directions through H3 Reviewed Plan_v2."
+        schema.inputs = [field for field in schema.inputs if field.id != "image_prompts"]
+        for field in schema.inputs:
+            if field.id == "duration":
+                field.tooltip = "Without video: seconds per clip; total duration is clip count × this value. With video: zero preserves source timing; positive overrides each source clip."
+            elif field.id == "cut_times":
+                field.tooltip = "Without video: one fewer cut than clips, in seconds from the video start; blank uses equal durations. With video: cuts on the loaded source timeline."
+            elif field.id == "prompt":
+                field.tooltip = "Global instructions included once in every scene's LLM input, or directly in generation when description is disabled."
+        return schema
+
+    @classmethod
+    def execute(cls, duration, max_clip_frames, cut_times, prompt, first_prompt,
+                next_prompts=None, images=None, audio=None, reference_video=None):
+        plan = plan_native_clips(unwrap_value(duration), unwrap_value(max_clip_frames),
+                                 unwrap_value(cut_times), unwrap_value(prompt), unwrap_value(first_prompt),
+                                 next_prompts, images, audio=unwrap_value(audio),
+                                 reference_video=unwrap_value(reference_video), prompt_timing=True)
+        return io.NodeOutput(plan, len(plan.clips), plan.total_frames, plan.audio, plan.report, native_scene_prompts(plan))
+
+
+class RvVideo_H3PromptInputsV2(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="H3 Prompt Inputs_v2 [Eclipse Nova]", display_name="H3 Prompt Inputs_v2", category=_CATEGORY,
+            is_input_list=True,
+            description="Send each planned scene's instructions to the LLM, paired with its assigned image when available. A single image is reused across its scenes; text-only needs no image. Technical render splits share one description.",
+            inputs=[io.Custom(CLIP_PLAN_TYPE).Input("plan"), io.Image.Input("images", optional=True)],
+            outputs=[io.Image.Output("images", is_output_list=True), io.String.Output("prompts", is_output_list=True)])
+
+    @classmethod
+    def execute(cls, plan, images=None):
+        return io.NodeOutput(*native_description_inputs(unwrap_value(plan), images))
 
 
 class RvVideo_H3ImageInputsV2(io.ComfyNode):

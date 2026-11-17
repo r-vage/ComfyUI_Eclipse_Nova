@@ -217,6 +217,7 @@ class EclipseExtension(ComfyExtension):
         from .py.RvVideo_MiniMaxH3NativePlan import (
             RvVideo_MiniMaxH3ClipPlannerV2, RvVideo_H3ImageInputsV2, RvVideo_SceneSourceBoundariesV2,
             RvVideo_H3ReviewedPlanV2,
+            RvVideo_H3PromptPlanV2, RvVideo_H3PromptInputsV2,
         )
         from .py.RvVideo_AppendClip import RvVideo_AppendClip
         from .py.RvVideo_RunStorage import RvVideo_RunStorage, RvVideo_LoadRun, RvVideo_RunGate, RvVideo_RunInfo
@@ -404,6 +405,8 @@ class EclipseExtension(ComfyExtension):
             RvVideo_H3ImageInputsV2,
             RvVideo_SceneSourceBoundariesV2,
             RvVideo_H3ReviewedPlanV2,
+            RvVideo_H3PromptPlanV2,
+            RvVideo_H3PromptInputsV2,
             RvVideo_AppendClip,
             RvVideo_RunStorage,
             RvVideo_LoadRun,

@@ -1,53 +1,72 @@
 # MiniMax H3 native clips
 
-## Video-only planning with Clip Planner_v2
+## Unified workflow prompt flow
 
-**MiniMax H3 Clip Planner_v2** keeps video timing independent of the soundtrack.
-It works with the existing Clip Conditioning, Video Loop Start, and Append Video
-Clip nodes. Its resolved image assignments override the older reference-mode
-selectors; the original planner remains available with its existing behavior.
+`MMH3_Unified_TFL2VA.json` uses **H3 Prompt Plan_v2** to resolve timing, image
+assignments and complete scene instructions before optional LLM description.
+The original Clip Planner and Clip Planner_v2 remain available.
 
-| Inputs | Logical clips | Duration |
+| Inputs without reference video | Logical clips | Images |
 | --- | --- | --- |
-| Loaded video playlist, with or without images | One per enabled source clip | 0 preserves trimmed source timing; a positive value overrides each clip |
-| Images without video | One per enabled image | Positive duration per image |
-| Neither images nor video | One text-only clip | Positive duration |
+| Two or more images | One per enabled image | First prompt for image 1, next prompts for subsequent images |
+| One image | First prompt plus each nonblank next-prompt entry | Reuse the image for every clip |
+| No images | Same first/next prompt list | Text-only generation |
 
-Images cycle in enabled loader order by **source clip**, not detected scene.
-One image is reused for all clips; excess images are unused. Each detected scene
-and technical render split keeps its source clip's image. A positive duration
-scales scene cuts proportionally within each source clip. A duration too short
-to retain every scene produces an error. Generation uses the 24 FPS frame grid.
+A blank first prompt still reserves the opening clip. Missing later instructions
+use global direction alone; extra prompts for multiple images produce an error.
+Without a prompt list or reference media, the workflow creates one text-only clip.
+Technical render splits retain the logical clip's prompt and image.
 
-Connect the same Load Video output to the planner and scene analysis. Place
-**Scene Source Boundaries_v2** after Scene Cut Limit and before Scene Analysis
-Plan to retain playlist boundaries even when adjacent clips look alike. Keep
-playlist transitions set to Cut. Other VIDEO producers without Eclipse playlist
-provenance are treated as a single source clip.
+**Global instructions** applies to every clip. **First clip** supplies the
+opening instruction, and each nonblank **Next clips** line supplies the next
+instruction. With **LLM descriptions** enabled, H3 Prompt Inputs_v2 pairs these
+complete instructions with their assigned images, or text alone, and sends them
+through Smart LM Prompt Pipe to the selected LLM task. Each result replaces its
+input instructions; the raw first/next/global text is not appended again. Select
+a task that accepts text for text-only generation. The MiniMax H3 Scene task
+supports both image and text inputs. With LLM descriptions off, the same planned
+instructions go directly to generation.
 
-**Describe images** is independent of video scene detection in
-`MMH3_Unified_TFL2VA.json`. Select the desired Smart LM task and edit its image
-instructions; images are processed individually. Review results before they
-reach the planner's `image_prompts` input. Keep one description per enabled
-image, in loader order. With video analysis enabled, these descriptions combine
-with scene action/framing and global direction. Select the video analysis task
-and the Scene Analysis to H3 appearance mode manually: **Scene Motion Analysis**
-with **exclude source appearance** when images supply the appearance, or
-**Scene Description (T2V)** with **include source appearance** for full textual
-descriptions. Disable both analysis options to use manual prompts.
+The connected prompt list overrides Smart LM Loader's local Prompt field unless
+its **Merge user prompt** option is enabled. Use Global instructions for shared
+direction, or enable Merge to add the loader's local guidance to every request.
 
-**Part source → Final generation prompts** displays the combined text from the
-planner, including each image's LLM description, scene/manual directions, and
-global direction. Queue the workflow to populate the display. Use its prompt
-selector to inspect each scene; technical render splits share that scene's text.
-Pause is off by default. Edits use the existing Prompt Review behavior and feed
-**H3 Reviewed Plan_v2** before generation, preserving timing and image assignments.
-No separate prompt file is written.
+**Part source → Final generation prompts** displays the resolved list, after
+LLM description when enabled. Queue the workflow to populate it. Use the prompt
+selector to inspect each logical clip; technical splits share its text. Pause is
+off by default. Reviewed edits reach H3 Reviewed Plan_v2 before generation,
+preserving timing, images and soundtrack. No separate prompt file is written.
 
-The workflow's **Duration per clip/image** control is in the Canvas group.
-Disable Images, Reference video, and Live analysis for text-only generation.
-Enable Images and Describe images, with Live analysis disabled, to describe and
-animate a single image without scene detection.
+## Timing and video analysis
+
+Without video, **Duration per clip/image** is the duration of each clip when cut
+times are blank. Explicit cuts specify the N−1 boundaries for N clips within the
+same total duration of N × Duration. For example, three clips at four seconds
+with cuts `3, 8` produce lengths of three, five and four seconds. Invalid cut
+counts or cuts outside the total duration produce an error.
+
+With a reference-video playlist, duration 0 preserves each loaded clip's trimmed
+timing. A positive duration overrides each source clip and scales its scene cuts.
+Images cycle by source clip, keeping the same reference through every scene and
+technical split in that clip. Excess images are unused. Without explicit cuts,
+a prompt list longer than the video playlist is distributed across the source
+timeline, retaining source boundaries. Generation uses the 24 FPS frame grid.
+
+**Live analysis** supplies video cuts and scene descriptions in place of the
+manual cut/first/next fields. Global instructions still applies. Select the
+video LLM task and Scene Analysis to H3 appearance mode manually: Scene Motion
+Analysis with exclude source appearance when images supply appearance, or Scene
+Description (T2V) with include source appearance for full textual descriptions.
+Optional LLM descriptions then refines each planned scene using its assigned
+image, or text alone. With Live analysis off, manual fields are used.
+
+Connect the same Load Video output to planning and scene analysis. Place Scene
+Source Boundaries_v2 after Scene Cut Limit and before Scene Analysis Plan to
+retain playlist boundaries even when adjacent clips look alike. Keep playlist
+transitions set to Cut. VIDEO producers without Eclipse playlist provenance are
+treated as a single source clip.
+
+## Soundtrack and saved runs
 
 Audio priority is a dedicated recording, then unmuted source-video audio, then
 H3-generated sound. Use Load Audio's **Start** and **Duration** to select a
@@ -60,6 +79,11 @@ generated sound; an intentional silent recording remains a selected recording.
 Persistent runs save resolved clip timing, source/image assignments, prompts,
 soundtrack, and audio-excerpt settings. Resume restores them without fresh
 analysis. Existing runs keep their saved planning and conditioning behavior.
+
+**Clip Planner_v2** retains its earlier contract: independent image descriptions
+are appended with global and scene directions, with one source clip per image
+when no video is connected. Use H3 Prompt Plan_v2 and H3 Reviewed Plan_v2 for the
+unified workflow's instructions → optional LLM → final prompt flow.
 
 ## Original Clip Planner
 

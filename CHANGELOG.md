@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-11-17
+
+### Version: 1.0.41
+
+- **Fix**
+  - Route complete global and first/next clip instructions through optional LLM description once, using the resulting text for final review and generation. Support the same prompt flow for text-only and image-reference clips.
+  - Keep one clip per image when several images are loaded; reuse a single image across the first/next prompt list. Apply explicit cut times to clip boundaries and reject unmatched prompts or cuts instead of silently ignoring them.
+- **Feat**
+  - Add H3 Prompt Plan_v2 and H3 Prompt Inputs_v2 while retaining the existing planners. Preserve reference-video timing, scene boundaries, soundtrack excerpts and reviewed prompts.
+- **Docs**
+  - Explain manual-field priority, clip/image pairing, optional LLM description and cut-time duration rules.
+- **Changed files**
+  - core/minimax_h3_native_plan.py
+  - py/RvVideo_MiniMaxH3NativePlan.py
+  - Readme/MiniMax_H3_Clips.md
+  - pyproject.toml
+
 ## 2026-11-16
 
 ### Version: 1.0.40

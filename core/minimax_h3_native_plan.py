@@ -65,8 +65,49 @@ def apply_native_scene_prompts(plan, prompts):
     return replace(plan, clips=tuple(replace(clip, prompt=by_scene[clip.part]) for clip in plan.clips))
 
 
+def native_description_inputs(plan, images=None):
+    """Pair each logical scene's complete instructions with its assigned image."""
+    prompts = native_scene_prompts(plan)
+    frames = flatten_images(images)
+    if not frames:
+        if any(clip.image_index is not None for clip in plan.clips):
+            raise ValueError("Connect the same images used by H3 Prompt Plan_v2.")
+        return [], [text if text.strip() else "Write one video clip description according to the selected task."
+                    for text in prompts]
+    scenes = dict.fromkeys(clip.part for clip in plan.clips)
+    assigned = {}
+    for clip in plan.clips:
+        if clip.image_index is None or not 0 <= clip.image_index < len(frames):
+            raise ValueError("Connect the same images used by H3 Prompt Plan_v2.")
+        assigned.setdefault(clip.part, frames[clip.image_index])
+    return ([assigned[part] for part in scenes],
+            [text if text.strip() else "Describe this image for one video clip according to the selected task."
+             for text in prompts])
+
+
+def _prompt_spans(duration, image_count, parts, times):
+    # Multiple images keep one clip each. A single image (or text only) can
+    # supply several clips from the first/next prompt list.
+    count = image_count if image_count > 1 else len(parts)
+    if len(parts) > count:
+        raise ValueError(f"{len(parts)} scene prompts were supplied for {count} images. Use one prompt per image.")
+    total = Fraction(str(duration)) * count
+    parsed = parse_manual_transition_times(times, 1, 2**63 - 1) if times.strip() else None
+    if parsed:
+        cuts = [Fraction(frame, FPS) for frame in parsed[1]]
+        if len(cuts) != count - 1:
+            raise ValueError(f"{count} clips require {count - 1} cut times, or leave cut times blank.")
+        if cuts[-1] >= total:
+            raise ValueError("Cut times must be inside the total video duration (clip count × duration per clip).")
+        edges = [Fraction(), *cuts, total]
+    else:
+        edges = [Fraction(str(duration)) * i for i in range(count + 1)]
+    return tuple((f"clip-{i + 1}", start, end) for i, (start, end) in enumerate(pairwise(edges)))
+
+
 def plan_native_clips(duration, max_clip_frames=362, cut_times="", prompt="", first_prompt="",
-                      next_prompts=None, images=None, image_prompts=None, audio=None, reference_video=None):
+                      next_prompts=None, images=None, image_prompts=None, audio=None, reference_video=None,
+                      *, prompt_timing=False):
     if not math.isfinite(duration) or not 0 <= duration <= 86400:
         raise ValueError("Duration must be finite and between 0 and 86400 seconds.")
     if not is_h3_frame_count(max_clip_frames):
@@ -77,6 +118,10 @@ def plan_native_clips(duration, max_clip_frames=362, cut_times="", prompt="", fi
         raise ValueError("Image description count must match the enabled images. Describe each image individually.")
     if any(not isinstance(text, str) for text in descriptions):
         raise ValueError("Image descriptions must be text.")
+    parts = [_text(first_prompt), *[_text(text) for text in (next_prompts or [])]]
+    if prompt_timing:
+        parts = [parts[0], *[text for text in parts[1:] if text.strip()]]
+    times = _text(cut_times).strip()
     source = "loaded audio" if audio is not None else "H3-generated audio"
     if reference_video is not None:
         from .video_stream import video_frame_source
@@ -90,23 +135,31 @@ def plan_native_clips(duration, max_clip_frames=362, cut_times="", prompt="", fi
     else:
         if duration == 0:
             raise ValueError("Set a positive duration per image or text-only clip when no video is loaded.")
-        seconds = Fraction(str(duration))
-        spans = tuple((f"image-{i + 1}" if frames else "text", i * seconds, (i + 1) * seconds)
-                      for i in range(max(1, len(frames))))
-    times = _text(cut_times).strip()
+        if prompt_timing:
+            spans = _prompt_spans(duration, len(frames), parts, times)
+        else:
+            seconds = Fraction(str(duration))
+            spans = tuple((f"image-{i + 1}" if frames else "text", i * seconds, (i + 1) * seconds)
+                          for i in range(max(1, len(frames))))
     parsed = parse_manual_transition_times(times, 1, 2**63 - 1) if times else None
     cuts = [Fraction(frame, FPS) for frame in parsed[1]] if parsed else []
+    if prompt_timing and reference_video is not None:
+        if cuts and cuts[-1] >= spans[-1][2]:
+            raise ValueError("Cut times must be inside the loaded video timeline.")
+        if not cuts and len(parts) > len(spans):
+            cuts = [spans[-1][2] * i / len(parts) for i in range(1, len(parts))]
     # Scene timestamps are exported on H3's 24 FPS grid. Snap a rounded
     # playlist cut back to its exact source boundary before scaling.
     source_edges = [span[1] for span in spans[1:]]
     cuts = sorted({next((edge for edge in source_edges if abs(edge - cut) <= Fraction(1, 2 * FPS)), cut)
                    for cut in cuts})
-    parts = [_text(first_prompt), *[str(text) for text in (next_prompts or [])]]
     clips, metadata, output_start, scene_index = [], [], 0, 0
+    used_prompts = set()
     for source_index, (identity, start, end) in enumerate(spans):
         length = Fraction(str(duration)) if duration > 0 else end - start
         # Round cumulative endpoints so a playlist does not accumulate frame drift.
-        output_end = (math.ceil((source_index + 1) * length * FPS) if duration > 0
+        output_end = (math.ceil((source_index + 1) * length * FPS)
+                      if duration > 0 and (reference_video is not None or not prompt_timing)
                       else math.ceil(end * FPS))
         count = output_end - output_start
         boundaries = [start, *[cut for cut in cuts if start < cut < end], end]
@@ -121,7 +174,8 @@ def plan_native_clips(duration, max_clip_frames=362, cut_times="", prompt="", fi
             # the detector/manual source supplied one scene spanning that cut.
             prompt_index = bisect_right(cuts, scene_start)
             if not cuts:
-                prompt_index = min(source_index, len(parts) - 1)
+                prompt_index = source_index if prompt_timing else min(source_index, len(parts) - 1)
+            used_prompts.add(prompt_index)
             specific = parts[prompt_index] if prompt_index < len(parts) else ""
             description = descriptions[image_index] if descriptions and image_index is not None else ""
             text = "\n\n".join(s.strip() for s in (_text(prompt), description, specific) if s.strip())
@@ -131,6 +185,8 @@ def plan_native_clips(duration, max_clip_frames=362, cut_times="", prompt="", fi
                                     source_index=source_index, image_index=image_index))
             scene_index += 1
         output_start = output_end
+    if prompt_timing and any(text.strip() and index not in used_prompts for index, text in enumerate(parts)):
+        raise ValueError("Some scene prompts have no clip. Match the first/next prompt list to the cut times.")
     total = output_start
     excerpt = audio.get("eclipse_excerpt") if audio is not None else None
     audio = fit_soundtrack(audio, total)
