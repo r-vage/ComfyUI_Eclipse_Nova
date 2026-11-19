@@ -4,8 +4,28 @@ export function ensurePanelStyle() {
     const style = document.createElement('link'); style.id = 'eclipse-nova-panel-style'; style.rel = 'stylesheet';
     style.href = new URL('./eclipse-panel.css', import.meta.url).href; document.head.append(style);
 }
+function completeDecimal(event) {
+    const input = event.currentTarget;
+    if (input.type !== 'number' || input.disabled || input.readOnly) return;
+    // Prefix a zero on commit without rounding or rewriting partial edits.
+    const value = input.value.replace(/^(-?)\.(?=\d)/, (_match, sign) => `${sign}0.`);
+    if (value !== input.value) input.value = value;
+}
+function selectValue(event) {
+    const input = event.currentTarget;
+    if (input.disabled || input.readOnly
+        || !['text', 'search', 'url', 'tel', 'email', 'password', 'number', 'textarea'].includes(input.type)) return;
+    input.select();
+    event.preventDefault(); event.stopPropagation();
+}
 export function element(tag, className = '', text = '') {
-    const item = document.createElement(tag); item.className = className; item.textContent = text; return item;
+    const item = document.createElement(tag); item.className = className; item.textContent = text;
+    if (tag === 'input' || tag === 'textarea') item.addEventListener('dblclick', selectValue);
+    if (tag === 'input') {
+        item.addEventListener('change', completeDecimal);
+        item.addEventListener('blur', completeDecimal);
+    }
+    return item;
 }
 export function button(text, title, action) {
     const item = element('button', '', text); item.type = 'button'; item.title = title;

@@ -15,7 +15,7 @@ SIZING = {
         **{f"square-{side}": {"label": f"{side}²", "area": side * side, "group": "Base size"}
            for side in [512, 768, 1024, 1536, 2048]},
         **{f"mp-{mp}": {"label": f"{mp} MP", "area": int(mp * 1_000_000), "group": "Megapixels"}
-           for mp in [0.25, 0.5, 1, 2, 4, 8]},
+           for mp in [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 4, 8]},
     },
     "divisors": [8, 16, 32, 64],
     "divisor": number("Divisible by", 16, 1, 32768),

@@ -33,6 +33,10 @@ The sizing controls follow Smart Model Loader's latent section:
 
 The readout shows the effective width, height and megapixels. For example, `1024²`, 16:9 and a divisor of 32 resolve to **1376 × 768**. Fixed pixels show their calculated aspect instead of an editable aspect menu. Changing sizing modes retains custom drafts; merely reopening a workflow does not recalculate its dimensions.
 
+Image and video sizing share the **0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 4 and
+8 MP** presets with Resolution Pipe. These are target pixel areas; aspect ratio
+and divisor rounding determine the final dimensions.
+
 Image starts with **2:3 at 1 MP, divisible by 16**, resolving to **816 × 1232**. Video starts with **576 × 1024** in Fixed pixels mode with divisor 32. Size is initially disabled. Invalid sizes are reported rather than silently replaced during execution. Choose the divisor required by the consuming model. Smart Folder supplies the initial dimensions; Smart Model Loader controls the latent format and creation.
 
 ## Video sections

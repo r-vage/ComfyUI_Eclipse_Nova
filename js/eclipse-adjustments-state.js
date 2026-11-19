@@ -17,15 +17,38 @@ export class AdjustmentsState {
             || Object.entries(spec.groups).some(([key, fields]) => !(spec.optional.includes(key) && config[key] === null)
                 && !fieldsMatch(config[key], Object.keys(fields)))) throw Error('Expected version 1 image adjustments configuration.');
         this.spec = spec; this.config = config; this.editor = clone(editor);
+        this.editor.detailEnabled = this.effectEnabled('detail');
     }
     value() { return JSON.stringify(this.config); }
+    defaults(key) { return Object.fromEntries(Object.entries(this.spec.groups[key]).map(([name, field]) => [name, field.default])); }
+    effectEnabled(key) {
+        if (key !== 'detail') return this.config[key] !== null;
+        // Older workflows have no section switch. Their active settings remain
+        // authoritative, including when restored over stale editor properties.
+        return this.editor.detailEnabled === true || this.config.processing.detail_enhance
+            || Object.entries(this.config.detail).some(([name, value]) => value !== this.spec.groups.detail[name].default);
+    }
     toggleEffect(key) {
+        if (key === 'detail') {
+            const drafts = this.editor.drafts ??= {};
+            if (this.effectEnabled(key)) {
+                drafts.detail = { settings: clone(this.config.detail), enhance: this.config.processing.detail_enhance };
+                // Keep the existing backend contract: disabled detail serializes
+                // neutral values, while the workflow retains the editor draft.
+                this.config.detail = this.defaults(key); this.config.processing.detail_enhance = false;
+                this.editor.detailEnabled = false;
+            } else {
+                this.config.detail = clone(drafts.detail?.settings ?? this.defaults(key));
+                this.config.processing.detail_enhance = drafts.detail?.enhance ?? false;
+                this.editor.detailEnabled = true; delete drafts.detail; this.openSection(key);
+            }
+            return;
+        }
         if (!this.spec.optional.includes(key)) return;
         const drafts = this.editor.drafts ??= {};
         if (this.config[key] !== null) { drafts[key] = clone(this.config[key]); this.config[key] = null; }
         else {
-            const defaults = Object.fromEntries(Object.entries(this.spec.groups[key]).map(([name, field]) => [name, field.default]));
-            this.config[key] = clone(drafts[key] ?? defaults); delete drafts[key]; this.openSection(key);
+            this.config[key] = clone(drafts[key] ?? this.defaults(key)); delete drafts[key]; this.openSection(key);
         }
     }
     sectionOpen(key) { return this.editor.sections?.[key] === true; }

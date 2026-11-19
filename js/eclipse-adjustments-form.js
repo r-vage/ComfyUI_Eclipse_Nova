@@ -14,7 +14,7 @@ export class AdjustmentsForm {
         const { root } = this.controller;
         const focused = root.contains(document.activeElement) ? document.activeElement.dataset.field : null;
         const content = element('div', 'en-panel-content'); this.bar(content);
-        for (const [key, title] of Object.entries(TITLES)) if (this.config[key] !== null) this.section(content, key, title);
+        for (const [key, title] of Object.entries(TITLES)) if (this.state.effectEnabled(key)) this.section(content, key, title);
         root.replaceChildren(content);
         if (focused) [...root.querySelectorAll('[data-field]')].find(item => item.dataset.field === focused)?.focus({ preventScroll: true });
         this.controller.measure();
@@ -24,12 +24,13 @@ export class AdjustmentsForm {
         bar.dataset.collapsed = String(collapsed); bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', 'Mode');
         const toggle = button('', 'Mode', () => this.edit(state => { state.editor.barCollapsed = !collapsed; }));
         toggle.className = 'en-panel-disclosure'; toggle.dataset.field = 'bar'; toggle.setAttribute('aria-expanded', String(!collapsed));
+        toggle.title = 'Show or hide the mode switches. Collapsing this bar does not disable effects.';
         toggle.append(element('span', '', collapsed ? '▸' : '▾'), element('span', 'en-panel-bar-label', 'Mode:'));
         const flags = [
             ['soften', 'Soften', this.config.soften !== null], ['scale', 'Scale', this.config.scale !== null],
             ['supersample', 'Supersample', Boolean(this.config.scale?.supersample) && this.supersampleAvailable()],
             ['color_match', 'Color match', this.config.color_match !== null], ['sharpen', 'Smart sharpen', this.config.sharpen !== null],
-            ['detail_enhance', 'Detail filter', this.config.processing.detail_enhance],
+            ['detail', 'Detail & blur', this.state.effectEnabled('detail')],
             ['per_frame', 'Per frame', this.config.processing.per_frame],
             ['cpu_threads', 'CPU threads', this.config.processing.cpu_threads && !this.config.processing.per_frame],
         ];
@@ -40,17 +41,14 @@ export class AdjustmentsForm {
         bar.append(toggle);
         if (!collapsed) for (const [key, title, active] of flags) {
             const control = button(title, title, () => this.edit(state => {
-                if (state.spec.optional.includes(key)) state.toggleEffect(key);
+                if (state.spec.optional.includes(key) || key === 'detail') state.toggleEffect(key);
                 else if (key === 'supersample') state.config.scale.supersample = !state.config.scale.supersample;
                 else state.config.processing[key] = !state.config.processing[key];
             }));
             control.dataset.field = `mode.${key}`; control.setAttribute('aria-pressed', String(active));
             control.disabled = key === 'supersample' && !this.supersampleAvailable() || key === 'cpu_threads' && this.config.processing.per_frame;
-            control.title = key === 'per_frame' ? 'Finish each frame before starting the next to limit memory use.'
-                : key === 'cpu_threads' ? 'Parallelize eligible CPU work across up to four frames when Per frame is off. Model/GPU stages remain serial.'
-                    : key === 'supersample' ? 'Resample above the target size before the final resize. Requires Scale with an explicit target; native size or an external factor of 0 skips this.'
-                        : key === 'detail_enhance' ? 'Apply the PIL DETAIL filter in Detail & blur.'
-                            : `Enable or disable ${title.toLowerCase()}. Disabled settings are retained.`;
+            control.title = this.state.spec.mode_tooltips?.[key] ?? `Enable or disable ${title.toLowerCase()}. Disabled settings are retained.`;
+            control.setAttribute('aria-description', control.title);
             bar.append(control);
         }
         parent.append(bar);
@@ -60,10 +58,12 @@ export class AdjustmentsForm {
         const header = element('div', 'en-panel-section-header'), open = this.state.sectionOpen(key);
         const toggle = button('', title, () => this.edit(state => state.toggleSection(key)));
         toggle.className = 'en-panel-section-toggle'; toggle.dataset.field = `section.${key}`; toggle.setAttribute('aria-expanded', String(open));
+        toggle.title = `Show or hide ${title} controls. Collapsing a section does not disable its effects.`;
         const summary = element('span', 'en-panel-summary', this.summary(key)); summary.title = summary.textContent; summary.dataset.sectionSummary = key;
         toggle.append(element('span', 'en-panel-section-label', `${open ? '▾' : '▸'} ${title}`), summary);
         const pin = button('⌖', `Pin ${title}`, () => this.edit(state => state.togglePin(key)));
         pin.dataset.field = `pin.${key}`; pin.setAttribute('aria-pressed', String(this.state.editor.pins?.[key] === true));
+        pin.title = `Keep ${title} open when opening another section. Pinning does not enable or disable effects.`;
         header.append(toggle, pin); section.append(header);
         if (open) { const body = element('div', 'en-panel-section-body'); this.body(body, key); section.append(body); }
         parent.append(section);
@@ -103,7 +103,17 @@ export class AdjustmentsForm {
         } else {
             this.numbers(parent, key, Object.keys(this.state.spec.groups[key]));
             if (key === 'color') this.note(parent, 'Brightness → multiplicative contrast → saturation → temperature/tint → hue.');
-            if (key === 'detail') this.note(parent, 'Sharpness 1 is neutral. The Detail filter switch is in Mode.');
+            if (key === 'detail') {
+                const control = button('Detail filter', 'Detail filter', () => this.edit(state => {
+                    state.config.processing.detail_enhance = !state.config.processing.detail_enhance;
+                }));
+                control.dataset.field = 'processing.detail_enhance';
+                control.setAttribute('aria-pressed', String(this.config.processing.detail_enhance));
+                control.title = this.state.spec.mode_tooltips?.detail_enhance ?? 'Apply an extra fine-detail enhancement after the controls above.';
+                control.setAttribute('aria-description', control.title); parent.append(control);
+                this.note(parent, 'Sharpness 1 is neutral. Detail filter adds an extra enhancement pass. The Mode switch bypasses and hides this entire section, retaining its settings.');
+            }
+            if (key === 'sharpen') this.note(parent, 'Amount above 1 sharpens fine detail. Blend: 0 = noise reduction only, 1 = sharpening only. Noise radius does not widen sharpening. Compare at 100% zoom.');
         }
     }
     field(parent, group, key, disabled = false) {
@@ -113,10 +123,17 @@ export class AdjustmentsForm {
             const control = this.menu.field(parent, field.label, choices[value] ?? value, Object.values(choices), label => {
                 this.edit(state => { state.config[group][key] = Object.keys(choices).find(name => choices[name] === label); });
             });
+            if (field.tooltip) {
+                control.title = `${field.tooltip}\nSelected: ${control.title}`;
+                control.parentElement.title = field.tooltip;
+                control.setAttribute('aria-description', field.tooltip);
+            }
             control.dataset.field = path; control.disabled = disabled; return;
         }
         const label = element('label', 'en-panel-field'), input = element('input');
         input.type = 'number'; input.required = true; input.value = value ?? ''; input.dataset.field = path; input.disabled = disabled;
+        label.title = input.title = field.tooltip ?? field.label;
+        input.setAttribute('aria-description', input.title);
         for (const name of ['min', 'max', 'step']) input[name] = field[name];
         input.oninput = () => this.edit(state => { state.config[group][key] = input.value === '' ? null : Number(input.value); }, false);
         label.append(element('span', '', field.label), input); parent.append(label);

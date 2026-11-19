@@ -9,6 +9,10 @@ classic canvas and Nodes 2.0. Click a section to open it; pin sections to keep
 several open. Disabling a stage retains its settings in the workflow. No preset
 or additional setting sockets are needed.
 
+Hover over a field, its label, or a Mode switch for its purpose, neutral value
+and interactions with other controls. Collapsing or pinning a section changes
+only its visibility; the Mode switches enable or disable optional stages.
+
 ## Inputs and output
 
 | Socket | Purpose |
@@ -42,9 +46,45 @@ Sections follow the execution order:
 | **Smart sharpen** | Sharpen amount/blend, bilateral noise radius and edge preservation. Independent of the simpler PIL Sharpness control. |
 | **Lens & grain** | Vignette and its center → chromatic aberration → film grain. Grain is last and changes on each run when enabled. |
 
-Soften, Scale, Color match and Smart sharpen are off initially. Their Mode buttons
-show the corresponding section. The other four sections start collapsed.
-**Detail filter** directly enables the PIL DETAIL operation.
+Soften, Scale, Color match, Detail & blur and Smart sharpen are off initially.
+Their Mode buttons show the corresponding section. The other three sections
+start collapsed.
+
+**Detail & blur** in Mode enables or disables the entire section. Turning it off
+hides the section and bypasses its sharpness, blurs, edge enhancement and extra
+Detail filter. Turning it back on restores all those settings, including after
+saving and reloading the workflow. A pinned section is also hidden when disabled.
+The separate **Detail filter** button is inside the section and enables the extra
+PIL DETAIL operation without disabling the other controls. Existing workflows
+with active detail settings keep those settings and show the section automatically.
+
+## Smart sharpen
+
+Smart sharpen mixes two versions of the image: the original with a fixed **3×3
+sharpening filter**, and the original with bilateral noise reduction. It runs
+after scaling and grading, at the final output resolution.
+
+- **Amount** above 1 increases fine edge contrast. 1 is neutral, values between
+  0 and 1 soften, and 0 skips sharpening. Increasing Amount strengthens the same
+  small filter; it does not widen its radius or restore missing detail.
+- **Blend** selects between noise reduction at 0 and sharpening at 1. At 0,
+  Amount has no effect. At 1, Noise radius and Preserve edges have no effect.
+  At 0.75, the output is 75% sharpened original and 25% noise-reduced original.
+  This is not an overall effect opacity: disable **Smart sharpen** in Mode to
+  bypass the entire stage. Amount 0 alone can still leave noise reduction active.
+- **Noise radius** changes the bilateral smoothing neighborhood. 1 skips that
+  smoothing. Increasing it can soften the result; it is not a sharpening radius.
+- **Preserve edges** reduces smoothing across color boundaries as it increases.
+  It does not add sharpening. Its influence becomes smaller as Blend approaches
+  1, and the strongest protection is reached at 0.95.
+
+For a controlled comparison, keep the source and other settings fixed, set
+**Blend to 1**, then compare **Amount 1 and 6** at **100% zoom**. A fitted preview
+of a large image can hide changes to details only a few pixels wide. Add noise
+reduction by lowering Blend afterward. The separate **Detail & blur → Sharpness**
+control and **Detail filter** also affect detail, so hold them fixed during the
+comparison. Sharpening before a later sampling pass may be altered by that pass;
+use the final adjustments node to judge output sharpening.
 
 ## Scaling
 

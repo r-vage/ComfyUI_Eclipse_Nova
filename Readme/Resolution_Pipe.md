@@ -18,6 +18,10 @@ Find it under **🌒 Eclipse Nova → Settings → Resolution Pipe**. It works i
 
 The default is **2:3 at 1 MP, divisible by 16**, resolving to **816 × 1232**. The readout always shows the effective dimensions and megapixels. For example, `1024²` at 16:9 with divisor 32 gives **1376 × 768**. A base size represents pixel area, not a fixed edge length.
 
+Megapixel presets are **0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 4 and 8 MP**.
+These are target pixel areas; the selected aspect ratio and divisor determine the
+final dimensions, so the readout can differ slightly from the preset.
+
 For a video frame size such as **576 × 1024**, select **Resolution → Custom → Fixed pixels** and enter the dimensions. The same controls serve both images and video; there is no Image/Video selector.
 
 Custom pixel, megapixel and ratio drafts survive changes between sizing modes. Workflow loading preserves the saved dimensions. Invalid values prevent execution and are not replaced silently.

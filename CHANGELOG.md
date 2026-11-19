@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-11-19
+
+### Version: 1.0.45
+
+- **Feat**
+  - Add descriptive tooltips to every Image Filter Adjustments Advanced field and Mode switch, including neutral values and interactions between controls.
+  - Add 0.75, 1.25, 1.5 and 2.5 MP resolution presets to Smart Folder's image/video sizing and Resolution Pipe through their shared preset list.
+- **Fix**
+  - Make the Detail & blur Mode switch hide and bypass the entire section while retaining its settings for restoration. Move the extra Detail filter switch inside the section and preserve active settings in existing workflows.
+  - Add the leading zero to decimal entries in custom panels when users press Enter, press Tab or click away, including negative decimals.
+  - Select the whole editable field on double-click in custom panels, including text, multiline prompts, numbers and seeds, so typing replaces its contents.
+- **Docs**
+  - Explain Smart sharpen's fixed filter size, sharpening/noise-reduction blend and how to compare its effect at full resolution.
+  - Describe the Detail & blur section switch and settings restoration.
+  - List the available megapixel presets and explain dimension rounding in the sizing guides.
+- **Changed files**
+  - core/image_adjustments_configuration.py
+  - core/resolution_sizing.py
+  - js/eclipse-adjustments-form.js
+  - js/eclipse-adjustments-state.js
+  - js/eclipse-panel-controls.js
+  - Readme/Image_Adjustments.md
+  - Readme/Resolution_Pipe.md
+  - Readme/Smart_Folder.md
+  - pyproject.toml
+
 ## 2026-11-17
 
 ### Version: 1.0.44
