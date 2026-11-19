@@ -34,7 +34,13 @@ Local sampler controls stay visible when pipe priority is enabled. An available 
 
 Guidance, noise-injection and upscale pipe values need compatible consumers; Kargim uses standard sampling.
 
-The final preview fills the remaining node space and resizes with the node in classic canvas and Nodes 2.0. For batches, click a thumbnail to enlarge it, click the enlarged image to advance (wrapping after the last image), and use **Close preview** to return to the grid. Live frames and final images share one viewer. Live-preview latents are reduced before decoding to limit memory use; final outputs retain full resolution. A preview-only OOM disables live frames for the current run without discarding sampling.
+The final preview fills the remaining node space and resizes with the node in classic canvas and Nodes 2.0. For batches, click a thumbnail to enlarge it, click the enlarged image to advance (wrapping after the last image), and use **Close preview** to return to the grid. Live frames and final images share one viewer.
+
+Live previews follow ComfyUI's selected preview method. **Auto/Latent2RGB** is a lightweight approximation that keeps the available latent detail. **TAESD** gives a more detailed preview when a matching preview decoder is installed. Only the first image/frame is previewed, displayed at up to 512 pixels or a smaller configured size.
+
+At the usual 512-pixel preview size, standard SD/SDXL/SD3/Flux TAESD decoders use overlapping tiles to preserve more detail. Each tile stays within the previous reduced preview's pixel-area budget; up to 1024 pixels of source detail are decoded before resizing the image. Tiling adds some processing time per step. Video, packed Flux2 and 16x decoders, very narrow images and smaller preview settings keep the reduced-latent path.
+
+Preview decoders load on the first sampling step and are released before final VAE decoding, including when sampling fails or is interrupted. A preview-only OOM disables live frames for the current run while sampling and progress continue. Final outputs retain full resolution.
 
 ## Detailer (SEGS/pipe)
 

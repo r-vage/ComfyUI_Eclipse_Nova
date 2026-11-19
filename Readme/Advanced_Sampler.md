@@ -125,11 +125,24 @@ Changing either stage reruns the whole node; ComfyUI cannot cache Stage 1 separa
 The final preview resizes within the space below the controls. Batches open as a
 grid: click a thumbnail to enlarge it, click the enlarged image to advance through
 the batch, and use **Close preview** to return to the grid. This works in classic
-canvas and Nodes 2.0. Live-preview decoding uses only the first image/frame and a
-thumbnail-sized latent (up to 512 pixels on its longest decoded side, or a lower
-configured preview size). One decoder is reused across stages when the model is unchanged. Preview-only OOMs
-disable live frames for the rest of the run while preserving progress and final
-image generation. This does not reduce the actual sampling or output resolution.
+canvas and Nodes 2.0. Live previews follow ComfyUI's selected method:
+Auto/Latent2RGB preserves the available latent detail, while TAESD provides a
+more detailed approximation when a matching preview decoder is installed.
+Only the first image/frame is previewed, displayed at up to 512 pixels on its
+longest side or a lower configured size. At the usual 512-pixel size, standard
+SD/SDXL/SD3/Flux TAESD decoders use overlapping tiles within the previous reduced
+preview's pixel-area budget. They retain up to 1024 pixels of source detail before
+resizing the image, at the cost of extra processing time per step. Video, packed
+Flux2 and 16x decoders, very narrow images and smaller preview settings retain the
+reduced-latent path. Latent2RGB preserves its available native detail.
+
+Each stage loads its preview decoder on its first sampling step. Preview resources
+are released before the between-stage upscale and before final VAE decoding,
+including on failure or interruption. Stage 2 receives the full Stage 1 sampling
+latent, optionally upscaled; preview images are never used as its input. A
+preview-only OOM disables live frames for the rest of the run, including Stage 2, while preserving
+progress and final image generation. This does not reduce actual sampling or
+output resolution.
 The advanced sampler processes the full batch together; its sampling memory still
 increases with batch size and latent upscale.
 

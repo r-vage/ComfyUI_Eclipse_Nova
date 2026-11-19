@@ -28,15 +28,14 @@ def sample_stages(*, parameters, model, samples, seed, steps, cfg, sampler_name,
     if parameters['two_stage']:
         stages.append({key: parameters['second_' + key] for key in
                        ('steps', 'cfg', 'sampler_name', 'scheduler', 'start', 'end', 'add_noise', 'leftover')})
-    # Reuse one preview decoder across stages instead of keeping two during replacement.
+    # Reuse progress/OOM state, but release preview resources after each stage.
+    # The next decoder is loaded lazily on its first actual sampling callback.
     callback = prepare_callback(model, steps) if preview_mode != 'None' else None
     for index, stage in enumerate(stages):
         if index and use_second:
-            # Drop the previous preview decoder before constructing one for the
-            # next device/model. ComfyUI manages model offloading during sampling.
-            callback = None
             model = prepare_extras(parameters, model_2)
-            callback = prepare_callback(model, stage['steps']) if preview_mode != 'None' else None
+        if index and callback is not None:
+            callback.start_stage(model, stage['steps'])
         if index and parameters['latent_upscale']:
             # Krea2/Qwen Image use a single-frame Wan latent even for still images.
             # ComfyUI's spatial upscale preserves that frame axis and the batch.
@@ -69,21 +68,31 @@ def sample_stages(*, parameters, model, samples, seed, steps, cfg, sampler_name,
                         schedule[-1] = 0
                 schedule = schedule[stage['start']:]
             wrapped = wrap_detail(comfy.samplers.sampler_object(stage['sampler_name']), parameters)
-            samples = comfy.sample.sample_custom(model, noise, stage['cfg'], wrapped, schedule,
-                                                 positive, negative, samples, noise_mask=noise_mask,
-                                                 callback=callback, disable_pbar=not comfy.utils.PROGRESS_BAR_ENABLED,
-                                                 seed=stage_seed)
+            try:
+                samples = comfy.sample.sample_custom(model, noise, stage['cfg'], wrapped, schedule,
+                                                     positive, negative, samples, noise_mask=noise_mask,
+                                                     callback=callback, disable_pbar=not comfy.utils.PROGRESS_BAR_ENABLED,
+                                                     seed=stage_seed)
+            finally:
+                if callback is not None:
+                    callback.release()
+                del noise
             continue
-        samples = comfy.sample.sample(
-            model, noise, stage['steps'], stage['cfg'], stage['sampler_name'], stage['scheduler'],
-            positive, negative, samples,
-            denoise=effective_denoise, disable_noise=not add_noise,
-            start_step=stage['start'] if advanced else None,
-            last_step=stage['end'] if advanced else None,
-            force_full_denoise=not stage['leftover'] if advanced else False,
-            noise_mask=noise_mask, sigmas=sigmas, callback=callback,
-            disable_pbar=not comfy.utils.PROGRESS_BAR_ENABLED, seed=stage_seed,
-        )
+        try:
+            samples = comfy.sample.sample(
+                model, noise, stage['steps'], stage['cfg'], stage['sampler_name'], stage['scheduler'],
+                positive, negative, samples,
+                denoise=effective_denoise, disable_noise=not add_noise,
+                start_step=stage['start'] if advanced else None,
+                last_step=stage['end'] if advanced else None,
+                force_full_denoise=not stage['leftover'] if advanced else False,
+                noise_mask=noise_mask, sigmas=sigmas, callback=callback,
+                disable_pbar=not comfy.utils.PROGRESS_BAR_ENABLED, seed=stage_seed,
+            )
+        finally:
+            if callback is not None:
+                callback.release()
+            del noise
     return samples
 
 

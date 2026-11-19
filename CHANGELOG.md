@@ -2,6 +2,24 @@
 
 ## 2026-11-19
 
+### Version: 1.0.46
+
+- **Fix**
+  - Restore native Latent2RGB detail in live sampler previews instead of applying the VAE's spatial reduction again. Account for packed formats and ComfyUI's decoder fallback while retaining bounded TAESD decoding, first-image/frame limits and preview-only OOM recovery.
+  - Preserve finer standard TAESD detail with overlapping tiles sized within the reduced preview's pixel-area budget. Retain conservative decoding for other formats, narrow images and smaller preview settings.
+  - Load preview decoders lazily and release their resources before the advanced sampler's between-stage upscale and final VAE decoding. Keep preview OOM recovery active across both stages and clean up after sampling failures or interruption.
+- **Docs**
+  - Explain preview-method selection and memory limits during sampling, with full-resolution final outputs.
+- **Changed files**
+  - core/sampler_preview.py
+  - core/advanced_sampler.py
+  - core/sampler_execution.py
+  - Readme/Sampler.md
+  - Readme/Advanced_Sampler.md
+  - pyproject.toml
+
+## 2026-11-19
+
 ### Version: 1.0.45
 
 - **Feat**
