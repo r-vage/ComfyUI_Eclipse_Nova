@@ -11,6 +11,7 @@ from .logger import log
 from .minimax_h3_segment_plan import (
     CONTINUITY_FRAMES,
     audio_shape,
+    segment_reference_count,
     validate_segment_plan,
 )
 
@@ -35,7 +36,7 @@ def resolve_segment(
         )
 
     images = flatten_images(image_batch)
-    if len(images) != plan_value["image_count"]:
+    if len(images) != segment_reference_count(plan_value):
         raise ValueError("image_batch count differs from the segmented plan.")
     waveform, sample_rate = audio_shape(conditioning_audio)
     if (

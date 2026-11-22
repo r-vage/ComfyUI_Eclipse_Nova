@@ -254,7 +254,7 @@ Both nodes share the same widget layout:
 
 | Widget | Values | Description |
 |--------|--------|-------------|
-| `type_filter` | `*`, MODEL, CLIP, VAE, CONDITIONING, LATENT, IMAGE, MASK, FLOAT, INT, STRING, CONTROL_NET, NOISE, GUIDER, SAMPLER, SIGMAS, PIPE† | Filter which SetNode variables appear in dropdowns |
+| `type_filter` | `*`, MODEL, CLIP, VAE, CONDITIONING, LATENT, IMAGE, MASK, AUDIO, FLOAT, INT, STRING, CONTROL_NET, NOISE, GUIDER, SAMPLER, SIGMAS, PIPE† | Filter which SetNode variables appear in dropdowns |
 | `var_count` | 1–20 | Number of variable slots |
 | `var_1`–`var_20` | (dropdown) | SetNode variable names from the current scope |
 

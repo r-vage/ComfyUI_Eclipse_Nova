@@ -2,7 +2,6 @@
 import comfy.sample
 import comfy.samplers
 import comfy.utils
-import torch
 
 from .detail_daemon import wrap_detail
 from .sampler_extras import prepare_extras, qwen_sigmas
@@ -54,9 +53,10 @@ def sample_stages(*, parameters, model, samples, seed, steps, cfg, sampler_name,
         if effective_denoise <= 0:
             continue
         add_noise = stage['add_noise'] if advanced else True
-        noise = comfy.sample.prepare_noise(samples, stage_seed, batch_index) if add_noise else torch.zeros_like(samples, device='cpu')
+        noise = (comfy.sample.prepare_noise(samples, stage_seed, batch_index) if add_noise
+                 else comfy.sample.prepare_empty_noise(samples))
         sigmas = qwen_sigmas(parameters, samples, stage['steps'], effective_denoise) if parameters['qwen_schedule'] else None
-        if parameters['detail_daemon']:
+        if parameters['detail_daemon'] or negative is None:
             base = comfy.samplers.KSampler(model, steps=stage['steps'], device=model.load_device,
                                            sampler=stage['sampler_name'], scheduler=stage['scheduler'],
                                            denoise=effective_denoise, model_options=model.model_options)
@@ -67,12 +67,24 @@ def sample_stages(*, parameters, model, samples, seed, steps, cfg, sampler_name,
                     if not stage['leftover']:
                         schedule[-1] = 0
                 schedule = schedule[stage['start']:]
-            wrapped = wrap_detail(comfy.samplers.sampler_object(stage['sampler_name']), parameters)
+            wrapped = comfy.samplers.sampler_object(stage['sampler_name'])
+            if parameters['detail_daemon']:
+                wrapped = wrap_detail(wrapped, parameters)
             try:
-                samples = comfy.sample.sample_custom(model, noise, stage['cfg'], wrapped, schedule,
-                                                     positive, negative, samples, noise_mask=noise_mask,
-                                                     callback=callback, disable_pbar=not comfy.utils.PROGRESS_BAR_ENABLED,
-                                                     seed=stage_seed)
+                if negative is None:
+                    from comfy_extras.nodes_custom_sampler import BasicGuider
+
+                    if stage['cfg'] != 1:
+                        raise ValueError('Positive-only guidance requires CFG 1 for every active stage.')
+                    guider = BasicGuider.execute(model, positive).result[0]
+                    samples = guider.sample(noise, samples, wrapped, schedule, denoise_mask=noise_mask,
+                                            callback=callback, disable_pbar=not comfy.utils.PROGRESS_BAR_ENABLED,
+                                            seed=stage_seed).to(comfy.model_management.intermediate_device())
+                else:
+                    samples = comfy.sample.sample_custom(model, noise, stage['cfg'], wrapped, schedule,
+                                                         positive, negative, samples, noise_mask=noise_mask,
+                                                         callback=callback, disable_pbar=not comfy.utils.PROGRESS_BAR_ENABLED,
+                                                         seed=stage_seed)
             finally:
                 if callback is not None:
                     callback.release()

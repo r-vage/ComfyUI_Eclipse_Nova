@@ -15,7 +15,7 @@ import {
 } from './eclipse-set-get-utils.js';
 import { createRendererAwareSubmenuEntry } from './eclipse-context-menu-utils.js';
 const LGraphNode = LiteGraph.LGraphNode;
-const TYPE_FILTERS = ["*", "MODEL", "CLIP", "VAE", "CONDITIONING", "LATENT", "IMAGE", "MASK", "FLOAT", "INT", "STRING", "CONTROL_NET", "NOISE", "GUIDER", "SAMPLER", "SIGMAS"];
+const TYPE_FILTERS = ["*", "MODEL", "CLIP", "VAE", "CONDITIONING", "LATENT", "IMAGE", "MASK", "AUDIO", "FLOAT", "INT", "STRING", "CONTROL_NET", "NOISE", "GUIDER", "SAMPLER", "SIGMAS"];
 
 function showAlert(message) {
     app.extensionManager.toast.add({

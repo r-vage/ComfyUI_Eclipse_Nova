@@ -60,23 +60,60 @@ def prompt_catalog(run_path):
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict) or value.get("format") != "eclipse_render_checkpoint" or value.get("version") != 1:
         raise ValueError("Unsupported render checkpoint.")
-    plan = value["plan"]
-    if value["kind"] == "clips":
+    return {"source": source_key(value), "run": str(root), "revision": run_revision(root, manifest),
+            "completed": len(manifest["chunks"]), "parts": _part_rows(
+                value["kind"], value["plan"], value["fps"], value.get("prompts", ""), value.get("first_part_prompt", ""))}
+
+
+def _part_rows(kind, plan, fps, prompts, first_part_prompt):
+    if isinstance(plan, H3ClipPlan):
+        items = [(c.start, c.keep, c.prompt) for c in plan.clips]
+    elif kind == "clips":
         items = [(c["start"], c["keep"], c["prompt"]) for c in plan["clips"]]
-    elif value["kind"] == "frames":
+    elif plan.get("kind") == "WAN_LIPSYNC_PLAN":
+        from .wan_timeline import wan_parts
+
+        items = [(t["start_frame"], t["keep_frames"], segment_prompt(
+            "", t["image_index"], plan=plan, task=t)) for t in wan_parts(plan)]
+    elif kind == "frames":
         plan, tasks = validate_segment_plan(plan)
         items = [(t["output_start_frame"], t["keep_frames"], segment_prompt(
-            value["prompts"], t["prompt_index"], value["first_part_prompt"], plan, t)) for t in tasks]
+            prompts, t["prompt_index"], first_part_prompt, plan, t)) for t in tasks]
     else:
         raise ValueError("Unsupported saved run kind.")
-    fps = value["fps"]
     if (not isinstance(fps, (int, float)) or not math.isfinite(fps) or fps <= 0 or not items
             or any(type(start) is not int or type(count) is not int or start < 0 or count < 1
                    or not isinstance(text, str) for start, count, text in items)):
         raise ValueError("Invalid saved part timing or prompt text.")
-    return {"source": source_key(value), "run": str(root), "revision": run_revision(root, manifest), "completed": len(manifest["chunks"]),
-            "parts": [{"part": i + 1, "start": start / fps, "end": (start + count) / fps, "prompt": text}
-                      for i, (start, count, text) in enumerate(items)]}
+    return [{"part": i + 1, "start": start / fps, "end": (start + count) / fps, "prompt": text}
+            for i, (start, count, text) in enumerate(items)]
+
+
+def publish_new_run_prompts(hidden, state=None):
+    from comfy_execution.graph_utils import is_link
+    from comfy_execution.utils import get_executing_context
+    from server import PromptServer
+
+    server = getattr(PromptServer, "instance", None)
+    context = get_executing_context()
+    if not getattr(server, "client_id", None) or context is None:
+        return
+    # The submitted API graph has already resolved subgraph and Get/Set links.
+    graph = hidden.dynprompt
+    link = graph.get_node(hidden.unique_id)["inputs"].get("prompt_edits")
+    if not is_link(link) or not graph.has_node(link[0]) or graph.get_node(link[0])["class_type"] != "Part Prompt Editor [Eclipse Nova]":
+        return
+    workflow = (hidden.extra_pnginfo or {}).get("workflow")
+    packet = {"node_id": graph.get_display_node_id(link[0]), "prompt_id": context.prompt_id,
+              "loop_id": str(hidden.unique_id), "workflow_id": workflow.get("id") if isinstance(workflow, dict) else None}
+    if state is not None:
+        data = state.render
+        kind = "clips" if isinstance(data.plan, H3ClipPlan) else "frames"
+        packet.update(token=state.control.token, catalog={
+            "source": data.prompt_source_id, "run": state.storage.run_directory or "",
+            "parts": _part_rows(kind, data.plan, data.fps, data.prompts, data.first_part_prompt),
+        })
+    server.send_sync("eclipse-nova.part-prompts", packet, server.client_id)
 
 
 def apply_prompt_edits(data, edits, start, end=None, revision=None):
@@ -85,14 +122,20 @@ def apply_prompt_edits(data, edits, start, end=None, revision=None):
     if edits["source"] != data.prompt_source_id:
         raise ValueError("Prompt edits belong to another run. Read the selected run's prompts or disable Apply edits.")
     native = isinstance(data.plan, H3ClipPlan)
-    parts = list(data.plan.clips if native else data.plan["tasks"])
+    wan = not native and data.plan.get("kind") == "WAN_LIPSYNC_PLAN"
+    if wan:
+        from .wan_timeline import wan_parts
+
+        parts = wan_parts(data.plan)
+    else:
+        parts = list(data.plan.clips if native else data.plan["tasks"])
     for number, text in edits["edits"].items():
         index = int(number) - 1
         if index >= len(parts):
             raise ValueError(f"Prompt edit part {number} is outside this run's plan.")
         part = parts[index]
         current = part.prompt if native else segment_prompt(
-            data.prompts, part["prompt_index"], data.first_part_prompt, data.plan, part)
+            data.prompts, part["image_index" if wan else "prompt_index"], data.first_part_prompt, data.plan, part)
         if current == text:
             continue  # An edited revision can continue with the same editor still enabled.
         if revision and edits.get("revision") and edits["revision"] != revision:
@@ -102,5 +145,9 @@ def apply_prompt_edits(data, edits, start, end=None, revision=None):
         if end is not None and index >= end:
             raise ValueError(f"Part {number} is being retained. Update selected run can edit part {start + 1}; clear the other edits or use Resume saved run.")
         parts[index] = replace(part, prompt=text) if native else {**part, "prompt_override": text}
-    plan = replace(data.plan, clips=tuple(parts)) if native else {**data.plan, "tasks": parts}
+    if wan:
+        plan = {**data.plan, "base_prompt": {k: parts[0][k] for k in ("prompt_override",) if k in parts[0]},
+                "tasks": parts[1:]}
+    else:
+        plan = replace(data.plan, clips=tuple(parts)) if native else {**data.plan, "tasks": parts}
     return replace(data, plan=plan)

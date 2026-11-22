@@ -27,7 +27,7 @@ class RvSampler_KSamplerAdvanced(io.ComfyNode):
             node_id="Eclipse KSampler Advanced [Eclipse Nova]",
             display_name="Eclipse KSampler Advanced",
             category=CATEGORY.MAIN.value + CATEGORY.SAMPLER.value,
-            description="Standard or two-stage sampling with independent step ranges and noise controls. Stage 2 Denoise applies when its Start step is 0; otherwise it is ignored for schedule continuation. Stage 2 uses model_2 from the PIPE when supplied, otherwise reuses model_1, independently of Use pipe settings. Optional latent upscale runs between stages; only the final latent is decoded. Use pipe settings overrides supplied settings for both stages, upscale, decode and preview. Stage 2 uses its explicit seed when supplied, otherwise base plus offset. Optional Qwen schedule, DiT skip guidance and Detail Daemon sections always use local controls and apply to both stages; Detail Daemon is built in and needs no additional custom node.",
+            description="Standard or two-stage sampling with independent step ranges and noise controls. Stage 2 Denoise applies when its Start step is 0. Stage 2 uses model_2 from the PIPE when supplied, otherwise reuses model_1, independently of Use pipe settings. Optional latent upscale runs between stages. Decode uses the VAE on the final latent. Turn it off to send the complete latent to external decoders. Use pipe settings applies supplied settings for both stages, upscale, decode and preview. Stage 2 uses its explicit seed when supplied, otherwise base plus offset. Optional Qwen schedule, DiT skip guidance and Detail Daemon sections always use local controls and apply to both stages. Detail Daemon is built in.",
             inputs=[
                 io.Custom("PIPE").Input("pipe"),
                 io.String.Input("configuration", socketless=True,
@@ -96,6 +96,7 @@ class RvSampler_KSamplerAdvanced(io.ComfyNode):
         engine_values["allow_overwrite"] = False
         result = sample_kargim(
             **engine_values, sampling_function=partial(sample_stages, parameters=values, model_2=pipe.get("model_2")), seed=seed, pipe=pipe,
+            decode=values["decode"], positive_only=values["cfg"] == 1 and (not values["two_stage"] or values["second_cfg"] == 1),
             prompt=cls.hidden.prompt, extra_pnginfo=cls.hidden.extra_pnginfo, unique_id=cls.hidden.unique_id,
         )
         # Include the resolved pipe seed so the local last-seed action also works

@@ -30,7 +30,7 @@ The screenshots show the Amber theme; Neutral is the default.
 | Images | [Loaders](Readme/Image_Loaders.md), [Resize](Readme/Image_Resize.md), [Adjustments](Readme/Image_Adjustments.md), [Text/Image FX](Readme/Image_FX.md), [Selection and comparison](Readme/Image_Review.md) |
 | Saving and metadata | [Save Images](Readme/Save_Images.md), [Save Video](Readme/Save_Video_Data.md), [Read Prompt Files](Readme/ReadPromptFiles.md), [Save Prompt](Readme/Save_Prompt.md) |
 | Audio and video | [Load Audio](Readme/Load_Audio.md), [Recorder](Readme/System_Audio_Recorder.md), [Load/Preview Video](Readme/Load_Video.md), [Scene and motion analysis](Readme/Scene_Analysis.md), [Upscale Video](Readme/Upscale_Video.md), [Lyric Captions](Readme/Lyric_Captions.md) |
-| Character and timeline workflows | [Character references](Readme/Character_Reference_Nodes.md), [Shot Planner](Readme/Character_Shot_Planner.md), [MiniMax audio planning](Readme/MiniMax_H3_Audio_Planner.md), [MiniMax native clips](Readme/MiniMax_H3_Clips.md), [Frame timelines](Readme/Frame_Timeline.md) |
+| Character and timeline workflows | [Character references](Readme/Character_Reference_Nodes.md), [Shot Planner](Readme/Character_Shot_Planner.md), [Unified video timeline](Readme/Video_Timeline.md), [MiniMax audio planning](Readme/MiniMax_H3_Audio_Planner.md), [MiniMax native clips](Readme/MiniMax_H3_Clips.md), [Frame timelines](Readme/Frame_Timeline.md) |
 | Routing and review | [Set/Get and Bridge](Readme/Set_Get_Bridge.md), [Get First / Get All Active](Readme/GetFirst_GetAllActive.md), [Previews and Stop](Readme/DOM_Previews.md), [Prompt Review](Readme/Prompt_Review.md), [Utilities](Readme/Utility_Nodes.md) |
 
 **Reference-video analysis** measures scene boundaries on CPU, limits cut frequency
@@ -43,14 +43,14 @@ independent detection/image resolutions, review warnings and saved-analysis reus
 **Video Run Storage** switches loop accumulation between CPU RAM, temporary disk
 and persistent output. **Load Video Run** restores saved parts and their soundtrack
 after a restart, while **Video Run Info** reports timing, size and part ranges.
-**Video Loop Start / Loop End** render and resume H3 runs without Easy-Use.
+**Video Loop Start / Loop End** render and resume native H3, H3 lip-sync and WAN InfiniteTalk runs.
 Persistent runs save resolved timings, prompts, references and audio, so resume
 can reuse them after a restart. Stop after the current part and its accumulated
 preview, or limit the new parts per queue. **Video Part Seed** keeps sampling
 variation separate from planning and the retained media.
 **Loop Control** puts the live stop button outside a subgraph, connected to the
-loop through Get/Set. **Part Prompt Editor** reads prompts from the existing saved
-run selection and replaces the text for individual render parts on Resume. Edits
+loop through Get/Set. **Part Prompt Editor** follows the part being rendered on
+a new run. It reads the selected saved run for editing individual parts on Resume. Edits
 persist in the new revision while retained media stays intact.
 See [loop controls](Readme/Loops.md) for wiring, prompt editing and resume.
 See [saved runs](Readme/Frame_Timeline.md#ram-disk-and-saved-runs) for connections

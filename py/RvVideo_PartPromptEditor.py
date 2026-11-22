@@ -18,12 +18,12 @@ class RvVideo_PartPromptEditor(io.ComfyNode):
         return io.Schema(
             node_id="Part Prompt Editor [Eclipse Nova]", display_name="Part Prompt Editor",
             category=CATEGORY.MAIN.value + CATEGORY.VIDEO.value,
-            description="Read final part prompts from the connected Load Video Run or its selected backup. Apply edits on Resume or Update selected run. Uses the same part numbers as Restart part. Timing, references, audio and retained media stay unchanged. Restoring a backup reloads its prompts and resets pending edits.",
+            description="Follow the resolved prompt for each part of a new render. Read a selected saved run or backup to edit its prompts for Resume or Update selected run. Reset editor clears the displayed prompts and pending edits.",
             inputs=[io.String.Input("run_path", optional=True, force_input=True, lazy=True,
-                                   tooltip="Connect Load Video Run's run_path directly or through Get/Set. Read selected run loads prompt text only; no models or media arrays."),
+                                   tooltip="Connect Load Video Run's run_path directly or through Get/Set. Read selected run reloads saved prompt text and clears pending edits."),
                     io.String.Input("configuration", socketless=True, default=json.dumps(default_configuration()),
                                     extra_dict={"widgetType": WIDGET_TYPE, "editorSpec": {}})],
-            outputs=[io.Custom(EDITS_TYPE).Output("prompt_edits", tooltip="Connect to Video Loop Start's prompt_edits input. Resume can edit upcoming parts or regenerate from Restart part onward. Update changes only the selected saved part.")])
+            outputs=[io.Custom(EDITS_TYPE).Output("prompt_edits", tooltip="Connect to Video Loop Start's prompt_edits input to follow a new run and apply saved-part edits on Resume or Update.")])
 
     @classmethod
     def validate_inputs(cls, configuration):

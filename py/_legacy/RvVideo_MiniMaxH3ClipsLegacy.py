@@ -1,8 +1,9 @@
+# ruff: noqa: N999 -- preserve the repository's role-based Legacy module names.
 # Optional-audio native H3 clip planning and conditioning.
 from comfy_api.latest import io
 
-from ..core import CATEGORY
-from ..core.minimax_h3_clips import (
+from ...core import CATEGORY
+from ...core.minimax_h3_clips import (
     CLIP_PLAN_TYPE,
     REFERENCE_MODES,
     clip_at,
@@ -10,7 +11,7 @@ from ..core.minimax_h3_clips import (
     plan_clips,
 )
 
-_CATEGORY = CATEGORY.MAIN.value + CATEGORY.MINIMAX.value
+_CATEGORY = CATEGORY.MAIN.value + CATEGORY.LEGACY.value
 
 
 class RvVideo_MiniMaxH3ClipPlanner(io.ComfyNode):

@@ -65,9 +65,10 @@ class RvVideo_LoadRun(io.ComfyNode):
             outputs=[io.AnyType.Output("source", tooltip="Exact frame timeline for lip-sync runs or VIDEO for native clips. Connect to Preview, captions or Save Video."),
                      io.Audio.Output("audio", tooltip="Saved master soundtrack. Native runs without an override retain their generated audio inside VIDEO."),
                      io.Float.Output("fps"), io.Int.Output("width"), io.Int.Output("height"),
-                     io.Int.Output("frame_count"), io.String.Output("report", tooltip="Run folder, completed part count, duration and stored size."),
+                     io.Int.Output("frame_count"), io.String.Output("report", tooltip="Saved video task, loader preset and model file, followed by duration, completed parts, storage and run folder."),
                      io.String.Output("run_path", tooltip="Connect to Video Loop Start for resolved checkpoint recovery. This is an output, not a second run selector."),
-                     io.Custom("PIPE").Output("caption_context", tooltip="Saved full recording and excerpt start for IO Lyric Captions. Media-only older runs use their soundtrack from zero.")])
+                     io.Custom("PIPE").Output("caption_context", tooltip="Saved full recording and excerpt start for IO Lyric Captions. Media-only older runs use their soundtrack from zero."),
+                     io.String.Output("model_family", tooltip="Render family recorded in the checkpoint. Empty for a media-only run.")])
 
     @classmethod
     def validate_inputs(cls, saved_run, backup=CURRENT_VERSION):
@@ -91,14 +92,15 @@ class RvVideo_LoadRun(io.ComfyNode):
             raise ValueError(f"Saved run '{saved_run}' is not available on this system. Click Refresh runs and select a local run, or switch the workflow to New run.")
         path = selected_run_path(saved_run, backup)
         values = list(load_video_run(str(path)))
-        from ..core.video_checkpoint import load_caption_context
+        from ..core.video_checkpoint import load_run_context
 
-        captions = load_caption_context(str(path), values[1])
+        captions, family, settings = load_run_context(str(path), values[1], include_report=True)
+        values[6] = f"{settings}\n\n{values[6]}"
         if storage is not None and storage.mode == "memory":
             from ..core.video_run import memory_source
 
             values[0] = memory_source(values[0])
-        return io.NodeOutput(*values, str(path), captions)
+        return io.NodeOutput(*values, str(path), captions, family)
 
 
 class RvVideo_RunGate(io.ComfyNode):

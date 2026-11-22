@@ -1426,6 +1426,25 @@ class PromptReviewEndpoints:
 
 class VideoRunPromptEndpoints:
     def __init__(self):
+        @PromptServer.instance.routes.post("/eclipse-nova/video_run/report")
+        async def preview_report(request):
+            import asyncio
+
+            from .json_store import JsonStoreError
+            from .request_security import same_origin_browser_request
+            from .video_run_history import selected_run_path
+            from .video_run_report import preview_run_report
+
+            if not same_origin_browser_request(request):
+                return web.json_response({"error": "Cross-origin report request rejected"}, status=403)
+            payload = await read_json_object_request(request, max_bytes=8192)
+            try:
+                path = selected_run_path(payload.get("saved_run"), payload.get("backup"))
+                report = await asyncio.to_thread(preview_run_report, path)
+                return web.json_response({"report": report}, headers={"Cache-Control": "no-store"})
+            except (OSError, ValueError, KeyError, TypeError, JsonStoreError):
+                return web.json_response({"error": "Could not read the selected saved run report."}, status=400)
+
         @PromptServer.instance.routes.post("/eclipse-nova/video_run/prompts")
         async def read_part_prompts(request):
             import asyncio

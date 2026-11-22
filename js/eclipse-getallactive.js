@@ -19,7 +19,7 @@ import { linkedChain, deriveChainList, excludeChainVariable, renameChainVariable
 import { openChainEditor, syncChainMenu, installSyncChainMenu } from './eclipse-getallactive-sync-ui.js';
 import { fitNodeToWidgets } from './eclipse-widget-utils.js';
 const LGraphNode = LiteGraph.LGraphNode;
-const TYPE_FILTERS = ["*", "MODEL", "CLIP", "VAE", "CONDITIONING", "LATENT", "IMAGE", "MASK", "FLOAT", "INT", "STRING", "CONTROL_NET", "NOISE", "GUIDER", "SAMPLER", "SIGMAS", "PIPE"];
+const TYPE_FILTERS = ["*", "MODEL", "CLIP", "VAE", "CONDITIONING", "LATENT", "IMAGE", "MASK", "AUDIO", "FLOAT", "INT", "STRING", "CONTROL_NET", "NOISE", "GUIDER", "SAMPLER", "SIGMAS", "PIPE"];
 
 function showAlert(message) {
     app.extensionManager.toast.add({

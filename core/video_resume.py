@@ -48,6 +48,13 @@ def plan_ranges(plan):
     if isinstance(plan, H3ClipPlan):
         ranges = [(clip.start, clip.keep) for clip in plan.clips]
         kind, fps = "clips", 24
+    elif isinstance(plan, dict) and plan.get("kind") == "WAN_LIPSYNC_PLAN":
+        from .wan_timeline import wan_parts
+
+        if plan["fps"] != 25:
+            raise ValueError("InfiniteTalk saved runs require 25 FPS.")
+        ranges = [(task["start_frame"], task["keep_frames"]) for task in wan_parts(plan)]
+        kind, fps = "frames", 25
     else:
         plan, tasks = validate_segment_plan(plan)
         ranges = [(task["output_start_frame"], task["keep_frames"]) for task in tasks]
@@ -176,7 +183,9 @@ def prepare_resume(plan, resume=False, restart_part=0, previous=None, storage=No
     if keep_following:
         report = (f"Replace part {restart_part} only; keep {start} earlier and "
                   f"{len(counts) - restart_part} later saved parts. The original run is unchanged.")
-        if kind == "frames" and restart_part < len(counts) and plan["tasks"][restart_part]["has_continuity"]:
+        if kind == "frames" and restart_part < len(counts) and (
+            plan.get("kind") == "WAN_LIPSYNC_PLAN" or plan["tasks"][restart_part]["has_continuity"]
+        ):
             report += " The following part used the old part's generated frames; review that join."
     return prefix, start, len(ranges) - start, report
 

@@ -217,7 +217,7 @@ def reference_pair(images, mode, part):
 
 
 def clip_conditioning(plan, index, clip, vae, width, height, seed,
-                      reference_mode="first_and_last", images=None, audio_vae=None):
+                      reference_mode="first_and_last", images=None, audio_vae=None, previous=None):
     # Keep the installed native H3 tokenization, joint latent and guide encoding.
     from comfy_extras.nodes_minimax_h3 import (
         MiniMaxH3AddGuide,
@@ -236,9 +236,25 @@ def clip_conditioning(plan, index, clip, vae, width, height, seed,
         last = None
     else:
         first, last = reference_pair(images, reference_mode, item.part)
-    if item.keep == 1 and first is not None:
+    metadata = plan.source_metadata or {}
+    guidance = metadata.get("guidance")
+    continuation = guidance and index > 0 and plan.clips[index - 1].part == item.part
+    endpoint = guidance == "First and last" and (index + 1 == len(plan.clips) or plan.clips[index + 1].part != item.part)
+    ends = metadata.get("scene_end_images") if plan.soundtrack_only else None
+    if endpoint:
+        last = first
+        if ends is not None:
+            if not 0 <= item.part < len(ends) or type(ends[item.part]) is not int or not 0 <= ends[item.part] < len(frames):
+                raise ValueError("The planned end image is missing from the saved inputs.")
+            last = frames[ends[item.part]]
+    active_reference = first if guidance == "Active reference" else None
+    if continuation or active_reference is not None:
+        first = None
+    if item.keep == 1 and first is not None and ends is None:
         last = None
     references = flatten_images(images) if reference_mode == "reference_images" and not plan.soundtrack_only else []
+    if active_reference is not None:
+        references = [active_reference]
     if references:
         if len(references) > 9:
             raise ValueError("H3 reference_images supports at most 9 images; select fewer timeline slots.")
@@ -255,14 +271,33 @@ def clip_conditioning(plan, index, clip, vae, width, height, seed,
             clip, vae, item.prompt, width, height, item.render,
             first_frame=first, last_frame=last,
         ).result
-    if last is not None and item.keep != item.render:
+    # A one-frame shot keeps its opening and steers toward the end image in the next, discarded frame.
+    last_index = max(int(first is not None), item.crop_start + item.keep - 1)
+    if last is not None and last_index != item.render - 1:
         # The native last-image guide otherwise lands in discarded padding.
         # Copy metadata: a cached native conditioning must remain reusable.
         positive = [[embedding, {**metadata, "minimax_keyframes": [
-            {**guide, "resolved_frame_index": item.keep - 1}
+            {**guide, "resolved_frame_index": last_index}
             if guide["resolved_frame_index"] == item.render - 1 else dict(guide)
             for guide in metadata.get("minimax_keyframes", [])
         ]}] for embedding, metadata in positive]
+    if continuation and guidance != "Active reference":
+        if previous is None or previous.get_frame_count() != item.start:
+            raise ValueError("Native H3 continuation needs the preceding rendered part.")
+        from .video_clip_append import MemoryClipVideo
+
+        if isinstance(previous, MemoryClipVideo):
+            tail = previous.chunks[-1][0][-item.crop_start:]
+        else:
+            # Seek to the motion tail before decoding. A full H3 part can contain
+            # hundreds of full-resolution frames, while the guide uses at most 22.
+            last_clip = previous.videos[-1]
+            first_frame = max(0, last_clip.get_frame_count() - item.crop_start)
+            window = last_clip.as_trimmed(first_frame / FPS, item.crop_start / FPS, strict_duration=False)
+            tail = window.get_components().images
+        if len(tail) != item.crop_start:
+            raise ValueError("The preceding native clip has insufficient motion history.")
+        positive = MiniMaxH3AddGuide.execute(positive, latent, 0, vae=vae, image=tail).result[0]
     if plan.audio is not None and not plan.soundtrack_only:
         if audio_vae is None:
             raise ValueError("An audio VAE is required to guide H3 with the selected soundtrack.")

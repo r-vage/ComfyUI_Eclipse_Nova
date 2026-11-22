@@ -18,7 +18,7 @@ from .minimax_h3_clips import (
     prepare_reference_plan,
     reference_pair,
 )
-from .minimax_h3_segment_plan import audio_shape
+from .minimax_h3_segment_plan import PLAN_KIND, audio_shape, segment_reference_count
 from .video_part_prompts import apply_prompt_edits, source_key
 from .video_resume import (
     PartReplacement,
@@ -54,6 +54,7 @@ class RenderInputs:
     caption_start: float = 0.0
     prompt_source_id: str = field(default_factory=lambda: uuid4().hex)
     replacement: PartReplacement | None = field(default=None, repr=False, compare=False)
+    video_loader: dict | None = None
 
     @property
     def fps(self):
@@ -62,7 +63,22 @@ class RenderInputs:
 
 def render_inputs(plan, width, height, **kwargs):
     plan = unwrap_value(plan)
+    from .video_timeline import VideoTimeline
+
+    if isinstance(plan, VideoTimeline):
+        kwargs.update(images=plan.images, audio=plan.soundtrack, conditioning_audio=plan.guide,
+                      prompts=[scene.prompt for scene in plan.scenes], first_part_prompt="")
+        plan = plan.plan
     kind, _, _ = plan_ranges(plan)
+    if isinstance(plan, dict) and plan["kind"] == "WAN_LIPSYNC_PLAN" and "reviewed_prompts" not in plan:
+        from .minimax_h3_prompts import segment_prompt
+
+        directions = [segment_prompt(kwargs.get("prompts", ""), i) for i in range(plan["image_count"])]
+        if kwargs.get("first_part_prompt"):
+            directions[0] = segment_prompt(kwargs.get("prompts", ""), 0, kwargs["first_part_prompt"])
+        plan = {**plan, "reviewed_prompts": directions}
+        if kwargs.get("conditioning_audio") is None:
+            kwargs["conditioning_audio"] = kwargs.get("audio")
     if any(type(v) is not int or v < 16 for v in (width, height)):
         raise ValueError("Render width and height must be integers of at least 16 pixels.")
     if kind == "clips":
@@ -81,6 +97,15 @@ def render_inputs(plan, width, height, **kwargs):
         if not plan.soundtrack_only and data.reference_mode == "first_middle_first":
             reference_pair(data.images, data.reference_mode, 0)
         data = replace(data, audio=plan.audio)
+    elif isinstance(plan, dict) and "reviewed_prompts" in plan:
+        waveform, rate = audio_shape(data.conditioning_audio)
+        if plan["kind"] == "MINIMAX_H3_SEGMENT_PLAN" and (
+            waveform.shape[-1] != plan["conditioning_sample_count"] or rate != plan["conditioning_sample_rate"]
+        ):
+            raise ValueError("Conditioning audio does not match the saved timeline.")
+        reference_count = segment_reference_count(plan) if plan["kind"] == PLAN_KIND else plan["image_count"]
+        if len(flatten_images(data.images)) != reference_count:
+            raise ValueError("Reference images do not match the saved timeline.")
     else:
         for name, rate_key, count_key in (("audio", "sample_rate", "sample_count"),
                                          ("conditioning_audio", "conditioning_sample_rate", "conditioning_sample_count")):
@@ -91,7 +116,7 @@ def render_inputs(plan, width, height, **kwargs):
             waveform, rate = audio_shape(value)
             if rate != plan[rate_key] or waveform.shape[-1] != plan[count_key]:
                 raise ValueError(f"Saved {name} does not match the lip-sync plan.")
-        if len(flatten_images(data.images)) != plan["image_count"]:
+        if len(flatten_images(data.images)) != segment_reference_count(plan):
             raise ValueError("Reference-image count does not match the lip-sync plan.")
     if data.caption_audio is None:
         data = replace(data, caption_audio=data.audio, caption_start=0.0)
@@ -108,16 +133,22 @@ def caption_context(data):
     return {"audio": data.caption_audio, "trim_start": data.caption_start}
 
 
-def load_caption_context(run_path, audio=None):
+def load_run_context(run_path, audio=None, *, include_report=False):
+    from .video_run_report import checkpoint_family, settings_text
+
     root = manifest_path(run_path).parent
     manifest = read_json_object(root / "run.json")
-    if not manifest.get("checkpoint"):
-        return {"audio": audio, "trim_start": 0.0}
-    value = read_json_object(_contained_file(root, manifest["checkpoint"]))
+    captions = {"audio": audio, "trim_start": 0.0}
+    value = read_json_object(_contained_file(root, manifest["checkpoint"])) if manifest.get("checkpoint") else {}
     item = value.get("caption_audio")
-    if item is None:
-        return {"audio": audio, "trim_start": 0.0}
-    return {"audio": _load_audio(root, item), "trim_start": value.get("caption_start", 0.0)}
+    if item is not None:
+        captions = {"audio": _load_audio(root, item), "trim_start": value.get("caption_start", 0.0)}
+    result = captions, checkpoint_family(value)
+    return (*result, settings_text(root, manifest, value)) if include_report else result
+
+
+def load_caption_context(run_path, audio=None):
+    return load_run_context(run_path, audio)[0]
 
 
 def _load_audio(root, item):
@@ -145,6 +176,8 @@ def save_checkpoint(root, data, parent=None):
              "images": [], "audio": None, "conditioning_audio": None, "parent_run": parent,
              "caption_audio": None, "caption_start": data.caption_start}
     value["prompt_source_id"] = data.prompt_source_id
+    if data.video_loader is not None:
+        value["video_loader"] = data.video_loader
     for index, pixels in enumerate(flatten_images(data.images)):
         file = f"reference_{index:05d}.npy"
         _save_array(root / file, pixels.detach().to(device="cpu", dtype=torch.float32).numpy())
@@ -165,6 +198,8 @@ def save_checkpoint(root, data, parent=None):
 
 
 def load_checkpoint(run_path):
+    from .video_run_report import saved_loader
+
     manifest = manifest_path(run_path)
     root = manifest.parent
     recorded = read_json_object(manifest)
@@ -195,7 +230,7 @@ def load_checkpoint(run_path):
     elif value["kind"] != "frames":
         raise ValueError("Unsupported checkpoint render kind.")
     data = render_inputs(plan, value["width"], value["height"], images=images or None, **audios,
-                         prompt_source_id=source_key(value),
+                         prompt_source_id=source_key(value), video_loader=saved_loader(root, recorded, value),
                          caption_start=value.get("caption_start", 0.0),
                          **{name: value[name] for name in ("prompts", "first_part_prompt", "reference_mode", "visual_condition_strength")})
     kind, fps, ranges = plan_ranges(data.plan)
@@ -206,7 +241,7 @@ def load_checkpoint(run_path):
     return data
 
 
-def prepare_video_loop(storage, restart_part, previous=None, run_path=None, prompt_edits=None, **inputs):
+def prepare_video_loop(storage, restart_part, previous=None, run_path=None, prompt_edits=None, loader_metadata=None, **inputs):
     keep_following = storage.run_mode == UPDATE_PART_MODE
     if keep_following and storage.mode != "persistent":
         raise ValueError("Update selected run requires Disk and Keep in output.")
@@ -252,6 +287,11 @@ def prepare_video_loop(storage, restart_part, previous=None, run_path=None, prom
     if storage.mode == "persistent" and remaining:
         root = (getattr(previous, "run_directory", None) or getattr(previous, "_eclipse_run_directory", None)
                 or create_run_directory(storage))
+        if loader_metadata and any(loader_metadata):
+            from .video_run_report import workflow_loader
+            from .video_timeline import model_path
+
+            data = replace(data, video_loader=workflow_loader(*loader_metadata, model_path(data.plan)))
         save_checkpoint(root, data, run_path if storage.run_mode != "New run" else None)
         manifest = Path(root) / "run.json"
         if manifest.is_file():

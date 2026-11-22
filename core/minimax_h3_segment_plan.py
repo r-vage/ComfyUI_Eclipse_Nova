@@ -331,6 +331,7 @@ def build_segment_tasks(
     ref_image_size: str,
     max_render_frames: int,
     opening_warmup_frames: int = 0,
+    closing_image_index: int | None = None,
     activity: torch.Tensor | None = None,
     transition_edge: str = "activity_resume",
     search_window_seconds: float = 5.0,
@@ -379,9 +380,8 @@ def build_segment_tasks(
             technical_seam_style=technical_seam_style,
             warmup_frames=warmup_frames,
         )
-        has_real_endpoint = (
-            segment_strategy == "first_last_bridge" and owner < image_count - 1
-        )
+        closing = owner == image_count - 1 and closing_image_index is not None
+        has_real_endpoint = segment_strategy == "first_last_bridge" and (owner < image_count - 1 or closing)
         same_endpoint = (
             conditioning_family == "fl2va_keyframes"
             and reset_anchor == "same_first_last_experimental"
@@ -430,10 +430,17 @@ def build_segment_tasks(
                 has_continuity = later_continuity
                 role = later_role
             real_endpoint = has_real_endpoint and is_region_last
-            endpoint_image = owner + 1 if real_endpoint else owner
-            has_last = real_endpoint or (same_endpoint and has_start)
+            endpoint_image = None
+            endpoint_role = None
             if real_endpoint:
-                role = "first_last_bridge"
+                endpoint_image = closing_image_index if closing else owner + 1
+                endpoint_role = "closing" if closing else "destination"
+                if not has_continuity:
+                    role = "first_last_bridge"
+            elif same_endpoint and has_start:
+                endpoint_image = owner
+                endpoint_role = "same_source_experimental"
+            has_last = endpoint_image is not None
             render_frames = aligned_h3_length(prefix + keep_frames + tail)
             if render_frames > max_render_frames:
                 raise ValueError("A balanced task exceeds max_render_frames.")
@@ -459,14 +466,10 @@ def build_segment_tasks(
                 "has_start_guide": has_start,
                 "start_guide_frame_index": 0 if has_start else None,
                 "has_last_image": has_last,
-                "last_image_index": endpoint_image if has_last else None,
+                "last_image_index": endpoint_image,
                 "endpoint_frame_index": endpoint_index,
                 "endpoint_output_frame": output_end if has_last else None,
-                "endpoint_role": (
-                    "destination" if real_endpoint else "same_source_experimental"
-                )
-                if has_last
-                else None,
+                "endpoint_role": endpoint_role,
                 "starts_image_interval": is_transition_start and is_region_first,
                 "is_technical_seam": bool(tasks) and not (
                     is_transition_start and is_region_first
@@ -690,6 +693,14 @@ def _require_bool(mapping: dict[str, Any], key: str) -> bool:
     return value
 
 
+def segment_reference_count(plan: dict[str, Any]) -> int:
+    # A final bridge can use one extra input without creating another scene or prompt.
+    count = plan["image_count"]
+    if plan.get("closing_image_index") == count:
+        return count + 1
+    return count
+
+
 def validate_segment_plan(plan: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     if not isinstance(plan, dict):
         raise TypeError(f"plan must be a {PLAN_KIND} dictionary.")
@@ -706,6 +717,9 @@ def validate_segment_plan(plan: Any) -> tuple[dict[str, Any], list[dict[str, Any
     max_render = _require_int(plan, "max_render_frames")
     if image_count < 1 or total_frames < 1:
         raise ValueError("Plan image_count and total_frames must be positive.")
+    closing = _optional_int(plan, "closing_image_index")
+    if closing is not None and (not 0 <= closing <= image_count or plan.get("segment_strategy") != "first_last_bridge"):
+        raise ValueError("A closing image needs a valid first-and-last bridge reference.")
     if "image_part_directions" in plan:
         directions = plan["image_part_directions"]
         if (image_count < 2 or not isinstance(directions, list)
@@ -838,7 +852,7 @@ def validate_segment_plan(plan: Any) -> tuple[dict[str, Any], list[dict[str, Any
             raise ValueError(f"Plan task {index} start guide must be local frame 0.")
         if has_last != (last_index is not None and endpoint_index is not None):
             raise ValueError(f"Plan task {index} has incomplete endpoint metadata.")
-        if last_index is not None and not 0 <= last_index < image_count:
+        if last_index is not None and not 0 <= last_index < segment_reference_count(plan):
             raise ValueError(f"Plan task {index} has an invalid last image.")
         if endpoint_index is not None and (
             endpoint_index != crop_start + keep_frames
@@ -849,9 +863,14 @@ def validate_segment_plan(plan: Any) -> tuple[dict[str, Any], list[dict[str, Any
         if endpoint_role not in (
             None,
             "destination",
+            "closing",
             "same_source_experimental",
         ) or (endpoint_role is None) != (not has_last):
             raise ValueError(f"Plan task {index} has an invalid endpoint role.")
+        if (endpoint_role == "closing") != (closing is not None and index == len(tasks) - 1):
+            raise ValueError(f"Plan task {index} has an unexpected or missing closing endpoint.")
+        if endpoint_role == "closing" and last_index != closing:
+            raise ValueError(f"Plan task {index} has the wrong closing image.")
         if endpoint_role == "destination":
             if last_index != owner + 1 or output_end not in transitions:
                 raise ValueError(f"Plan task {index} has an invalid destination endpoint.")

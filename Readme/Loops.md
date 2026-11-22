@@ -149,6 +149,11 @@ the editor's **prompt_edits** to Start's optional **prompt_edits** input. Both
 connections can use Get/Set, including when Start is inside a subgraph. The editor
 uses the loader's existing selection; it has no second run picker.
 
+When **New run** executes, the connected editor clears the previous prompts and
+drafts. Once the plan is ready it shows the current part's resolved prompt and
+advances with the loop. You can browse other parts with the dropdown and arrows.
+The live text is read-only because this render already has its prompts.
+
 1. Select the saved run, then click **Read selected run** in the editor. This reads
    prompt text and part ranges without loading models, references or audio arrays.
 2. Choose the **Render part** from the themed dropdown or use **◀ / ▶** beside it.
@@ -171,11 +176,11 @@ folder with backups and edit just the selected part as described above.
 Resume saves the edited plan with its new persistent revision, including changes
 to upcoming parts. Select that revision to continue. Update saves its corrected
 prompt in the selected run. Corrections remain even when Apply edits is off.
-Reading the saved prompts again clears edits already saved
-there. **Reset this part** restores the text read from the selected revision;
-**Clear edits** discards all pending edits and switches Apply off. Neither changes
-saved files. Clear drafts before reading a different run, or disable Apply to use
-that run without them. New run and Load saved run do not apply this editor.
+**Read selected run** reloads the saved text, selects the first part and clears
+pending edits. **Reset this part** restores that part's saved text. **Clear edits**
+discards pending changes and switches Apply off. **Reset editor** clears the
+displayed catalog as well. Changing the saved run or backup clears the previous
+selection's text. These controls leave the saved files intact.
 Update automatically reloads the saved prompts in connected editors. If the run
 changed since a draft was read, read the selected version again before applying
 new changes.

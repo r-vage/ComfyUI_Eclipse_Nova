@@ -16,9 +16,11 @@ from .logger import log
 from .minimax_h3_segment_plan import H3_FPS
 from .scene_gradual import appearance_histogram, gradual_boundaries
 from .scene_motion_text import (
+    has_source_detail,
     motion_only_text,
     performance_motion_text,
     performance_prompt_issue,
+    transferred_scene_text,
 )
 from .video_stream import video_frame_source
 from .video_timing import _rgb_array, check_media_interrupt, media_progress
@@ -264,13 +266,16 @@ def get_scene_job(jobs, index):
                    "Observe these images as one scene window in the listed order. "
                    "The first frame may already be mid-gesture: describe its existing pose separately "
                    "from movement visible within this window. Do not invent an approach, preparation "
-                   "or return to rest. Compare visible body, hand/finger and facial motion; "
+                   "or return to rest. Compare visible body, hand/finger, head and gaze changes; "
                    "summarize distinct changes, not one event per sample. State uncertainty "
                    "if the samples do not establish the motion or a boundary pose is not visible. "
                    "Follow the selected task's response format; this context does not require JSON. "
                    "When the task requests scene_id/window_id, copy them from this context. "
                    "Follow the selected analysis task's appearance "
-                   "policy: motion analysis omits appearance entirely; full T2V description includes it. "
+                   "policy. For motion analysis, describe framing, head, hands, body, gaze, eyes and brows. "
+                   "Leave out mouth and lip movement, smiles, teeth, tongue, hair and clothing in every field. "
+                   "When these accompany a gesture, describe just the visible gesture. "
+                   "For full T2V description, include visible appearance and expression. "
                    "Describe only visible evidence; do not create cuts. "
                    "Times are relative to the trimmed source VIDEO.")}
     excluded = [frame for frame in jobs.plan.metadata.get("cut_limit", {}).get("excluded_cut_frames", [])
@@ -344,10 +349,9 @@ def validate_observation(raw, scene_id, window_id):
     mode = value.get("description_mode")
     if mode is not None and mode not in ("motion", "full"):
         raise ValueError("Unknown scene description_mode; expected motion or full")
-    # Task-marked results generate from performance_prompt. Their separate
-    # appearance audit is optional; only legacy export cleanup depends on it.
-    text_fields = _TEXT_FIELDS if mode is not None else (*_TEXT_FIELDS, "appearance")
-    for key in text_fields:
+    # Appearance notes are optional even for unmarked saves. A usable paragraph
+    # can still be exported when the model missed or misformatted that field.
+    for key in _TEXT_FIELDS:
         if not isinstance(value.get(key), str):
             raise TypeError(f"Observation {key} must be text")
         if not value[key].strip():
@@ -374,8 +378,8 @@ def validate_observation(raw, scene_id, window_id):
     issue = performance_prompt_issue(value["performance_prompt"])
     if issue:
         warnings.append(issue)
-    result = {key: value[key] for key in ("scene_id", "window_id", *text_fields, *_LIST_FIELDS, "performance_prompt")}
-    if mode is not None and "appearance" in value:
+    result = {key: value[key] for key in ("scene_id", "window_id", *_TEXT_FIELDS, *_LIST_FIELDS, "performance_prompt")}
+    if "appearance" in value:
         result["appearance"] = value["appearance"]
         if mode == "motion":
             warnings.append("Motion analysis returned source appearance metadata; review the text before use.")
@@ -427,7 +431,7 @@ def _unique(items):
 
 def performance_instruction(observations):
     """Join the paragraphs written in the analysis calls, never rebuild audit fields."""
-    appearances = [item.get("appearance", "") for item in observations]
+    appearances = [item["appearance"] for item in observations if isinstance(item.get("appearance"), str)]
     paragraphs = []
     for item in observations:
         if not isinstance(item.get("performance_prompt"), str) or not item["performance_prompt"].strip():
@@ -436,10 +440,8 @@ def performance_instruction(observations):
         # call. Retain bounded cleanup only for older, unmarked observations.
         text = item["performance_prompt"]
         if item.get("description_mode") is None:
-            text = performance_motion_text(text, appearances)
+            text = performance_motion_text(text, appearances) or text
         paragraph = _h3_paragraph([text])
-        if not paragraph:
-            raise ValueError("performance_prompt contains no transferable direction; rerun Scene Motion Analysis")
         # Shared samples can produce identical neighboring summaries. A later
         # recurrence after another window remains in its observed order.
         if not paragraphs or paragraph.casefold() != paragraphs[-1].casefold():
@@ -513,33 +515,34 @@ def _h3_paragraph(parts):
     return " ".join(sentences)
 
 
-def _h3_shot_direction(scene, appearance_mode=APPEARANCE_MODES[0]):
+def _h3_shot_direction(scene, appearance_mode, warnings):
     observations = [item for window in scene["windows"] for item in window["observations"]]
     modes = {item.get("description_mode") for item in observations}
-    if len(modes) != 1:
-        raise ValueError(f"Scene {scene['scene_id']} mixes description tasks; rerun its windows with one task")
-    mode = next(iter(modes))
-    if mode is not None:
-        required_mode = APPEARANCE_MODES[0] if mode == "motion" else APPEARANCE_MODES[1]
-        if appearance_mode != required_mode:
-            task = "Scene Motion Analysis" if appearance_mode == APPEARANCE_MODES[0] else "Scene Description (T2V)"
-            raise ValueError(f"This analysis uses {mode} descriptions. Select '{required_mode}' to export it, "
-                             f"or rerun {task} for the requested appearance policy.")
-        return _h3_paragraph([scene["instruction"]])
-    # instruction is the joined performance paragraphs, or the user's explicit
-    # edit. Audit fields never become a fallback generation prompt.
-    direction = motion_only_text(scene["instruction"], [item["appearance"] for item in observations])
-    if not direction.strip():
-        raise ValueError(f"Scene {scene['scene_id']} has no transferable performance instruction")
-    appearance = []
-    if appearance_mode == APPEARANCE_MODES[1]:
-        appearance = _unique(item["appearance"] for item in observations
-                             if item["appearance"].strip().rstrip(".").casefold()
+    appearances = [item["appearance"] for item in observations if isinstance(item.get("appearance"), str)]
+    original = scene["instruction"]
+    if appearance_mode == APPEARANCE_MODES[0]:
+        direction = transferred_scene_text(original, appearances)
+        if not direction:
+            warnings.append(f"Scene {scene['scene_id']}: filtering left no usable direction. "
+                            "The original prompt is available to edit.")
+        elif has_source_detail(direction):
+            warnings.append(f"Scene {scene['scene_id']}: a source detail shares a phrase with a visible action. "
+                            "The phrase was kept for manual editing.")
+        elif "full" in modes:
+            warnings.append(f"Scene {scene['scene_id']}: filtered a full description. Review the part for source appearance.")
+        return _h3_paragraph([direction or original])
+    if modes == {None}:
+        appearance = _unique(value for value in appearances if value.strip().rstrip(".").casefold()
                              not in {"not visible", "not observed", "uncertain", "unknown", "none", "n/a"})
-    return _h3_paragraph([*appearance, direction])
+        return _h3_paragraph([*appearance, motion_only_text(original, appearances) or original])
+    if "motion" in modes:
+        warnings.append(f"Scene {scene['scene_id']}: motion analysis omits source appearance. "
+                        "The saved prompt is available to edit.")
+    return _h3_paragraph([original])
 
 
-def h3_scene_part_inputs(bundle, performance_prompt=H3_PERFORMANCE_PROMPT, appearance_mode=APPEARANCE_MODES[0]):
+def h3_scene_part_inputs(bundle, performance_prompt=H3_PERFORMANCE_PROMPT, appearance_mode=APPEARANCE_MODES[0],
+                         *, review_warnings=None):
     validate_scene_analysis(bundle)
     if appearance_mode not in APPEARANCE_MODES:
         raise ValueError("Choose whether to exclude or include source appearance")
@@ -550,13 +553,13 @@ def h3_scene_part_inputs(bundle, performance_prompt=H3_PERFORMANCE_PROMPT, appea
     total = math.ceil(bundle["source"]["duration_seconds"] * H3_FPS)
     if any(not 0 < value < total for value in frames) or len(set(frames)) != len(frames):
         raise ValueError("Detected cuts collide on H3's 24 FPS timeline; review scene sensitivity before planning")
-    instructions = [_h3_shot_direction(scene, appearance_mode) for scene in scenes[1:]]
-    return (", ".join(format(value, ".9f") for value in cuts), instructions,
-            _h3_paragraph([performance_prompt]), _h3_shot_direction(scenes[0], appearance_mode))
+    warnings = [] if review_warnings is None else review_warnings
+    first, *instructions = [_h3_shot_direction(scene, appearance_mode, warnings) for scene in scenes]
+    return ", ".join(format(value, ".9f") for value in cuts), instructions, _h3_paragraph([performance_prompt]), first
 
 
-def scene_analysis_review_report(bundle):
-    warnings = []
+def scene_analysis_review_report(bundle, export_warnings=()):
+    warnings = list(export_warnings)
     for scene in bundle["scenes"]:
         for window in scene["windows"]:
             for observation in window["observations"]:

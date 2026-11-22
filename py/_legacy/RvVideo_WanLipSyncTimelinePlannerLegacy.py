@@ -1,3 +1,4 @@
+# ruff: noqa: N999 -- preserve the repository's role-based Legacy module names.
 # WAN LipSync Timeline Planner [Eclipse Nova]
 #
 # Builds a metadata-only, frame-exact extension plan for ComfyUI's fixed-length
@@ -10,15 +11,16 @@ from typing import Any
 
 from comfy_api.latest import io  # type: ignore
 
-from ..core import CATEGORY
-from ..core.audio_timeline import (
+from ...core import CATEGORY
+from ...core.audio_timeline import (
     align_activity_gap,
     audio_duration_seconds,
     encoded_audio_activity,
 )
-from ..core.image_helpers import flatten_images, unwrap_value
-from ..core.logger import log
-from ..core.operation_panel import OperationPanel
+from ...core.image_helpers import flatten_images, unwrap_value
+from ...core.logger import log
+from ...core.operation_panel import OperationPanel
+from ...core.wan_timeline import build_extension_tasks
 
 _LOG_PREFIX = "WAN LipSync Timeline Planner"
 _PLAN_KIND = "WAN_LIPSYNC_PLAN"
@@ -111,50 +113,6 @@ def _space_transitions(
     return spaced, adjustments
 
 
-def _build_tasks(
-    base_keep_frames: int,
-    total_frames: int,
-    transition_frames: list[int],
-    context_length: int,
-    overlap_frames: int,
-    warmup_frames: int = 0,
-) -> list[dict[str, int | bool]]:
-    stride = context_length - overlap_frames
-    transition_set = set(transition_frames)
-    tasks: list[dict[str, int | bool]] = []
-    start_frame = base_keep_frames
-
-    while start_frame < total_frames:
-        image_index = sum(
-            1 for transition_frame in transition_frames if transition_frame <= start_frame
-        )
-        next_transition = (
-            transition_frames[image_index]
-            if image_index < len(transition_frames)
-            else total_frames
-        )
-        # Hidden generated lead-in uses preceding real audio; the visible range
-        # remains at start_frame. Keep the fixed render length and budget less
-        # visible content only on an image change.
-        warmup = min(warmup_frames, start_frame - overlap_frames, stride - 1) if start_frame in transition_set else 0
-        end_frame = min(start_frame + stride - warmup, next_transition, total_frames)
-        if end_frame <= start_frame:
-            raise ValueError("Timeline planning produced an empty extension task.")
-        tasks.append(
-            {
-                "start_frame": start_frame,
-                "end_frame": end_frame,
-                "image_index": image_index,
-                "keep_frames": end_frame - start_frame,
-                "starts_transition": start_frame in transition_set,
-                "warmup_frames": warmup,
-            }
-        )
-        start_frame = end_frame
-
-    return tasks
-
-
 class RvVideo_WanLipSyncTimelinePlanner(OperationPanel, io.ComfyNode):
     PANEL_KIND = "wan_planner"
 
@@ -169,7 +127,7 @@ class RvVideo_WanLipSyncTimelinePlanner(OperationPanel, io.ComfyNode):
                 "Encoded Wav2Vec2 features are treated as activity, not as an "
                 "explicit voice-activity classification."
             ),
-            category=CATEGORY.MAIN.value + CATEGORY.VIDEO.value,
+            category=CATEGORY.MAIN.value + CATEGORY.LEGACY.value,
             inputs=[
                 io.Audio.Input(
                     "audio", tooltip="Audio that defines the final timeline length."
@@ -315,7 +273,7 @@ class RvVideo_WanLipSyncTimelinePlanner(OperationPanel, io.ComfyNode):
             manual_times: list[float] = []
             transition_frames: list[int] = []
             base_keep_frames = min(context_length, total_frames)
-            tasks = _build_tasks(
+            tasks = build_extension_tasks(
                 base_keep_frames,
                 total_frames,
                 transition_frames,
@@ -401,7 +359,7 @@ class RvVideo_WanLipSyncTimelinePlanner(OperationPanel, io.ComfyNode):
             base_keep_frames = min(
                 context_length, total_frames, transition_frames[0]
             )
-            tasks = _build_tasks(
+            tasks = build_extension_tasks(
                 base_keep_frames,
                 total_frames,
                 transition_frames,

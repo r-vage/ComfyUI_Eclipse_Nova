@@ -36,6 +36,7 @@ class CATEGORY(Enum):
     TOOLS = "/ Tools"
     TEXT = "/ Text"
     DANBOORU = "/ Danbooru"
+    LEGACY = "/ Legacy"
     VIDEO = "/ Video"
     MINIMAX = "/ MiniMax"
     AUDIO = "/ Audio"

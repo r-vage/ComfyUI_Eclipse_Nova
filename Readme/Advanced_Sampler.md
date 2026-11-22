@@ -14,8 +14,9 @@ socket. Use IO Checkpoint Loader to extract those loader-specific fields. Connec
 win, including zero. Supplying a new image clears an inherited latent; supplying
 a new latent clears an inherited image. If both are present, sampling uses the latent.
 
-The sampler requires model, VAE, positive and negative conditioning, and either a
-latent or an image in the PIPE. An image is encoded only when no latent is present.
+Supply a model, positive conditioning and either a latent or an image in the PIPE.
+Each active stage must use CFG 1 when negative conditioning is omitted. A VAE is
+required to encode an image or decode the final latent.
 **Use pipe settings** uses supplied PIPE values for both stages, the seeds, optional upscale,
 preview, tiled decode, tile size and Alpha. Missing values stay local. With it off,
 all settings come from the panel. The switch itself is always controlled locally.
@@ -117,8 +118,11 @@ When Stage 2 seed is empty, Stage 2 uses base seed + offset, wrapping
 within the unsigned 64-bit range. Offset 0 reuses the base seed. An explicit Stage 2 seed takes priority over the offset. Randomization is
 resolved once per queue. Image Selector confirmation freezes that base seed.
 
-Only the final latent is decoded. Preview, tiled decode and Alpha work as in the
-existing sampler. Alpha is off by default. The output PIPE contains the final
+**Decode** is on by default, including for older workflows. Turn it off to pass
+the complete sampled latent to a downstream decoder. The output image is then
+empty. This preserves both streams of a native H3 video/audio latent and the
+noise mask and batch metadata of a supplied latent. With Decode on, the final
+latent is decoded once. Alpha is off by default. The output PIPE contains the final
 stage's settings and seed, plus `sampling_stages` describing the two-stage setup.
 Changing either stage reruns the whole node; ComfyUI cannot cache Stage 1 separately.
 

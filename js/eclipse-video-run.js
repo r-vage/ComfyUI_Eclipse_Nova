@@ -30,11 +30,26 @@ export class RunBackups {
             if (event.detail.saved_run === this.savedRun) void this.refreshBackups(true);
         };
         api.addEventListener('eclipse-nova.video-run', this.updated);
+        let lastRun = this.savedRun, lastBackup = this.widget('backup').value || CURRENT;
+        const selectionChanged = () => {
+            const backup = this.widget('backup').value || CURRENT;
+            if (lastRun === this.savedRun && lastBackup === backup && this.savedRun !== NO_SAVED_RUNS) return;
+            lastRun = this.savedRun; lastBackup = backup;
+            api.dispatchEvent(new CustomEvent('eclipse-nova.video-run-selection', { detail: { loader: node } }));
+        };
         const run = this.widget('saved_run'), callback = run.callback;
         run.callback = (...args) => {
             const result = callback?.apply(run, args);
+            this.closeReport();
             this.widget('backup').value = CURRENT;
+            selectionChanged();
             void this.refreshBackups(true); return result;
+        };
+        const backup = this.widget('backup'), selectBackup = backup.callback;
+        backup.callback = (...args) => {
+            this.closeReport();
+            const result = selectBackup?.apply(backup, args);
+            selectionChanged(); return result;
         };
     }
     widget(name) { return this.node.widgets.find(w => w.name === name); }
@@ -42,6 +57,46 @@ export class RunBackups {
     normalize() { if (this.widget('backup').value == null) this.widget('backup').value = CURRENT; }
     error(summary, error) {
         if (!this.disposed) app.extensionManager.toast.add({ severity: 'error', summary, detail: error.message });
+    }
+    closeReport() {
+        this.reportRequest?.abort();
+        this.reportDialog?.close();
+    }
+    async previewReport() {
+        this.closeReport();
+        const saved_run = this.savedRun, backup = this.widget('backup').value || CURRENT;
+        if (!saved_run || saved_run === NO_SAVED_RUNS) {
+            this.error('Saved run report', Error('Choose a saved run first.')); return;
+        }
+        const request = this.reportRequest = new AbortController();
+        try {
+            const response = await api.fetchApi('/eclipse-nova/video_run/report', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ saved_run, backup }), signal: request.signal,
+            });
+            const data = await response.json();
+            if (request.signal.aborted || this.disposed || this.savedRun !== saved_run
+                || (this.widget('backup').value || CURRENT) !== backup) return;
+            if (!response.ok) throw Error(data.error || 'Could not read the saved run.');
+            const dialog = document.createElement('dialog');
+            dialog.setAttribute('aria-label', 'Saved run report');
+            dialog.style.cssText = 'max-width:min(48rem,90vw);max-height:80vh;overflow:auto;background:var(--comfy-menu-bg);color:var(--fg-color);padding:1.25rem;border:1px solid var(--border-color);';
+            const heading = document.createElement('h2'); heading.textContent = 'Saved run report';
+            const report = document.createElement('pre'); report.textContent = data.report;
+            report.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;';
+            const close = document.createElement('button'); close.textContent = 'Close';
+            close.addEventListener('click', () => dialog.close());
+            dialog.addEventListener('close', () => {
+                dialog.remove();
+                if (this.reportDialog === dialog) this.reportDialog = null;
+            }, { once: true });
+            dialog.append(heading, report, close); document.body.append(dialog);
+            this.reportDialog = dialog; dialog.showModal();
+        } catch (error) {
+            if (!request.signal.aborted) this.error('Saved run report', error);
+        } finally {
+            if (this.reportRequest === request) this.reportRequest = null;
+        }
     }
     async refreshBackups(quiet = false) {
         this.normalize(); this.request?.abort();
@@ -95,7 +150,7 @@ export class RunBackups {
         finally { this.restoring = false; }
     }
     dispose() {
-        this.disposed = true; this.request?.abort();
+        this.disposed = true; this.request?.abort(); this.closeReport();
         api.removeEventListener('eclipse-nova.video-run', this.updated);
     }
 }
@@ -155,6 +210,9 @@ app.registerExtension({
                     this.setDirtyCanvas(true);
                 }
             }, { serialize: false });
+            if (backups) this.addWidget('button', 'Preview run report', null, () => backups.previewReport(), {
+                serialize: false, tooltip: 'Read the selected run or backup’s saved task, preset and model before choosing a preset on the video loader.',
+            });
             if (backups) this.addWidget('button', 'Restore selected backup', null, () => backups.restore(), {
                 serialize: false, tooltip: 'Make the selected backup current without generating video. The current version is backed up first. Connected prompt editors reload the restored prompts and reset pending edits.',
             });

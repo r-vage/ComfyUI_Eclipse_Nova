@@ -53,8 +53,10 @@ export class SamplerState extends SeedState {
             else p.selection = 'All';
             for (const [key, field] of Object.entries(spec.fields)) if (!Object.hasOwn(p, key)) p[key] = clone(field.default);
         }
-        if (spec.profile === 'advanced' && spec.fields.second_denoise && !Object.hasOwn(this.config.parameters, 'second_denoise')) {
-            this.config.parameters.second_denoise = clone(spec.fields.second_denoise.default);
+        if (spec.profile === 'advanced') {
+            for (const key of ['second_denoise', 'decode']) {
+                if (spec.fields[key] && !Object.hasOwn(this.config.parameters, key)) this.config.parameters[key] = spec.fields[key].default;
+            }
         }
         for (const [key, field] of Object.entries(spec.fields)) {
             if (field.optional && !Object.hasOwn(this.config.parameters, key)) this.config.parameters[key] = clone(field.default);

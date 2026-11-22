@@ -212,12 +212,12 @@ class RvVideo_SceneAnalysisToH3(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         return io.Schema(node_id="Scene Analysis to H3 [Eclipse Nova]", display_name="Scene Analysis to H3", category=_CATEGORY,
-                         description="Separate global performance from the first part and subsequent part prompts. Match appearance_mode to the analysis: exclude for Scene Motion Analysis, include for Scene Description (T2V) or Scene JSON captions. New task paragraphs pass through without appearance rewriting. Times and next_part_prompts connect to the planner; main_prompt and first_part_prompt connect to both Segmented Conditioning nodes.",
+                         description="Export the global direction and one editable prompt per part. Exclude filters source mouth, hair and clothing descriptions for image-to-video. Include uses the full scene description for text-to-video. Times and next_part_prompts connect to the planner; main_prompt and first_part_prompt connect to both Segmented Conditioning nodes.",
                          inputs=[io.Custom(ANALYSIS_TYPE).Input("analysis", tooltip="Connect Save Scene Analysis or Load Scene Analysis. This adapter builds generation prompts from the saved result without another LM call. Use matching source audio and trim for its cut times."),
                                  io.String.Input("performance_prompt", default=H3_PERFORMANCE_PROMPT, multiline=True,
                                                  tooltip="Direction that applies throughout the video, such as performing to the supplied audio and preserving the selected image's identity. Put scene-specific framing, poses and movement in the part prompts. This text remains as entered when appearance_mode changes."),
                                  io.Combo.Input("appearance_mode", options=list(APPEARANCE_MODES), default=APPEARANCE_MODES[0], optional=True,
-                                                tooltip="Use exclude with Scene Motion Analysis for image-to-video, or include with Scene Description (T2V) and Scene JSON captions. Task paragraphs pass through unchanged; switching their policy requires a new analysis run. Older unmarked saved analyses retain appearance filtering/inclusion without inference. Adjust the global performance prompt for T2V yourself.")],
+                                                tooltip="Exclude removes recognized source appearance and mouth cues from the first and subsequent parts, including saved analyses. If filtering would empty a part, its original text is returned for editing and the report identifies the scene. Include keeps full descriptions. The global prompt is entered separately.")],
                          outputs=[io.String.Output("manual_transition_times", tooltip="Measured cut times in seconds from the trimmed reference start. Connect to the H3 Audio Timeline Planner's manual_transition_times. Timings are checked against H3's 24 FPS timeline."),
                                   io.String.Output("next_part_prompts", is_output_list=True,
                                                    tooltip="One description for each part after the first, ordered to match the cut times. Connect to the planner's technical_cut_instruction. These describe the part's framing and movement; timing stays in the planner."),
@@ -227,7 +227,9 @@ class RvVideo_SceneAnalysisToH3(io.ComfyNode):
 
     @classmethod
     def execute(cls, analysis, performance_prompt=H3_PERFORMANCE_PROMPT, appearance_mode=APPEARANCE_MODES[0]):
-        times, parts, main, first = h3_scene_part_inputs(analysis, performance_prompt, appearance_mode)
+        warnings = []
+        times, parts, main, first = h3_scene_part_inputs(analysis, performance_prompt, appearance_mode,
+                                                         review_warnings=warnings)
         return io.NodeOutput(times, parts, main, first,
                              f"{len(analysis['scenes'])} parts: one global prompt, one first-part prompt and {len(parts)} subsequent part prompts; {appearance_mode}. Cut times and observations are unchanged."
-                             + scene_analysis_review_report(analysis))
+                             + scene_analysis_review_report(analysis, warnings))

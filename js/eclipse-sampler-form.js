@@ -23,6 +23,7 @@ export class SamplerForm {
             ? ['allow_overwrite', 'noise_mask', 'force_inpaint', 'inpaint_model', 'tiled_encode', 'tiled_decode',
                 ...(spec.profile === 'detailer' ? ['live_preview'] : [])].map(key => [key, spec.fields[key].label, p[key] === true]) : [
             ['allow_overwrite', 'Use pipe settings', p.allow_overwrite],
+            ...(spec.profile === 'advanced' ? [['decode', 'Decode', p.decode !== false]] : []),
             ['tiled_decode', 'Tiled decode', p.tiled_decode], ['alpha', 'Alpha', p.alpha === true],
             ['preview_mode', 'Preview', p.preview_mode === 'Preview'],
         ];

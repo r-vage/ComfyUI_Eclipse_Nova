@@ -43,7 +43,9 @@ class RvVideo_WanLipSyncConditioning(OperationPanel, io.ComfyNode):
         mode = {"mode": "single_speaker"}
         if inputs.get("audio_encoder_output_2") is not None:
             mode = {"mode": "two_speakers", **{key: inputs.pop(key, None) for key in ("audio_encoder_output_2", "mask_1", "mask_2")}}
-        context = motion_context(previous_frames, motion_frame_count, audio_start)
+        if previous_frames is None and audio_start != 0:
+            raise ValueError("An InfiniteTalk opening must start at audio frame zero.")
+        context = None if previous_frames is None else motion_context(previous_frames, motion_frame_count, audio_start)
         return WanInfiniteTalkToVideo.execute(
             mode=mode, previous_frames=context, motion_frame_count=motion_frame_count, **inputs,
         )

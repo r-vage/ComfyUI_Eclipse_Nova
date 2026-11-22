@@ -38,7 +38,8 @@ def sample_kargim(steps, cfg, sampler_name, scheduler, denoise, seed,
                   model=None, vae=None, positive=None, negative=None,
                   preview_mode="Preview", tiled_decode=False, tile_size=512,
                   latent=None, image=None, pipe=None, allow_overwrite=False,
-                  *, prompt=None, extra_pnginfo=None, unique_id=None, alpha=True, sampling_function=None):
+                  *, prompt=None, extra_pnginfo=None, unique_id=None, alpha=True, sampling_function=None,
+                  decode=True, positive_only=False):
     def is_input_connected(key):
         if prompt is not None and unique_id is not None and unique_id in prompt:
             node_inputs = prompt[unique_id].get("inputs", {})
@@ -93,7 +94,7 @@ def sample_kargim(steps, cfg, sampler_name, scheduler, denoise, seed,
         raise ValueError(
             "Eclipse KSampler (Kargim): A 'model' must be provided either directly or via the input 'pipe'."
         )
-    if vae is None:
+    if vae is None and (decode or image is not None or (pipe or {}).get("image") is not None):
         raise ValueError(
             "Eclipse KSampler (Kargim): A 'vae' must be provided either directly or via the input 'pipe'."
         )
@@ -101,7 +102,7 @@ def sample_kargim(steps, cfg, sampler_name, scheduler, denoise, seed,
         raise ValueError(
             "Eclipse KSampler (Kargim): A 'positive' conditioning must be provided either directly or via the input 'pipe'."
         )
-    if negative is None:
+    if negative is None and not positive_only:
         raise ValueError(
             "Eclipse KSampler (Kargim): A 'negative' conditioning must be provided either directly or via the input 'pipe'."
         )
@@ -274,7 +275,9 @@ def sample_kargim(steps, cfg, sampler_name, scheduler, denoise, seed,
     latent_output["samples"] = samples
 
     # 2. Perform VAE decode (either tiled or standard)
-    if tiled_decode:
+    if not decode:
+        images = None
+    elif tiled_decode:
         decoder = nodes.VAEDecodeTiled()
         overlap = max(16, tile_size // 8)
         images = decoder.decode(
@@ -292,11 +295,11 @@ def sample_kargim(steps, cfg, sampler_name, scheduler, denoise, seed,
 
     # Apply the same channel policy to final previews, the image output and PIPE.
     # The native-widget node keeps its existing behavior via the default above.
-    if not alpha and images.shape[-1] == 4:
+    if images is not None and not alpha and images.shape[-1] == 4:
         images = images[..., :3]
 
     # 3. Handle UI render preview output
-    if preview_mode == "None":
+    if images is None or preview_mode == "None":
         ui_output = {"images": []}
     else:
         preview_node = nodes.PreviewImage()
@@ -306,8 +309,8 @@ def sample_kargim(steps, cfg, sampler_name, scheduler, denoise, seed,
         ui_output = save_result.get("ui", {})
 
     # Extract dimensions from images tensor (shape: [batch, height, width, channels])
-    height = 0
-    width = 0
+    height = (pipe or {}).get("height", 0)
+    width = (pipe or {}).get("width", 0)
     if images is not None and len(images.shape) >= 3:
         height = int(images.shape[1])
         width = int(images.shape[2])

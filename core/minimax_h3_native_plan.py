@@ -32,14 +32,14 @@ def source_spans(video, duration):
     return spans
 
 
-def fit_soundtrack(audio, total_frames):
+def fit_soundtrack(audio, total_frames, fps=FPS):
     if audio is None:
         return None
     waveform, rate = audio_shape(audio)
     if (waveform.ndim != 3 or waveform.shape[0] != 1 or waveform.shape[1] not in (1, 2)
             or waveform.shape[-1] == 0):
         raise ValueError("Selected audio excerpt must contain nonempty mono or stereo audio.")
-    count = round(Fraction(total_frames, FPS) * rate)
+    count = round(Fraction(total_frames, fps) * rate)
     repeats = math.ceil(count / waveform.shape[-1])
     fitted = waveform.repeat(1, 1, repeats) if repeats > 1 else waveform
     return {**audio, "waveform": fitted[..., :count]}

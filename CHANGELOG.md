@@ -1,5 +1,74 @@
 # Changelog
 
+## 2026-11-22
+
+### Version: 1.0.47
+
+- **Feat (New)**
+  - Add Video Timeline Planner for native MiniMax H3, H3 lip-sync and WAN InfiniteTalk. It supports clip-based, audio-based and fixed durations, accepts per-scene prompts and can skip a short final continuation.
+- **Feat**
+  - Add Video Timeline Audio to select a recording, embedded video audio or isolated vocals. The planner accepts separate tracks for duration, lip-sync conditioning and the final soundtrack, and identifies missing required audio.
+  - Add ordered, cycling and equal-time image assignment at scene cuts. H3 first-and-last guidance supports adjacent and wrapping image pairs. The planner and saved-run reports identify each scene’s images.
+  - Extend Video Loop Start to support WAN opening and extension parts. Disk checkpoints retain reviewed scene prompts, guide audio and the soundtrack when resuming a run or replacing a part.
+  - Add the saved video task, loader preset and model filename to the Load Video Run report for runs and backups.
+  - Add a Decode switch to Eclipse KSampler Advanced, enabled by default. The sampler can return the complete latent without decoding and use positive-only conditioning when every active stage uses CFG 1.
+- **Fix**
+  - Filter mouth, hair and clothing descriptions in Scene Analysis to H3 when source appearance is excluded. Preserve gestures, gaze and facial movements, and return the original prompt for editing if filtering would empty a part.
+  - Apply the global direction verbatim to each scene in Video Timeline Generation Prompts. For H3 lip-sync, the node includes it in the visual description and sets the soundscape to N/A.
+  - Clear stale Part Prompt Editor drafts when a new run starts and display the resolved prompt for each render part. Reset editor clears the entire selection, and Read selected run reloads the chosen saved version.
+  - Add AUDIO to the type filter in Get First and Get All Active so saved audio selections reopen as valid choices.
+- **Perf**
+  - Read only the motion frames needed from the preceding disk clip for native H3 continuation.
+- **Deprecated nodes**
+  - Move the ten superseded H3 and WAN nodes to the Legacy menu, preserving their serialized IDs, sockets, defaults and frontend hooks.
+- **Changed files**
+  - README.md
+  - Readme/Advanced_Sampler.md
+  - Readme/GetFirst_GetAllActive.md
+  - Readme/Loops.md
+  - Readme/Scene_Analysis.md
+  - core/advanced_sampler.py
+  - core/keys.py
+  - core/minimax_h3_clips.py
+  - core/minimax_h3_native_plan.py
+  - core/minimax_h3_panels.py
+  - core/minimax_h3_prompts.py
+  - core/sampler_configuration.py
+  - core/sampler_execution.py
+  - core/scene_analysis.py
+  - core/scene_motion_text.py
+  - core/server_endpoints.py
+  - core/video_checkpoint.py
+  - core/video_part_prompts.py
+  - core/video_resume.py
+  - core/video_run_report.py
+  - core/video_timeline.py
+  - core/wan_timeline.py
+  - js/eclipse-getallactive.js
+  - js/eclipse-getfirst.js
+  - js/eclipse-part-prompts.js
+  - js/eclipse-sampler-form.js
+  - js/eclipse-sampler-state.js
+  - js/eclipse-video-run.js
+  - py/RvSampler_KSamplerAdvanced.py
+  - py/RvVideo_MiniMaxH3Clips.py
+  - py/RvVideo_MiniMaxH3NativePlan.py
+  - py/RvVideo_MiniMaxH3Panels.py
+  - py/RvVideo_PartPromptEditor.py
+  - py/RvVideo_Resume.py
+  - py/RvVideo_RunStorage.py
+  - py/RvVideo_SceneAnalysis.py
+  - py/RvVideo_Timeline.py
+  - py/RvVideo_WanLipSyncConditioning.py
+  - py/RvVideo_WanLipSyncPlanStep.py
+  - py/RvVideo_WanLipSyncTimelinePlanner.py
+  - py/_legacy/RvVideo_MiniMaxH3ClipsLegacy.py
+  - py/_legacy/RvVideo_MiniMaxH3NativePlanLegacy.py
+  - py/_legacy/RvVideo_MiniMaxH3SegmentedTimelineLegacy.py
+  - py/_legacy/RvVideo_WanLipSyncPlanStepLegacy.py
+  - py/_legacy/RvVideo_WanLipSyncTimelinePlannerLegacy.py
+  - pyproject.toml
+
 ## 2026-11-19
 
 ### Version: 1.0.46
@@ -190,7 +259,7 @@
 - **Feat**
   - Let Upscale Video stream exact H3 frame timelines as well as native VIDEO, with an optional separate soundtrack. Preserve frame timing and bounded frame batches; connected audio replaces embedded audio and is aligned to the result duration.
 - **Docs**
-  - Explain H3 upscaling before captions, output dimensions and variable fallback when the optional group is muted.
+  - Update the Upscale Video reference for H3 frame timelines, output dimensions and soundtracks.
 - **Changed files**
   - core/video_stream.py
   - core/video_upscale.py
@@ -293,7 +362,7 @@
 ### Version: 1.0.30
 
 - **Feat (New)**
-  - Add Part Prompt Editor to read combined prompts and time ranges from the existing saved-run selection, edit individual render parts, and apply full prompt replacements on Resume for lip-sync or native H3. Route it through Get/Set into subgraphs without loading models or media arrays to review text.
+  - Add Part Prompt Editor to read combined prompts and time ranges from the existing saved-run selection, edit individual render parts, and apply full prompt replacements on Resume for lip-sync or native H3. The editor can read saved text in subgraphs without loading models or media arrays.
 - **Feat**
   - Save prompt corrections in the new run revision, including upcoming parts, while preserving timing, references, audio, warmup and retained media. Keep changes local to the selected render part even when a scene spans several renders. Validate the source run and restart position before creating a revision; provide Apply, Reset and Clear controls.
 - **Fix**
@@ -323,7 +392,7 @@
   - Add Load Video Run to restore ordered video parts, exact frame ranges, FPS, dimensions and saved soundtracks after a restart. Use one refreshable dropdown to select discovered output runs. Write a manifest after each completed part, keep workflow/prompt snapshots when available, and support moving the whole run folder with relative part paths. Unavailable inactive selections do not block New run; Load and Resume require an available selected run.
   - Add Video Run Gate to skip independent generation outputs without requesting their upstream inputs and pass through absent or muted optional sources. Add Video Run Info for selected-media timing, storage size and retained-part ranges.
   - Add Eclipse-owned Loop Start, Video Loop Start and Loop End for sequential analysis and H3 rendering without Easy-Use. Support loops inside subgraphs, with stop requests scoped to the matching loop. Limit parts per queue or stop after saving the current part and its accumulated preview, preserving warmup-trim and transition review. Load mode skips fresh inputs and rendering, including independent accumulated previews.
-  - Add Loop Control to place the live Stop after current part button outside a subgraph. Connect it to either loop start through Get/Set; synchronize both buttons and keep requests scoped to the current queue.
+  - Add Loop Control to expose the Stop after current part button outside a subgraph. It synchronizes with either loop start and scopes stop requests to the current queue.
   - Save resolved timing plans, prompts, references, canvas and audio in persistent render checkpoints, including the full caption recording and excerpt start. Resume without fresh analysis or planning, continue after completed parts or replace from a selected part in a new revision. Keep original media unchanged; retain load/export for older media-only runs. Expose the matching caption context on loop completion or loading so captions align with the saved excerpt.
   - Add Video Part Seed to separate absolute clip selection from sampling variation and record each completed part's actual seed.
 - **Feat**
@@ -335,7 +404,7 @@
   - Return the original VIDEO through Preview Video while retaining its viewing copy separately. Preserve native loop state and its storage metadata instead of feeding a compressed preview back into accumulation.
 - **Docs**
   - Explain RAM and disk resource use, saved-run ownership, downstream re-export, analysis cache behavior and the limits of media checkpoints.
-  - Document loop wiring, New/Resume/Load controls, saved input recovery, accumulated previews and separate preparation/render gates.
+  - Document the New, Resume and Load modes, saved input recovery and accumulated previews.
 - **Changed files**
   - core/cache_artifacts.py
   - core/execution_cache.py
@@ -392,8 +461,7 @@
 - **Docs**
   - Document native H3 clip connections, optional references and soundtrack selection. Clarify that image-slot blends affect the still-image renderer and do not automatically fade generated clips.
   - Add practical tooltips to every scene-analysis input and output, covering detection sensitivity, independent resolutions, sample budgets, per-request frame limits, overlap, loop wiring, cut spacing and task-specific H3 export.
-  - Document node connections for optional live analysis, editable manual inputs and saved-analysis reuse. Keep each source's timings and part prompts together through Set/Get routing, with the global performance prompt independent of part-source muting.
-  - Update the README and guides for scene analysis, current image controls and part prompts. Remove references to unshipped workflows while retaining the bundled Get All Active shared-chain preview.
+  - Update the README and guides for scene analysis, current image controls and part prompts.
 - **Changed files**
   - README.md
   - Readme/README.md
@@ -894,7 +962,7 @@
 ### Version: 1.0.8
 
 - **Feat (New)**
-  - Add PIPE-only Eclipse KSampler Advanced with standard/two-stage modes, independent step ranges and noise controls, optional between-stage latent upscale, a shared base seed and Stage 2 offset, and final-only decoding. Defaults match the configured Nova sampler in the Moody Moss workflow, including 2× bicubic upscale.
+  - Add PIPE-only Eclipse KSampler Advanced with standard/two-stage modes, independent step ranges and noise controls, optional between-stage latent upscale, a shared base seed and Stage 2 offset, and final-only decoding. Latent upscale defaults to 2× bicubic interpolation.
   - Add IO KSampler to control both sampling stages, seeds, noise toggles, latent upscale, preview and decode through a PIPE, using the standard sampler fields for Stage 1 and separate Stage 2 fields, with local fallback for missing values and preservation of other metadata.
 - **Feat**
   - Support Image Selector seed locking for the new advanced sampler.

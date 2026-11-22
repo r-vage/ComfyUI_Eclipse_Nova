@@ -198,10 +198,14 @@ class EclipseExtension(ComfyExtension):
         from .py.RvVideo_LoopKeepCalc import RvVideo_LoopKeepCalc
         from .py.RvAudio_LoopAlignSilence import RvAudio_LoopAlignSilence
         from .py.RvVideo_WanLipSyncConditioning import RvVideo_WanLipSyncConditioning
-        from .py.RvVideo_WanLipSyncPlanStep import RvVideo_WanLipSyncPlanStep
-        from .py.RvVideo_WanLipSyncTimelinePlanner import RvVideo_WanLipSyncTimelinePlanner
+        from .py.RvVideo_Timeline import (
+            RvVideo_TimelineAudio, RvVideo_TimelinePlanner, RvVideo_TimelineIO, RvVideo_TimelineSelect,
+            RvVideo_TimelineGenerationPrompts, RvVideo_TimelineNativeConditioning, RvVideo_TimelineWanStep,
+        )
+        from .py._legacy.RvVideo_WanLipSyncPlanStepLegacy import RvVideo_WanLipSyncPlanStep
+        from .py._legacy.RvVideo_WanLipSyncTimelinePlannerLegacy import RvVideo_WanLipSyncTimelinePlanner
+        from .py._legacy.RvVideo_MiniMaxH3SegmentedTimelineLegacy import RvVideo_MiniMaxH3SegmentedTimelinePanel
         from .py.RvVideo_MiniMaxH3Panels import (
-            RvVideo_MiniMaxH3SegmentedTimelinePanel,
             RvVideo_MiniMaxH3SegmentedStepPanel, RvVideo_MiniMaxH3SegmentedConditioningPanel,
         )
         from .py.RvVideo_TrimToShortest import RvVideo_TrimToShortest
@@ -211,12 +215,13 @@ class EclipseExtension(ComfyExtension):
             RvVideo_DecodeAppendTimeline,
             RvVideo_TrimTimeline,
         )
-        from .py.RvVideo_MiniMaxH3Clips import (
+        from .py._legacy.RvVideo_MiniMaxH3ClipsLegacy import (
             RvVideo_MiniMaxH3ClipPlanner, RvVideo_MiniMaxH3ClipConditioning,
             RvVideo_MiniMaxH3ClipConditioningV2,
         )
-        from .py.RvVideo_MiniMaxH3NativePlan import (
-            RvVideo_MiniMaxH3ClipPlannerV2, RvVideo_H3ImageInputsV2, RvVideo_SceneSourceBoundariesV2,
+        from .py.RvVideo_MiniMaxH3NativePlan import RvVideo_H3ImageInputsV2, RvVideo_SceneSourceBoundariesV2
+        from .py._legacy.RvVideo_MiniMaxH3NativePlanLegacy import (
+            RvVideo_MiniMaxH3ClipPlannerV2,
             RvVideo_H3ReviewedPlanV2,
             RvVideo_H3PromptPlanV2, RvVideo_H3PromptInputsV2,
         )
@@ -392,6 +397,8 @@ class EclipseExtension(ComfyExtension):
             RvVideo_WanLipSyncTimelinePlanner,
             RvVideo_WanLipSyncPlanStep,
             RvVideo_WanLipSyncConditioning,
+            RvVideo_TimelineAudio, RvVideo_TimelinePlanner, RvVideo_TimelineIO, RvVideo_TimelineSelect,
+            RvVideo_TimelineGenerationPrompts, RvVideo_TimelineNativeConditioning, RvVideo_TimelineWanStep,
             RvVideo_MiniMaxH3SegmentedTimelinePanel,
             RvVideo_MiniMaxH3SegmentedStepPanel,
             RvVideo_MiniMaxH3SegmentedConditioningPanel,
