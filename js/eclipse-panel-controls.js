@@ -12,15 +12,23 @@ function completeDecimal(event) {
     if (value !== input.value) input.value = value;
 }
 function selectValue(event) {
+    if (event.type === 'click' && event.detail !== 3) return;
     const input = event.currentTarget;
     if (input.disabled || input.readOnly
         || !['text', 'search', 'url', 'tel', 'email', 'password', 'number', 'textarea'].includes(input.type)) return;
+    event.stopPropagation();
+    // Let the browser select the word under the pointer, using its own word boundaries.
+    const numeric = input.type === 'number' || (input.type === 'text' && ['numeric', 'decimal'].includes(input.inputMode));
+    if (event.type === 'dblclick' && !numeric) return;
     input.select();
-    event.preventDefault(); event.stopPropagation();
+    event.preventDefault();
 }
 export function element(tag, className = '', text = '') {
     const item = document.createElement(tag); item.className = className; item.textContent = text;
-    if (tag === 'input' || tag === 'textarea') item.addEventListener('dblclick', selectValue);
+    if (tag === 'input' || tag === 'textarea') {
+        item.addEventListener('dblclick', selectValue);
+        item.addEventListener('click', selectValue);
+    }
     if (tag === 'input') {
         item.addEventListener('change', completeDecimal);
         item.addEventListener('blur', completeDecimal);

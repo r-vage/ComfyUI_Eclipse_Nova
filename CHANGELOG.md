@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-23
+
+### Version: 1.0.48
+
+- **Fix**
+  - Double-click selects the word under the pointer in panel text fields. Triple-click selects the entire field, including multiline prompts.
+- **Changed files**
+  - js/eclipse-panel-controls.js
+  - Readme/Operation_Panels.md
+  - pyproject.toml
+
 ## 2026-11-22
 
 ### Version: 1.0.47

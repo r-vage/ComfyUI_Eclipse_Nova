@@ -9,6 +9,9 @@ Small tools use a flat row or grid. Larger tools group settings into collapsible
 pinnable sections; mode bars select modes or enable features. Dropdowns have search.
 The values, open sections and text-area sizes are saved with the workflow.
 
+In a text field, double-click a word to select it. Triple-click anywhere in the
+field to select every line. Double-click a number or seed to select its full value.
+
 ## Available nodes
 
 | Area | Nodes |
