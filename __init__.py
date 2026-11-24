@@ -232,8 +232,9 @@ class EclipseExtension(ComfyExtension):
         from .py.RvLogic_LoopControl import RvLogic_LoopControl
         from .py.RvVideo_PartPromptEditor import RvVideo_PartPromptEditor
         from .py.RvVideo_SaveData import RvVideo_SaveData
+        from .py._legacy.RvVideo_SceneCutLimitLegacy import RvVideo_SceneCutLimit
         from .py.RvVideo_SceneAnalysis import (
-            RvVideo_SceneDetector, RvVideo_SceneCutLimit, RvVideo_SceneAnalysisPlan, RvVideo_SceneFrameSampler,
+            RvVideo_SceneDetector, RvVideo_SceneCutsPerSecond, RvVideo_SceneAnalysisPlan, RvVideo_SceneFrameSampler,
             RvVideo_SceneDescriptionCollector, RvVideo_SaveSceneAnalysis,
             RvVideo_LoadSceneAnalysis, RvVideo_SceneAnalysisToH3,
         )
@@ -432,6 +433,7 @@ class EclipseExtension(ComfyExtension):
             RvVideo_SaveData,
             RvVideo_Load,
             RvVideo_SceneDetector,
+            RvVideo_SceneCutsPerSecond,
             RvVideo_SceneCutLimit,
             RvVideo_SceneAnalysisPlan,
             RvVideo_SceneFrameSampler,

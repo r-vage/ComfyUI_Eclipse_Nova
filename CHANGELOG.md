@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-24
+
+### Version: 1.0.49
+
+- **Feat**
+  - Add Scene Cuts per Second to keep up to a whole number of detected cuts in each source second. Use −1 for all source cuts or 0 for one continuous scene. The original Scene Cut Limit remains available under Legacy.
+- **Changed files**
+  - core/scene_analysis.py
+  - py/RvVideo_MiniMaxH3NativePlan.py
+  - py/RvVideo_SceneAnalysis.py
+  - py/_legacy/RvVideo_SceneCutLimitLegacy.py
+  - Readme/MiniMax_H3_Clips.md
+  - Readme/Scene_Analysis.md
+  - pyproject.toml
+
 ## 2026-11-23
 
 ### Version: 1.0.48

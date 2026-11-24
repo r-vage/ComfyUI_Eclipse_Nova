@@ -4,7 +4,7 @@ The scene-analysis nodes measure a reference video's scene boundaries and descri
 
 Use Eclipse **Loop Start / Loop End** to process one sampled window per iteration:
 
-`Load Video → Scene Detector → Scene Cut Limit (optional) → Scene Analysis Plan → Loop Start [Scene Frame Sampler → Smart LM Prompt Pipe → Smart LM Loader → Scene Description Collector] → Loop End → Save Scene Analysis → Scene Analysis to H3`
+`Load Video → Scene Detector → Scene Cuts per Second (optional) → Scene Analysis Plan → Loop Start [Scene Frame Sampler → Smart LM Prompt Pipe → Smart LM Loader → Scene Description Collector] → Loop End → Save Scene Analysis → Scene Analysis to H3`
 
 Connect the sampler's `frame_source` directly to Smart LM Loader's `frame_source`, and its `context` to Smart LM Prompt Pipe's `user_prompt`. Connect the pipe's `settings` to the loader's `pipe_opt`, then the loader's `text` to Scene Description Collector.
 
@@ -68,9 +68,17 @@ description. Keep the selected LM task and matching appearance policy appropriat
 to the intended output. Loading an old saved analysis reuses its old boundaries;
 rerun live analysis to use newly detected transitions.
 
-Optional **Scene Cut Limit → max_cuts_per_second** filters the detected plan before sampling. Zero passes it through unchanged; 1 keeps cuts at least one second apart, 2 requires half a second, and 0.5 requires two seconds. It keeps the earliest candidate meeting the interval measured from the previous retained boundary, including the source start. It never moves a cut. The final scene may be shorter than that interval, so the full source duration remains covered.
+**Scene Cuts per Second** filters detected edits before sampling. Set **Max cuts per second** to a whole number.
 
-Excluded cuts merge adjacent scenes. The plan records their source frame positions, and any analysis window crossing one tells the LM that a sudden pose change across that edit does not prove physical movement. A stricter limit can omit brief events from a uniform sample budget; review the merged descriptions. Changing this node reuses cached detection but reruns sampling and descriptions for the new scene ranges. Use **0 = unlimited** to preserve every detected boundary.
+- **−1 (Auto)** keeps every detected source cut. This is the default.
+- **0** removes every detected cut and returns one scene covering the full input.
+- **1 or more** keeps up to that many cuts in each second, earliest first. Values above five work the same way.
+
+Counting starts at the beginning of the trimmed video and resets at each whole second. For example, with a limit of **2**, detections at 0.10, 0.20, 0.80 and 1.00 seconds produce cuts at **0.10, 0.20 and 1.00**. A second with fewer detections keeps them all. The final partial second follows the same rule.
+
+Excluded cuts merge adjacent scenes. Their source frames remain available to the LM as discontinuities when a sampled window crosses them. Changing the limit reuses cached detection and reruns sampling for the new scene ranges. If you connect **Scene Source Boundaries_v2** downstream, it also restores joins between separate input clips, even at **0**.
+
+Older graphs that use **Scene Cut Limit** in the **Legacy** category retain their fractional minimum-spacing setting, including **0** for unlimited.
 
 Smart LM uses a separate **Longest side** in its **Image handling** section below Model. Start with **512 px** for faces and gestures, then review the descriptions. Zero keeps automatic model sizing; a positive value is bounded by the loader/model limits. Original IMAGE passthrough remains unchanged. Dynamic patch alignment can round dimensions down, and incompatible fixed/minimum processor sizes produce a clear error where their requirements are available. Remote backends still control their own final preprocessing.
 

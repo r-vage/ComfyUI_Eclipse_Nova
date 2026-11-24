@@ -61,7 +61,7 @@ Optional LLM descriptions then refines each planned scene using its assigned
 image, or text alone. With Live analysis off, manual fields are used.
 
 Connect the same Load Video output to planning and scene analysis. Place Scene
-Source Boundaries_v2 after Scene Cut Limit and before Scene Analysis Plan to
+Source Boundaries_v2 after Scene Cuts per Second and before Scene Analysis Plan to
 retain playlist boundaries even when adjacent clips look alike. Keep playlist
 transitions set to Cut. VIDEO producers without Eclipse playlist provenance are
 treated as a single source clip.

@@ -35,7 +35,7 @@ class RvVideo_SceneSourceBoundariesV2(io.ComfyNode):
         return io.Schema(
             node_id="Scene Source Boundaries_v2 [Eclipse Nova]", display_name="Scene Source Boundaries_v2",
             category=_CATEGORY,
-            description="Keep every loaded clip boundary even when scene detection or cut limiting merges similar clips. Connect after Scene Cut Limit and before Scene Analysis Plan.",
+            description="Keep every loaded clip boundary even when scene detection or cut limiting merges similar clips. Connect after Scene Cuts per Second and before Scene Analysis Plan.",
             inputs=[io.Custom(PLAN_TYPE).Input("scene_plan"), io.Video.Input("video")],
             outputs=[io.Custom(PLAN_TYPE).Output("scene_plan")])
 

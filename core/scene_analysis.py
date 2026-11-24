@@ -5,7 +5,7 @@ import re
 import tempfile
 from dataclasses import dataclass
 from fractions import Fraction
-from itertools import pairwise
+from itertools import groupby, pairwise
 from pathlib import Path
 
 import cv2
@@ -116,7 +116,7 @@ def detect_scenes(video, longest_side=128, threshold=2.5, window_width=4,
 
 
 def limit_scene_cuts(plan, max_cuts_per_second=0.0):
-    """Merge scenes around excess cuts without rescanning or shifting boundaries."""
+    """Apply the original minimum-spacing rule for saved Scene Cut Limit nodes."""
     if not isinstance(plan, ScenePlan):
         raise TypeError("Expected Scene Detector plan")
     if (type(max_cuts_per_second) not in (int, float) or not math.isfinite(max_cuts_per_second)
@@ -126,16 +126,37 @@ def limit_scene_cuts(plan, max_cuts_per_second=0.0):
         return plan
     spacing = 1 / Fraction(str(max_cuts_per_second))
     times = plan.source.timing.timestamps
-    retained = [0]
-    excluded = []
+    excluded = set()
     previous_time = times[plan.scenes[0]["start_frame"]]
-    for index, scene in enumerate(plan.scenes[1:], start=1):
+    for scene in plan.scenes[1:]:
         timestamp = times[scene["start_frame"]]
         if timestamp - previous_time >= spacing:
-            retained.append(index)
             previous_time = timestamp
         else:
-            excluded.append(scene["start_frame"])
+            excluded.add(scene["start_frame"])
+    return _merge_scene_cuts(plan, excluded, {"max_cuts_per_second": max_cuts_per_second,
+                                              "minimum_spacing_seconds": float(spacing)})
+
+
+def limit_cuts_per_second(plan, cuts_per_second=-1):
+    """Keep the first N detected cuts in each whole second of the source timeline."""
+    if not isinstance(plan, ScenePlan):
+        raise TypeError("Expected Scene Detector plan")
+    if type(cuts_per_second) is not int or cuts_per_second < -1:
+        raise ValueError("Cuts per second must be a whole number of -1 or greater")
+    if cuts_per_second == -1:
+        return plan
+
+    times = plan.source.timing.timestamps
+    frames = (scene["start_frame"] for scene in plan.scenes[1:])
+    excluded = set()
+    for _, cuts in groupby(frames, key=lambda frame: math.floor(times[frame])):
+        excluded.update(frame for index, frame in enumerate(cuts) if index >= cuts_per_second)
+    return _merge_scene_cuts(plan, excluded, {"mode": "per_second", "max_cuts_per_second": cuts_per_second})
+
+
+def _merge_scene_cuts(plan, excluded, settings):
+    retained = [index for index, scene in enumerate(plan.scenes) if scene["start_frame"] not in excluded]
     retained.append(len(plan.scenes))
     scenes = []
     for index, (start, stop) in enumerate(pairwise(retained)):
@@ -146,9 +167,9 @@ def limit_scene_cuts(plan, max_cuts_per_second=0.0):
             merged["end_time"] = last["end_time"]
         scenes.append(merged)
     metadata = {**plan.metadata, "cut_limit": {
-        "max_cuts_per_second": max_cuts_per_second, "minimum_spacing_seconds": float(spacing),
+        **settings,
         "input_cut_count": len(plan.scenes) - 1, "retained_cut_count": len(scenes) - 1,
-        "excluded_cut_frames": sorted(set(excluded).union(plan.metadata.get("cut_limit", {}).get("excluded_cut_frames", []))),
+        "excluded_cut_frames": sorted(excluded.union(plan.metadata.get("cut_limit", {}).get("excluded_cut_frames", []))),
     }}
     return ScenePlan(plan.source, metadata, tuple(scenes))
 
