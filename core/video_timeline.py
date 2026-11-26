@@ -22,6 +22,7 @@ from .minimax_h3_segment_plan import (
     is_h3_frame_count,
     validate_segment_plan,
 )
+from .scene_motion_text import AnalyzedMotionDirection
 from .video_reference_range import DURATIONS, reference_lengths
 from .video_scene_transitions import (
     motion_regions,
@@ -85,14 +86,21 @@ class VideoTimeline:
         directions = ["" if self.global_prompt.strip() and s.image is None and not s.direction.strip() else text
                       for s, text in zip(shots, directions, strict=True)]
         if self.shot_groups:
-            texts = iter(directions)
             metadata = self.plan.source_metadata if isinstance(self.plan, H3ClipPlan) else self.plan.get("source_metadata", {})
             continuous = {row["frame"] for row in metadata.get("scene_transitions", ()) if row["continue"]}
-            return [timed_shot_prompt([next(texts) for _ in group.shots],
-                                      [s.start - group.render_start for s in group.shots],
-                                      self.global_prompt, supplied_audio=supplied_audio,
-                                      continuations=[s.start in continuous for s in group.shots])
-                    for group in self.shot_groups]
+            prompts = []
+            offset = 0
+            for group in self.shot_groups:
+                texts = directions[offset:offset + len(group.shots)]
+                if supplied_audio and descriptions is not None:
+                    texts = [shot.direction if text == shot.direction else
+                             AnalyzedMotionDirection(text, getattr(shot.direction, "camera", ()))
+                             for shot, text in zip(group.shots, texts, strict=True)]
+                prompts.append(timed_shot_prompt(
+                    texts, [s.start - group.render_start for s in group.shots], self.global_prompt,
+                    supplied_audio=supplied_audio, continuations=[s.start in continuous for s in group.shots]))
+                offset += len(group.shots)
+            return prompts
         return [generation_prompt(text, self.global_prompt, supplied_audio=supplied_audio) for text in directions]
 
     def reviewed(self, prompts):

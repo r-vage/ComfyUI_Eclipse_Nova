@@ -16,8 +16,10 @@ from .logger import log
 from .minimax_h3_segment_plan import H3_FPS
 from .scene_gradual import appearance_histogram, gradual_boundaries
 from .scene_motion_text import (
+    AnalyzedMotionDirection,
     has_source_detail,
     motion_only_text,
+    observed_shot_camera,
     performance_motion_text,
     performance_prompt_issue,
     transferred_scene_text,
@@ -294,6 +296,9 @@ def get_scene_job(jobs, index):
                    "When the task requests scene_id/window_id, copy them from this context. "
                    "Follow the selected analysis task's appearance "
                    "policy. For motion analysis, describe framing, head, hands, body, gaze, eyes and brows. "
+                   "Give the opening shot size and the camera angle when visible. Compare the framing "
+                   "at the start, middle and end. Describe an observed camera move, its direction and "
+                   "ending framing alongside the gesture. Distinguish camera movement from subject movement. "
                    "Leave out mouth and lip movement, smiles, teeth, tongue, hair and clothing in every field. "
                    "When these accompany a gesture, describe just the visible gesture. "
                    "For full T2V description, include visible appearance and expression. "
@@ -546,12 +551,17 @@ def _h3_shot_direction(scene, appearance_mode, warnings):
         if not direction:
             warnings.append(f"Scene {scene['scene_id']}: filtering left no usable direction. "
                             "The original prompt is available to edit.")
-        elif has_source_detail(direction):
+            return _h3_paragraph([original])
+        if has_source_detail(direction):
             warnings.append(f"Scene {scene['scene_id']}: a source detail shares a phrase with a visible action. "
                             "The phrase was kept for manual editing.")
-        elif "full" in modes:
+            return _h3_paragraph([direction])
+        if "full" in modes:
             warnings.append(f"Scene {scene['scene_id']}: filtered a full description. Review the part for source appearance.")
-        return _h3_paragraph([direction or original])
+        paragraph = _h3_paragraph([direction])
+        if _h3_paragraph([original]) != performance_instruction(observations):
+            return paragraph
+        return AnalyzedMotionDirection(paragraph, observed_shot_camera(observations))
     if modes == {None}:
         appearance = _unique(value for value in appearances if value.strip().rstrip(".").casefold()
                              not in {"not visible", "not observed", "uncertain", "unknown", "none", "n/a"})

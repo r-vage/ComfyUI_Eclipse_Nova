@@ -131,7 +131,7 @@ class RvVideo_TimelineGenerationPrompts(io.ComfyNode):
             inputs=[io.Custom(TIMELINE_TYPE).Input("timeline"), io.String.Input("descriptions", optional=True, force_input=True,
                     tooltip="Optional scene descriptions from the prompt writer. Without this input the timeline uses its original scene directions.")],
             outputs=[io.String.Output("prompts", is_output_list=True)],
-            description="Apply global direction after scene description. In grouped H3 mode, combine shot descriptions and timed cuts into one editable prompt per group. H3 lip-sync uses the supplied audio and starts each soundscape at N/A.")
+            description="Apply global direction after scene description. Grouped H3 combines timed shots into one editable prompt. H3 lip-sync puts the global direction first, condenses long generated motion descriptions and cues vocal articulation in each grouped shot. Its soundscape is N/A.")
 
     @classmethod
     def execute(cls, timeline, descriptions=None):

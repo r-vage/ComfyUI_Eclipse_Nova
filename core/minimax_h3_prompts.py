@@ -6,11 +6,20 @@ from .minimax_h3_segment_plan import (
     task_uses_intentional_camera_cut,
     technical_cut_prompt_for_task,
 )
+from .scene_motion_text import AnalyzedMotionDirection, compact_shot_observation
 
 _VISUAL_LABEL = re.compile(r"^\s*integrated_multimodal_description[ \t]*:", re.IGNORECASE)
 _AUDIO_LABEL = re.compile(r"^[ \t]*(overall_soundscape|non_diegetic_music)[ \t]*:[ \t]*", re.MULTILINE | re.IGNORECASE)
 _SHOT_VISUAL = re.compile(r"^[ \t]*(?:integrated_multimodal_description|detailed_description)[ \t]*:", re.MULTILINE | re.IGNORECASE)
 _SHOT_CUE = re.compile(r"\[shot\s*\d+\](?:\s*At\s+\d+:\d{2}(?:\.\d+)?\s*,?\s*(?:the shot cuts\.\s*)?)?\s*", re.IGNORECASE)
+_VOCAL_CUE = "Lip-sync each audible syllable. Rest the lips during vocal pauses."
+
+
+def _append_instruction(text, instruction):
+    if not text or not instruction:
+        return text or instruction
+    separator = " " if text.endswith((".", "!", "?")) else "\n"
+    return text + separator + instruction
 
 
 def generation_prompt(scene, global_prompt, *, supplied_audio):
@@ -43,9 +52,9 @@ def generation_prompt(scene, global_prompt, *, supplied_audio):
     return f"{visual}\n\noverall_soundscape: N/A\n\nnon_diegetic_music: {music}"
 
 
-def timed_shot_prompt(descriptions, frame_offsets, global_prompt, *, supplied_audio, continuations=()):
+def timed_shot_prompt(descriptions, frame_offsets, global_prompt, *, supplied_audio, continuations=(), compact_shots=()):
     """Compile scene descriptions on the local 24 FPS render clock."""
-    if len(descriptions) == 1:
+    if len(descriptions) == 1 and not supplied_audio:
         return generation_prompt(descriptions[0], global_prompt, supplied_audio=supplied_audio)
     direction = global_prompt.strip()
     repeated_direction = re.compile(r"(?<!\w)" + re.escape(direction) + r"(?!\w)") if direction else None
@@ -67,10 +76,24 @@ def timed_shot_prompt(descriptions, frame_offsets, global_prompt, *, supplied_au
             visual = visual[label.end():]
         if repeated_direction:
             visual = repeated_direction.sub("", visual)
-        visual = _SHOT_CUE.sub("", visual).strip()
+        generated = isinstance(text, AnalyzedMotionDirection) or bool(compact_shots and compact_shots[index])
+        if len(descriptions) == 1 and not generated:
+            # A manual prompt can already contain its own shot sequence and timestamps.
+            visual = re.sub(r"^\s*\[shot\s*1\]\s*", "", visual, count=1, flags=re.IGNORECASE).strip()
+        else:
+            visual = _SHOT_CUE.sub("", visual).strip()
+        if supplied_audio:
+            visual = visual.replace(_VOCAL_CUE, "").strip()
+            if generated:
+                visual = compact_shot_observation(visual, getattr(text, "camera", ()))
+            if visual.rstrip(".").casefold() != "black screen" and (index or _VOCAL_CUE not in direction):
+                visual = _append_instruction(visual, _VOCAL_CUE)
         if index == 0:
-            shared = f"Use this direction throughout all shots. {direction}" if direction else ""
-            shots.append(" ".join(x for x in ("[Shot 1]", visual, shared) if x))
+            if supplied_audio:
+                shots.append(f"[Shot 1] {_append_instruction(direction, visual)}".rstrip())
+            else:
+                shared = f"Use this direction throughout all shots. {direction}" if direction else ""
+                shots.append(" ".join(x for x in ("[Shot 1]", visual, shared) if x))
         else:
             milliseconds = round(frame * 1000 / H3_FPS)
             minute, rest = divmod(milliseconds, 60000)

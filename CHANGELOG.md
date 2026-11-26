@@ -2,6 +2,22 @@
 
 ## 2026-11-26
 
+### Version: 1.0.51
+
+- **Fix**
+  - Grouped H3 lip-sync prompts place the global direction first and cue vocal articulation at every timed shot. The prompt builder keeps observed shot size, camera angle and camera movement, including zoom direction and ending framing, alongside the main gesture. Manual directions and final prompt edits retain their wording.
+- **Changed files**
+  - Readme/Scene_Analysis.md
+  - Readme/Video_Timeline.md
+  - core/minimax_h3_prompts.py
+  - core/scene_analysis.py
+  - core/scene_motion_text.py
+  - core/video_timeline.py
+  - py/RvVideo_Timeline.py
+  - pyproject.toml
+
+## 2026-11-26
+
 ### Version: 1.0.50
 
 - **Feat (New)**

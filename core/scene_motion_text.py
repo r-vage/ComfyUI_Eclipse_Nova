@@ -1,5 +1,8 @@
 """Keep reference appearance clauses out of transferred scene movement."""
 import re
+from itertools import groupby
+from math import inf
+from typing import NamedTuple
 
 from .regex_helper import smart_phrase_removal
 
@@ -281,3 +284,237 @@ def transferred_scene_text(text, appearances=()):
         if sentence.strip():
             chunks.append(sentence.strip() + punctuation)
     return " ".join(chunks).rstrip(" ,;")
+
+
+class AnalyzedMotionDirection(str):
+    """Keep camera observations with their shot while exposing ordinary text on the STRING socket."""
+
+    __slots__ = ("camera",)
+
+    def __new__(cls, text, camera=()):
+        value = super().__new__(cls, text)
+        value.camera = camera
+        return value
+
+
+_FRAMING = re.compile(
+    r"\b(?:(?:extreme |medium )?close[- ]up|(?:extreme[- ]wide|medium(?:[- ](?:wide|full|long))?|wide|long|full(?:[- ]body)?) shot)\b",
+    re.IGNORECASE,
+)
+_VIEW = re.compile(
+    r"\b(?:eye[- ]level|straight[- ]on|frontal|(?:low|high|dutch|canted)[- ]angle|overhead|"
+    r"(?:bird|worm)['’]s[- ]eye(?: view)?|over[- ]the[- ]shoulder|profile view|"
+    r"(?:off[- ]cent(?:er|re)|cent(?:ered|red))(?: composition| framing)?|static camera|locked[- ]off camera)\b",
+    re.IGNORECASE,
+)
+_CAMERA_CHANGE = re.compile(
+    r"\b(?:zoom(?:s|ing|ed)?|dolly|dollies|dollied|panning|tracking shot|push[- ]in|pull[- ]back)\b|"
+    r"\b(?:camera|framing|frame|shot)\s+(?:(?:\w+ly|then|also|is|begins? to|continues? to)\s+){0,3}"
+    r"(?:pan|tilt|track|push|pull|mov|tighten|widen|shift|reframe|orbit|rotat)\w*\b|"
+    r"\b(?:tightens?|widens?) (?:to|into) (?:an? |the )?(?:[\w-]+ ){0,3}(?:shot|close[- ]up)\b",
+    re.IGNORECASE,
+)
+_ACTOR = re.compile(r"(?<![-\w])(?:subject|performer|person|they|she|he|face|head|torso|hands?|arms?|"
+                    r"fingers?|gaze|eyes?(?![- ]level)|brows?)\b", re.IGNORECASE)
+_ACTION_BOUNDARY = re.compile(r"\s+(?:while|as|when|then|and)\s+(?=(?:(?:the|their|both|right|left)\s+)*"
+                              r"(?:subject|performer|they|she|he|head|hands?|arms?|eyes?|camera|framing)\b)", re.IGNORECASE)
+_MOVEMENT = re.compile(
+    r"\b(?:raise|lift|lower|turn|tilt|shift|nod|lean|step|sway|sweep|point|extend|reach|"
+    r"glance|blink|widen|narrow|squint|move|pan|zoom|rotate|cross|uncross|clasp|spread|retract)(?:s|es)?\b", re.IGNORECASE)
+_POSE = re.compile(
+    r"\b(?:upright|seated|standing|facing|faces?|rests?|resting|centered|centred|kneeling|crouched|holds?|crossed|tilted)\b",
+    re.IGNORECASE,
+)
+_UNCERTAIN = re.compile(r"\b(?:unclear|uncertain|possibly|whether|could|may|might|if)\b", re.IGNORECASE)
+_NEGATED = re.compile(r"\b(?:no|not|never|neither|without|cannot)\b|n['’]t\b", re.IGNORECASE)
+_UNREPORTED = re.compile(r"\b(?:unreported|not reported|not visible|uncertain|unknown|unclear|n/a)\b", re.IGNORECASE)
+_STATIC_CAMERA = re.compile(
+    r"\b(?:the )?camera\s+(?:(?:is|stays?|remains?)\s+)?(?:static|fixed|stationary|locked[- ]off)"
+    r"(?:\s+throughout(?: the shot)?)?\b|\b(?:static|fixed|stationary|locked[- ]off) camera\b|"
+    r"\b(?:static|fixed|locked[- ]off)\s+(?=(?:medium|wide|close|full|long|extreme|shot)\b)|"
+    r"(?<=, )static(?=[.,;:]|$)", re.IGNORECASE)
+_SCALE_FACT = {"tightens": "framing progressively tightens", "widens": "framing progressively widens"}
+_SCALE_WORDING = {
+    "tightens": re.compile(r"\b(?:zoom(?:s|ing|ed)?[- ]in|(?:shot|frame|framing) (?:\w+ly )?tightens?|"
+                           r"tightens? (?:to|into) (?:an? |the )?(?:extreme |medium )?close[- ]up)\b", re.IGNORECASE),
+    "widens": re.compile(r"\b(?:zoom(?:s|ing|ed)?[- ]out|(?:shot|frame|framing) (?:\w+ly )?widens?|"
+                          r"widens? (?:to|into) (?:an? |the )?(?:[\w-]+ ){0,2}shot)\b", re.IGNORECASE),
+}
+
+
+class _CameraWindow(NamedTuple):
+    facts: tuple
+    scales: tuple = ()
+
+
+def _window_scales(obs):
+    evidence = obs.get("input_evidence")
+    windows = evidence.get("windows") if isinstance(evidence, dict) else None
+    if not isinstance(windows, list):
+        return ()
+    scales = []
+    for window in windows:
+        value = window.get("frame_scale_evidence") if isinstance(window, dict) else None
+        if not isinstance(value, dict):
+            continue
+        direction, ratio = value.get("framing"), value.get("scale_ratio")
+        if (type(ratio) in (int, float) and
+                ((direction == "tightens" and 1 < ratio < inf) or (direction == "widens" and 0 < ratio < 1))):
+            scales.append(direction)
+    return tuple(direction for direction, _ in groupby(scales))
+
+
+def _moving_camera_text(text):
+    text = _STATIC_CAMERA.sub("", text)
+    text = re.sub(r"(?<=\w) +(?=[,.;])|(?<=[,;])\s*[,;]", "", text)
+    text = re.sub(r"(?:^|(?<=[.!?]))\s*[,;.]+\s*", " ", text)
+    return re.sub(r"\s+", " ", text).strip(" ,;")
+
+
+def _camera_key(text):
+    return " ".join(re.findall(r"\w+", text.casefold()))
+
+
+def _has_camera_fact(text, fact):
+    key = _camera_key(fact)
+    if key == "static camera" and _STATIC_CAMERA.search(text):
+        return True
+    for direction, phrase in _SCALE_FACT.items():
+        if _SCALE_WORDING[direction].search(text):
+            if key.removeprefix("the ") == phrase:
+                return True
+            if re.fullmatch(rf"(?:then )?{direction} (?:to|into) (?:an? |the )?[\w ]+", key):
+                size = _FRAMING.search(fact)
+                if size and _camera_key(size[0]) in _camera_key(text):
+                    return True
+    # Models often repeat the same opening and ending sizes in different sentence forms.
+    opening = re.fullmatch(r"(?:opens|starts|begins) (?:as|with|in) (?:an? )?(.+)", key)
+    if opening:
+        first_size = _FRAMING.search(text)
+        if first_size and _camera_key(first_size[0]) == opening[1]:
+            return True
+    ending = re.fullmatch(r"(?:ends|finishes) (?:as|with|in) (?:an? )?(.+)", key)
+    if ending:
+        sizes = _FRAMING.findall(text)
+        if len(sizes) > 1 and _camera_key(sizes[-1]) == ending[1]:
+            return True
+    if _CAMERA_CHANGE.search(fact):
+        key = key.removeprefix("the camera ").removeprefix("camera ")
+    key = re.sub(r" (?:by|at) the (?:final|last|ending) frame$", "", key)
+    return f" {key} " in f" {_camera_key(text)} "
+
+
+def _prose_camera(text):
+    """Keep shot geometry and explicit camera changes. A hand approaching the lens is subject motion."""
+    facts = []
+    for clause in re.split(r"[,;.!?\n]+", text):
+        clause = clause.strip()
+        if not clause or _UNCERTAIN.search(clause) or _NEGATED.search(clause):
+            continue
+        # A viewpoint belongs to the framing. "Their head turns to profile" describes the actor.
+        actor = _ACTOR.search(clause)
+        camera = re.search(r"\b(?:the )?(?:camera|framing|shot)\b", clause, re.IGNORECASE)
+        event = _CAMERA_CHANGE.search(clause)
+        if event and (not actor or event.start() < actor.start() or (camera and camera.start() <= event.start())):
+            start = camera.start() if actor and camera and actor.start() < camera.start() <= event.start() else 0
+            motion = re.split(r"\s+(?:as|while|when|and)\s+(?=(?:the |their )?(?:subject|performer|they|she|he|hands?|head|arms?)\b)",
+                              clause[start:], maxsplit=1, flags=re.IGNORECASE)[0]
+            if not has_source_detail(motion):
+                facts.append(motion)
+        else:
+            view = clause[:actor.start()] if actor else clause
+            matches = [*_FRAMING.finditer(clause), *_VIEW.finditer(view)]
+            facts.extend(match[0] for match in sorted(matches, key=lambda m: m.start()))
+    return tuple(facts)
+
+
+def observed_shot_camera(observations):
+    states = []
+    for obs in observations:
+        scales = _window_scales(obs)
+        facts = []
+        for field in ("framing", "camera_motion"):
+            for clause in re.split(r"[,;.!?\n]+", obs.get(field) or ""):
+                clause = clause.strip()
+                if not clause or _UNREPORTED.search(clause) or _UNCERTAIN.search(clause):
+                    continue
+                if clause.casefold() in {"static", "fixed", "locked off", "locked-off", "stationary", "no camera movement"}:
+                    clause = "static camera"
+                elif _NEGATED.search(clause) or clause.casefold() in {"none", "n/a"}:
+                    continue
+                if scales:
+                    clause = _moving_camera_text(clause)
+                candidates = _prose_camera(clause) if has_source_detail(clause) else (clause,)
+                for fact in candidates:
+                    if fact and not _has_camera_fact(" ".join(facts), fact):
+                        facts.append(fact)
+        # The paragraph can carry camera evidence that the supporting fields omit.
+        paragraph = obs["performance_prompt"]
+        for fact in _prose_camera(_moving_camera_text(paragraph) if scales else paragraph):
+            if not _has_camera_fact(" ".join(facts), fact):
+                facts.append(fact)
+        for direction in scales:
+            fact = _SCALE_FACT[direction]
+            if not _has_camera_fact(" ".join(facts), fact):
+                facts.append(fact)
+        state = _CameraWindow(tuple(facts), scales)
+        if facts and (not states or state != states[-1]):
+            states.append(state)
+    return tuple(states)
+
+
+def _short_performance(text):
+    sentences = re.split(r"(?<=[.!?;])\s+", text)
+    candidates = []
+    for sentence in sentences:
+        if _UNCERTAIN.search(sentence):
+            continue
+        # Keep the subject and its qualifiers together. Shorten only at a clause boundary.
+        phrase = ""
+        for clause in sentence.rstrip(".;!?").split(", "):
+            if _NEGATED.search(clause) or (phrase and len(phrase.split()) + len(clause.split()) > 18):
+                break
+            phrase = f"{phrase}, {clause}" if phrase else clause
+        if 2 <= len(phrase.split()) <= 30:
+            candidates.append(phrase)
+        # An opening camera clause can consume the word budget before the main gesture.
+        for part in _ACTION_BOUNDARY.split(sentence.rstrip(".;!?"))[1:]:
+            if (2 <= len(part.split()) <= 24 and _ACTOR.search(part) and _MOVEMENT.search(part)
+                    and not _CAMERA_CHANGE.search(part) and not _NEGATED.search(part)):
+                candidates.append(part)
+    chosen = next((p for p in candidates if _MOVEMENT.search(p) and not _CAMERA_CHANGE.search(p)), None)
+    if chosen is None:
+        chosen = next((p for p in candidates if _POSE.search(p) and (not _FRAMING.search(p) or _ACTOR.search(p))), None)
+    if chosen is None:
+        return text
+    chosen = chosen[:1].upper() + chosen[1:]
+    return chosen.rstrip(".;!?") + "."
+
+
+def compact_shot_observation(text, camera=()):
+    """Keep observed camera work and the performer's action independently in each timed shot."""
+    if text.strip().rstrip(".").casefold() == "black screen":
+        return text
+    if camera and all(window.scales for window in camera):
+        text = _moving_camera_text(text)
+    compact = len(text.split()) > 30 and "<" not in text
+    performance = _short_performance(text) if compact else text
+    if not camera:
+        camera = (_CameraWindow(_prose_camera(text)),) if compact else ()
+    previous = ""
+    for index, window in enumerate(camera):
+        state = window.facts
+        missing = [fact for fact in state if not _has_camera_fact(previous if index else performance, fact)]
+        previous = " ".join(state)
+        if not missing:
+            continue
+        phrase = ", ".join(fact[:1].lower() + fact[1:] for fact in missing)
+        if index:
+            performance = f"{performance} Later, {phrase[:1].lower() + phrase[1:]}.".strip()
+        else:
+            intro = phrase[:1].upper() + phrase[1:] + "."
+            if "<" in performance:
+                performance = f"{performance} {intro}"
+            else:
+                performance = f"{intro} {performance[:1].upper() + performance[1:]}".strip()
+    return performance
