@@ -146,14 +146,16 @@ does not discard completed parts. The append node also outputs **run_path**.
 Saved files remain until you remove their folder; they are not automatically
 deleted by cache cleanup. Incomplete writes are excluded from the manifest.
 
-**Load Video Run → saved_run** lists saved manifests under ComfyUI's output
-folder, including partially completed runs. **Refresh runs** discovers newly
-saved or moved runs without changing the current selection. The list reads only
-manifests, so opening it does not load the stored frames into RAM.
+**Load Video Run → saved_run** starts with **None**, followed by the saved
+manifests under ComfyUI's output folder, including partially completed runs.
+**Refresh runs** keeps your selection if it still exists. If you moved or
+deleted the selected run, the picker returns to **None** and clears its backup
+list. You can also choose **None** yourself. Listing runs reads only manifests.
 
 The dropdown is the loader's only run selection. To reuse a moved run, place
-its complete folder under ComfyUI output and click **Refresh runs**. If the list
-is empty, generate with **Disk** and **Keep files** enabled, then refresh.
+its complete folder under ComfyUI output, click **Refresh runs**, and select
+the new path. If **None** is the only choice, generate with **Disk** and
+**Keep files** enabled, then refresh.
 When sharing a workflow, an unavailable saved-run selection does not block
 **New run** mode through the lazy selector. **Load saved run** requires a local
 run; if it is unavailable, the loader explains how to refresh and select one.

@@ -12,12 +12,14 @@ import torch  # type: ignore
 from comfy_api.latest import io  # type: ignore
 
 from .image_helpers import flatten_images
+from .minimax_h3_prompt_blend import transition_clip
 from .minimax_h3_prompts import segment_prompt
 from .minimax_h3_segment_plan import (
     CONDITIONING_FAMILIES,
     REF_IMAGE_SIZES,
     validate_segment_plan,
 )
+from .video_scene_transitions import previous_influence
 
 _CANVAS_MULTIPLE = 32
 _REF_IMAGE_SHORT_EDGE = 2048
@@ -179,6 +181,12 @@ def encode_segment(
                 "conditioning_family differs from the connected segment_plan task."
             )
     selected_prompt = segment_prompt(prompts, prompt_index, first_part_prompt, segment_plan, task)
+    if task is not None and task_index:
+        percent = previous_influence(segment_plan.get("source_metadata") or {}, task["output_start_frame"])
+        if percent:
+            prior = tasks[task_index - 1]
+            previous = segment_prompt(prompts, prior["prompt_index"], first_part_prompt, segment_plan, prior)
+            clip = transition_clip(clip, previous, selected_prompt, percent)
 
     if conditioning_family == "ref2va_active_reference":
         if has_start_guide or has_last_image:

@@ -2,7 +2,13 @@
 import json
 
 from .video_run import _contained_file
-from .video_timeline import FRAME_PLAN_MODELS, MODELS, scene_image_report
+from .video_scene_transitions import transition_report
+from .video_timeline import (
+    FRAME_PLAN_MODELS,
+    MODELS,
+    scene_image_report,
+    shot_group_report,
+)
 
 _LOADER = "Smart Model Loader [SML2]"
 _ROLE = "EclipseNova.videoRunLoader"
@@ -114,6 +120,10 @@ def settings_text(root, manifest, checkpoint):
     metadata = _mapping(_mapping(checkpoint.get("plan")).get("source_metadata"))
     if images := scene_image_report(metadata):
         lines.append(images)
+    if groups := shot_group_report(metadata):
+        lines.append(groups)
+    if transitions := transition_report(metadata):
+        lines.append(transitions)
     return "\n".join(lines)
 
 

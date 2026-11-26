@@ -10,7 +10,7 @@ import weakref
 from bisect import bisect_left
 from collections import OrderedDict
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fractions import Fraction
 from functools import lru_cache
 
@@ -35,6 +35,7 @@ from .video_overlays import (
     overlay_settings,
     validate_overlay_row,
 )
+from .video_reference_range import reference_limit
 from .video_timing import (
     VideoTiming,
     check_media_interrupt,
@@ -181,7 +182,10 @@ def file_version(path):
 
 
 def _open(source):
-    if hasattr(source, "seek"):
+    if isinstance(source, python_io.BytesIO):
+        # PyAV drives the cursor itself. Independent readers can share the immutable bytes.
+        source = python_io.BytesIO(source.getvalue())
+    elif hasattr(source, "seek"):
         source.seek(0)
     return av.open(source)
 
@@ -251,9 +255,11 @@ class FrameScan:
     time_base: Fraction
 
 
-def scan_video(source, *, allow_alpha=False):
+def scan_video(source, *, allow_alpha=False, start_frame=0, load_cap=0, seconds=None):
     times, durations = [], []
     dimensions = None
+    stop_frame = start_frame + load_cap if load_cap else None
+    stop_time = None
     with _open(source) as container:
         stream = _video_stream(container)
         time_base = stream.time_base
@@ -266,6 +272,11 @@ def scan_video(source, *, allow_alpha=False):
             position = frame.pts * frame.time_base
             if times and position <= times[-1]:
                 raise ValueError("Video timestamps must be strictly increasing")
+            if len(times) == stop_frame or (stop_time is not None and position >= stop_time):
+                durations[-1] = position - times[-1]
+                break
+            if seconds is not None and len(times) == start_frame:
+                stop_time = position + seconds
             geometry = _geometry(frame, stream, allow_alpha=allow_alpha)[:2]
             if dimensions is not None and dimensions != geometry:
                 raise ValueError("Video changes dimensions mid-stream")
@@ -286,8 +297,8 @@ def scan_video(source, *, allow_alpha=False):
 
 
 @lru_cache(maxsize=16)
-def _cached_scan(path, version, allow_alpha=False):
-    return scan_video(path, allow_alpha=allow_alpha)
+def _cached_scan(path, version, allow_alpha=False, start_frame=0, load_cap=0, seconds=None):
+    return scan_video(path, allow_alpha=allow_alpha, start_frame=start_frame, load_cap=load_cap, seconds=seconds)
 
 
 def _fit(array, width, height, fit, *, crop_x=0.5, crop_y=0.5):
@@ -384,10 +395,36 @@ class ClipRange:
     first: int
     stop: int
     info: dict
+    last_duration: Fraction | None = None
 
     @property
     def timing(self):
-        return VideoTiming(self.scan.durations[self.first:self.stop])
+        durations = self.scan.durations[self.first:self.stop]
+        if self.last_duration is not None:
+            durations = (*durations[:-1], self.last_duration)
+        return VideoTiming(durations)
+
+    def prefix(self, length):
+        end = self.scan.times[self.first] + length
+        stop = bisect_left(self.scan.times, end, self.first + 1, self.stop)
+        return replace(self, stop=stop, last_duration=end - self.scan.times[stop - 1])
+
+
+def _read_clip(row, limit=None):
+    path = resolve_video_file(row["file"])
+    overlay = is_overlay(row)
+    first = row["start_frame"]
+    try:
+        scan = _cached_scan(path, file_version(path), overlay, first, row["load_cap"], limit)
+        info = probe_video(path, allow_alpha=overlay)
+    except (OSError, ValueError, av.error.FFmpegError) as error:
+        raise ValueError(f"{row['file']['filename']}: {error}") from error
+    if first >= len(scan.times):
+        raise ValueError(f"{row['file']['filename']}: start frame {first} is beyond the last frame")
+    if overlay and overlay_settings(row)["mode"] == "alpha" and not info["has_alpha"]:
+        raise ValueError(f"{row['file']['filename']}: no decoded alpha channel. Use Remove black, Screen, Opacity or a mask video.")
+    clip = ClipRange(row, path, scan, first, len(scan.times), info)
+    return clip.prefix(limit) if limit is not None and limit < clip.timing.duration else clip
 
 
 def _frames_for_clips(clips, width, height, fit, *, alpha=False):
@@ -422,11 +459,11 @@ def _fixed_frames(frames, timing, rate):
 
 
 def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", fps=24.0,
-                  blend_mode="cut", blend_duration=1.0, style="off", style_strength=0.5, style_period=2.0):
+                  blend_mode="cut", blend_duration=1.0, style="off", style_strength=0.5, style_period=2.0,
+                  reference_range=None):
     validate_blend(blend_mode, blend_duration)
     style_settings = validate_style(style, style_strength, style_period)
     rows = parse_playlist(playlist)
-    groups = overlay_groups(rows)
     if fit not in ("pad", "crop", "stretch") or timing_mode not in ("source", "fixed"):
         raise ValueError("Invalid fit or timing selection")
     if timing_mode == "fixed" and (not math.isfinite(float(fps)) or not 1 <= float(fps) <= 240):
@@ -434,26 +471,52 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
     if any(type(value) is not int or not 0 <= value <= 16384 for value in (width, height)):
         raise ValueError("Width and height must be between 0 and 16384")
     media_progress(0, stage="Reading videos")
-    clips, report, generation_data = [], [], None
+    limit = reference_limit(**reference_range) if reference_range is not None else None
+    bounded = limit is not None
+    clips = []
+    for row in rows:
+        if not row["enabled"] or is_overlay(row):
+            continue
+        clip = _read_clip(row, limit)
+        clips.append(clip)
+        if limit is not None and reference_range["duration_source"] == "Total seconds":
+            limit -= clip.timing.duration
+            if not limit:
+                break
+    if not clips:
+        overlay_groups(rows)
+        raise ValueError("Add and enable at least one video")
+    by_id = {clip.row["id"]: clip for clip in clips}
+    selected_durations = {key: clip.timing.duration for key, clip in by_id.items()} if bounded else None
+    groups = overlay_groups(rows, selected_durations)
+    layers = {identity: [] for identity in by_id}
+    for identity, group in groups.items():
+        for row in group:
+            end = selected_durations[identity] - Fraction(str(overlay_settings(row)["offset"])) if bounded else None
+            layers[identity].append(_read_clip(row, end))
+    by_id.update((layer.row["id"], layer) for group in layers.values() for layer in group)
+    all_clips = [by_id[row["id"]] for row in rows if row["id"] in by_id]
+    report, generation_data = [], None
     for index, row in enumerate(rows):
-        path = resolve_video_file(row["file"])
         report.append(f"Clip {index + 1}: {row['file']['filename']}\nRow: {row['id']} | enabled={row['enabled']} mute={row['mute']} use_metadata={row['use_metadata']}")
         if not row["enabled"]:
             report.append("Disabled; not decoded.")
             continue
-        try:
-            scan = _cached_scan(path, file_version(path), is_overlay(row))
-            info = probe_video(path, allow_alpha=is_overlay(row))
-        except (OSError, ValueError, av.error.FFmpegError) as error:
-            raise ValueError(f"{row['file']['filename']}: {error}") from error
-        first = row["start_frame"]
-        stop = min(len(scan.times), first + row["load_cap"]) if row["load_cap"] else len(scan.times)
-        if first >= len(scan.times):
-            raise ValueError(f"{row['file']['filename']}: start frame {first} is beyond the last frame")
-        clip = ClipRange(row, path, scan, first, stop, info)
-        if is_overlay(row) and overlay_settings(row)["mode"] == "alpha" and not info["has_alpha"]:
-            raise ValueError(f"{row['file']['filename']}: no decoded alpha channel. Use Remove black, Screen, Opacity or a mask video.")
-        clips.append(clip)
+        clip = by_id.get(row["id"])
+        if clip is None:
+            report.append("Outside the selected reference duration.")
+            if row["use_metadata"]:
+                # The metadata selector is independent of the selected footage.
+                try:
+                    with _open(resolve_video_file(row["file"])) as container:
+                        parameters = parse_video_parameters(container.metadata.get("parameters"))
+                except (OSError, av.error.FFmpegError) as error:
+                    report.append(f"Selected metadata unavailable: {error}")
+                else:
+                    generation_data = parameters["data"]
+                    report.append(parameters["status"])
+            continue
+        scan, info, first, stop = clip.scan, clip.info, clip.first, clip.stop
         parameters = parse_video_parameters(info["parameters"]["raw"])
         parameters["status"] = info["parameters"]["status"]
         if row["use_metadata"]:
@@ -462,12 +525,10 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
         report.append(f"Source frames [{first}, {stop}); start={float(scan.times[first]):.9f}s duration={float(clip.timing.duration):.9f}s; frames={stop - first}; {'variable' if len(set(clip.timing.durations)) > 1 else 'constant'} timing")
         report.append(parameters["status"] + "\nSampling data: " + json.dumps(display_parameters(parameters)["data"], ensure_ascii=False))
         report.append("Original A1111 text (resource fields are not reused):\n" + (parameters["raw"] or "(none)"))
-    if not clips:
-        raise ValueError("Add and enable at least one video")
-    all_clips = clips
-    by_id = {clip.row["id"]: clip for clip in all_clips}
-    clips = [clip for clip in all_clips if not is_overlay(clip.row)]
-    layers = {identity: [by_id[row["id"]] for row in group] for identity, group in groups.items()}
+    if reference_range is not None:
+        report.append("Selected reference: " + ", ".join(
+            f"{clip.row['file']['filename']} [{clip.first}, {clip.stop}) ({float(clip.timing.duration):g}s)"
+            for clip in clips))
     masks = {}
     for layer in all_clips:
         if not is_overlay(layer.row):
@@ -475,7 +536,8 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
         settings = overlay_settings(layer.row)
         if settings["mode"] == "mask":
             mask_path = resolve_video_file(settings["mask"])
-            mask_scan = _cached_scan(mask_path, file_version(mask_path), True)
+            mask_end = layer.scan.times[layer.first] - layer.scan.times[0] + layer.timing.duration if bounded else None
+            mask_scan = _cached_scan(mask_path, file_version(mask_path), True, seconds=mask_end)
             masks[layer.row["id"]] = ClipRange({}, mask_path, mask_scan, 0, len(mask_scan.times), {})
         report.append(f"Overlay: {layer.row['file']['filename']} over {by_id[settings['target']].row['file']['filename']}; "
                       f"mode={settings['mode']}, opacity={settings['opacity']:g}, offset={settings['offset']:g}s. "
@@ -496,6 +558,7 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
                   clip.row.get("blend_mode", "inherit"), clip.row.get("blend_duration", 1.0),
                   is_overlay(clip.row), json.dumps(overlay_settings(clip.row), sort_keys=True) if is_overlay(clip.row) else None)
                  for clip in all_clips),
+           tuple((clip.row["id"], clip.stop, clip.timing.durations[-1]) for clip in clips),
            tuple((identity, mask.path, file_version(mask.path)) for identity, mask in masks.items()),
            width, height, fit, timing_mode, str(fps) if timing_mode == "fixed" else None,
            blend_mode, blend_duration, style, style_strength, style_period)
@@ -574,9 +637,12 @@ def load_playlist(playlist, width=0, height=0, fit="pad", timing_mode="source", 
         end = offset + clip.timing.duration
         start_time = encoded_times[min(bisect_left(encoded_times, offset), len(encoded_times) - 1)]
         end_time = encoded_times[min(bisect_left(encoded_times, end), len(encoded_times) - 1)]
-        source_clips.append({"id": clip.row["id"], "start": str(start_time), "end": str(end_time)})
+        if start_time < end_time:
+            source_clips.append({"id": clip.row["id"], "start": str(start_time), "end": str(end_time)})
         offset = end
     video.eclipse_source_clips = tuple(source_clips)
+    if timing_mode == "fixed":
+        video.eclipse_reference_lengths = tuple(clip.timing.duration for clip in clips)
     report.append(f"Result: {width}x{height}, fit={fit}, {len(timing)} source frames, {float(timing.duration):.9f}s.")
     report.append("Frames streamed to VIDEO. Audio: first track per file, 48000 Hz stereo; missing or muted intervals are silence.")
     for index, window in enumerate(windows):

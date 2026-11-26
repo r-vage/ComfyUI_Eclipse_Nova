@@ -6,6 +6,7 @@ import { app, api } from './comfy/index.js';
 import { ConfigurationPanel } from './eclipse-configuration-panel.js';
 import { element, button, ensurePanelStyle } from './eclipse-panel-controls.js';
 import { findSetterByName } from './eclipse-set-get-utils.js';
+import { isSavedRun } from './eclipse-video-run-selection.js';
 
 const NODE = 'Part Prompt Editor [Eclipse Nova]';
 const WIDGET = 'ECLIPSE_NOVA_PART_PROMPTS';
@@ -142,7 +143,7 @@ class PartPromptForm {
     }
     async read(refresh = false) {
         const selected = selectedVersion(this.controller.node);
-        if (!selected.saved_run || selected.saved_run === '(no saved runs found)') {
+        if (!isSavedRun(selected.saved_run)) {
             this.reset(selected.saved_run ? 'Choose a saved run in Load Video Run.' : 'Connect Load Video Run → run_path directly or through Get/Set.');
             return;
         }

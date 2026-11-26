@@ -25,6 +25,16 @@ from ..core.video_panel_configuration import (
     resolve_load,
     validate_load,
 )
+from ..core.video_reference_range import RANGE_TYPE
+
+
+def _fingerprint_file(reference):
+    path = resolve_video_file(reference)
+    try:
+        return file_version(path)
+    except OSError as error:
+        # Linked duration ranges are unresolved here. Execution opens contributing files.
+        return "unavailable", error.errno
 
 
 class RvVideo_Load(io.ComfyNode):
@@ -47,19 +57,22 @@ class RvVideo_Load(io.ComfyNode):
                                     "overlay_defaults": OVERLAY_DEFAULTS, "overlay_modes": OVERLAY_MODES,
                                     "blend_modes": ["cut", *BLEND_MODES], "blend_tooltips": BLEND_TOOLTIPS,
                                     "style_modes": list(STYLE_MODES), "style_tooltip": STYLE_TOOLTIP}}),
+                io.Custom(RANGE_TYPE).Input("reference_range", optional=True,
+                    tooltip="Video Timeline Duration selects the beginning of each clip or of the joined playlist, including its audio."),
             ],
             outputs=[io.Video.Output("video"), io.Custom("PIPE").Output("generation_data"),
                      io.Float.Output("duration"), io.String.Output("report")],
         )
 
     @classmethod
-    def validate_inputs(cls, configuration, width=None, height=None, fps=None):
+    def validate_inputs(cls, configuration, width=None, height=None, fps=None, reference_range=...):
         try:
             config = validate_load(configuration)
             resolve_load(config, width, height, fps)
             if not any(row["enabled"] and row["file"] is not None for row in config["clips"]):
                 return "Add and enable at least one video."
-            overlay_groups(config["clips"])
+            if reference_range is ...:
+                overlay_groups(config["clips"])
         except (TypeError, ValueError, OSError) as error:
             return str(error)
         return True
@@ -71,15 +84,15 @@ class RvVideo_Load(io.ComfyNode):
         for row in config["clips"]:
             if not row["enabled"] or row["file"] is None:
                 continue
-            versions.append((row["id"], "video", file_version(resolve_video_file(row["file"]))))
+            versions.append((row["id"], "video", _fingerprint_file(row["file"])))
             settings = overlay_settings(row)
             if is_overlay(row) and settings["mode"] == "mask" and settings["mask"]:
-                versions.append((row["id"], "mask", file_version(resolve_video_file(settings["mask"]))))
+                versions.append((row["id"], "mask", _fingerprint_file(settings["mask"])))
         return artifact_fingerprint(tuple(versions))
 
     @classmethod
-    def execute(cls, configuration, width=None, height=None, fps=None):
+    def execute(cls, configuration, width=None, height=None, fps=None, reference_range=None):
         config = validate_load(configuration)
-        result = load_playlist(playlist_value(config), **resolve_load(config, width, height, fps))
+        result = load_playlist(playlist_value(config), reference_range=reference_range, **resolve_load(config, width, height, fps))
         record_artifacts(result[0], (result[0].get_stream_source(),))
         return io.NodeOutput(*result, ui={"eclipse_video": [preview_video_file(result[0])[1]], "eclipse_report": [result[3]]})

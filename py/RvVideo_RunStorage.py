@@ -16,6 +16,8 @@ from ..core.video_run import (
 )
 from ..core.video_run_history import CURRENT_VERSION, selected_run_path
 
+_NO_RUN = "None"
+
 
 class RvVideo_RunStorage(io.ComfyNode):
     @classmethod
@@ -51,13 +53,13 @@ class RvVideo_RunStorage(io.ComfyNode):
 class RvVideo_LoadRun(io.ComfyNode):
     @classmethod
     def define_schema(cls):
-        runs = available_video_runs()
+        runs = [path for path in available_video_runs() if path != NO_SAVED_RUNS]
         return io.Schema(
             node_id="Load Video Run [Eclipse Nova]", display_name="Load Video Run",
             category=CATEGORY.MAIN.value + CATEGORY.VIDEO.value,
             description="Reload a completed or partially completed saved run without models, reference analysis or sampling. Uses relative paths so the entire run folder can move. Original files are never owned or deleted by this loader.",
-            inputs=[io.Combo.Input("saved_run", options=runs, default=runs[0],
-                        tooltip="Select a saved run under ComfyUI output, including partially completed runs. Refresh runs after generating or moving a run; the current selection is preserved. Keep the whole run folder together when moving it."),
+            inputs=[io.Combo.Input("saved_run", options=[_NO_RUN, *runs], default=_NO_RUN,
+                        tooltip="Select a saved run under ComfyUI output or choose None to clear the selection. Refresh runs keeps a selection that still exists and switches to None if it was moved or deleted."),
                     io.Custom(STORAGE_TYPE).Input("storage", optional=True,
                         tooltip="Optional shared storage control. RAM loads the saved parts into memory; Disk streams the existing files. Loading never creates another persistent copy."),
                     io.Combo.Input("backup", options=[CURRENT_VERSION], default=CURRENT_VERSION, optional=True,
@@ -86,8 +88,8 @@ class RvVideo_LoadRun(io.ComfyNode):
 
     @classmethod
     def execute(cls, saved_run, storage=None, backup=CURRENT_VERSION):
-        if not saved_run or saved_run == NO_SAVED_RUNS:
-            raise ValueError("No saved runs found. Generate with Disk and Keep files enabled under ComfyUI output, then click Refresh runs.")
+        if not saved_run or saved_run in (_NO_RUN, NO_SAVED_RUNS):
+            raise ValueError("No saved run selected. Click Refresh runs and choose a run. To create one, use New run with Disk and Keep files enabled under ComfyUI output.")
         if saved_run not in available_video_runs():
             raise ValueError(f"Saved run '{saved_run}' is not available on this system. Click Refresh runs and select a local run, or switch the workflow to New run.")
         path = selected_run_path(saved_run, backup)

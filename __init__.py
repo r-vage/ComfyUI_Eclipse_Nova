@@ -198,6 +198,8 @@ class EclipseExtension(ComfyExtension):
         from .py.RvVideo_LoopKeepCalc import RvVideo_LoopKeepCalc
         from .py.RvAudio_LoopAlignSilence import RvAudio_LoopAlignSilence
         from .py.RvVideo_WanLipSyncConditioning import RvVideo_WanLipSyncConditioning
+        from .py.RvVideo_TimelineDuration import RvVideo_TimelineDuration
+        from .py.RvVideo_SceneTransitions import RvVideo_ApplySceneTransitions, RvVideo_TransitionToNext
         from .py.RvVideo_Timeline import (
             RvVideo_TimelineAudio, RvVideo_TimelinePlanner, RvVideo_TimelineIO, RvVideo_TimelineSelect,
             RvVideo_TimelineGenerationPrompts, RvVideo_TimelineNativeConditioning, RvVideo_TimelineWanStep,
@@ -398,6 +400,8 @@ class EclipseExtension(ComfyExtension):
             RvVideo_WanLipSyncTimelinePlanner,
             RvVideo_WanLipSyncPlanStep,
             RvVideo_WanLipSyncConditioning,
+            RvVideo_TimelineDuration,
+            RvVideo_TransitionToNext, RvVideo_ApplySceneTransitions,
             RvVideo_TimelineAudio, RvVideo_TimelinePlanner, RvVideo_TimelineIO, RvVideo_TimelineSelect,
             RvVideo_TimelineGenerationPrompts, RvVideo_TimelineNativeConditioning, RvVideo_TimelineWanStep,
             RvVideo_MiniMaxH3SegmentedTimelinePanel,

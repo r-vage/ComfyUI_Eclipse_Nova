@@ -3,6 +3,7 @@
 import json
 import os
 import random
+import threading
 import time
 import weakref
 from fractions import Fraction
@@ -13,6 +14,7 @@ import torch  # type: ignore
 from comfy.cli_args import args  # type: ignore
 from comfy_api.latest import Input, io  # type: ignore
 
+from .cache_artifacts import record_artifacts
 from .frame_timeline import raise_storage_error, timeline_input
 from .image_helpers import (
     cat_and_fit_images,
@@ -148,30 +150,68 @@ def _encode_video(
         container.close()
 
 
+class _PreviewCopies(dict):
+    """Viewing copies for nodes currently displaying the same source."""
+
+
+class _PreviewFilename(str):
+    """Weak owner for a specific descriptor in ComfyUI's output cache."""
+
+
+_preview_copies = weakref.WeakValueDictionary()
+_preview_lock = threading.Lock()
+
+
+def _keep_preview(source, node_id, preview):
+    with _preview_lock:
+        copies = _preview_copies.get(id(source))
+        if copies is None:
+            if preview is None:
+                return
+            copies = _PreviewCopies()
+            _preview_copies[id(source)] = copies
+            weakref.finalize(source, copies.clear)
+        if preview is None:
+            copies.pop(node_id, None)
+        else:
+            copies[node_id] = preview
+
+
 class VideoPreview:
     def __init__(self, hidden):
         self.hidden = hidden
 
-    def execute(self, images, fps: float = 16.0, audio: dict | None = None, stop_review=False):
+    def execute(self, images, fps: float = 16.0, audio: dict | None = None, stop_review=False, *, transition_plan=None):
         fps = unwrap_value(fps, 16.0)
         audio = unwrap_value(audio, None)
         source = unwrap_value(images, None)
         timeline = timeline_input(images)
         video = source if isinstance(source, Input.Video) else None
+        node_id = getattr(self.hidden, "unique_id", None)
         stop_review = unwrap_value(stop_review, False)
+        if transition_plan is not None and (video is not None or timeline is not None):
+            from .video_scene_transitions import picture_context
+            from .video_transitions import render_scene_transitions
+
+            metadata = (transition_plan.get("source_metadata") if isinstance(transition_plan, dict)
+                        else getattr(transition_plan, "source_metadata", None))
+            if context := picture_context(metadata):
+                display = render_scene_transitions(source, context, audio, preview=True)
+                if display is not source:
+                    video = display
         if video is not None:
             if isinstance(images, (list, tuple)) and len(images) != 1:
                 raise ValueError("Connect one VIDEO per input; combine multiple clips before this node.")
             # Audio is for the IMAGE fallback; VIDEO retains its own soundtrack.
             preview, descriptor = preview_video_file(video)
-            if preview is not video:
-                # Keep the viewing copy alive with the original VIDEO, while
-                # returning that original for exact storage/loop semantics.
-                weakref.finalize(video, lambda owner: None, preview)
+            if preview is not source:
+                descriptor["filename"] = _PreviewFilename(descriptor["filename"])
+                record_artifacts(descriptor["filename"], (preview.get_stream_source(),))
+            _keep_preview(source, node_id, preview if preview is not source else None)
             if stop_review:
                 import nodes
                 nodes.interrupt_processing()
-            return io.NodeOutput([video], ui={"eclipse_video": [descriptor]})
+            return io.NodeOutput([source], ui={"eclipse_video": [descriptor]})
 
         if images is None:
             return io.NodeOutput(None, ui={"eclipse_video": []})
@@ -231,6 +271,8 @@ class VideoPreview:
             log.error(_LOG_PREFIX, f"Failed to encode preview video: {e}")
             return io.NodeOutput(images_out, ui={"eclipse_video": []})
 
+        if timeline is not None:
+            _keep_preview(source, node_id, None)
         result = {
             "filename": file,
             "subfolder": subfolder,

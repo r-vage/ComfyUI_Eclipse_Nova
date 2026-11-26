@@ -1,6 +1,8 @@
 # Video Timeline
 
-Open `Unified_Video_Timeline_Nova.json` in the ComfyUI workflow library. Choose the render path and duration in **Video Timeline Planner**. Its report gives the retained frame count, duration and number of render parts before sampling.
+The Unified Video Timeline workflow is distributed separately on Civitai. To follow this guide with Nova.2, open `Unified_Video_Timeline_Nova.2.json` in ComfyUI. [Workflow release page](https://civitai.red/models/3061803/lipsync-minimax-h3-wan-infinitetalk-h3-native-tfl2va)
+
+Choose the render path in **Video Timeline Planner** and the duration mode in **Video Timeline Duration**. The planner report gives the retained frame count, duration and number of render parts before sampling.
 
 | Render path | Timing and guidance |
 | --- | --- |
@@ -31,8 +33,10 @@ Choose **First frame** to start each scene with its assigned picture. For either
 | --- | --- |
 | Source clip lengths | The loaded video's clip lengths determine the duration. |
 | Audio track length | The selected duration track determines the duration. |
-| Seconds per clip | Each source clip gets the entered duration. |
-| Total seconds | The entered duration is shared across all source clips. |
+| Seconds per clip | Keep up to the entered duration from the beginning of each trimmed reference clip. At 15 seconds, clips lasting 8 and 25 seconds contribute 8 and 15 seconds. Without video, use the entered duration for each planned clip. |
+| Total seconds | Keep the first entered number of seconds of the joined reference playlist. With the same clips and a 15-second limit, use 8 seconds of the first and 7 of the second. Without video, use the entered duration for the whole plan. |
+
+The workflow takes **seconds** from **Smart Folder → Video → Duration**. In either numeric mode, `-1` keeps all available reference footage. Load Video applies the range before cut detection, scene sampling and embedded-audio extraction. A cut at the endpoint belongs to the excluded footage. A scene crossing the endpoint is described using only its retained frames. Start a **New run** with **Live analysis** to generate descriptions for a changed range.
 
 Under **Conditioning audio and final soundtrack**, select the duration track, vocal guide and soundtrack independently. With **Recording or video**, these switches determine which recording they use.
 
@@ -58,9 +62,28 @@ The workflow opens with manual scene directions. Enter the global prompt once an
 
 Enable **Optional Smart LM** to describe each scene from its local direction and available image. **Apply global direction to every scene** adds the exact text from **Global direction for every scene** after scene analysis and optional description. For H3 lip-sync, singing and lip-sync directions appear in the visual description and `overall_soundscape` starts at `N/A` because the run uses the supplied audio. Native H3 can keep its generated soundscape.
 
-**Final generation prompts** shows the assembled text for each scene. Enable its pause control to edit any part before sampling, including its global direction and audio fields. The run saves the reviewed text, including line breaks. A capacity split keeps the same scene prompt and source image.
+**H3 shot mode** on **Video Timeline Planner** controls how Native H3 and H3 lip-sync render those directions.
+
+- **Separate at cuts** is the default. Each cut starts a new render part on its planned frame. Choose this when a cut must land on a particular frame or you want to regenerate a short shot independently.
+- **Group timed shots** fits up to 15 visible seconds of consecutive shots with the same assigned image into one render. The planner numbers the shots and gives later shots cut times on that render's clock, for example `[Shot 2] At 00:01.208, the shot cuts.` H3 interprets these cues, so an internal cut can move or be missed. A change of image, a source playlist join, or a shot that would exceed the available frames starts another group at a cut. Warmup and any required end-guide frame count toward the capacity.
+
+With a 362-frame capacity, zero opening warmup and one reference image, 15 seconds at 24 FPS can fit in one part. H3 renders 362 frames and the timeline keeps 360. The optional writer still receives each original shot separately. The planner combines its descriptions and applies the global direction once per grouped prompt. WAN InfiniteTalk uses its own scene transitions.
+
+**Final generation prompts** shows one item per separate scene or H3 shot group. Enable its pause control to edit a shot's text within that item before sampling. The run saves the reviewed text, including line breaks. Replacing a saved part regenerates every shot in that part. A capacity split within a long single shot keeps its prompt and source image.
 
 For native H3 **First and last**, the end picture guides the last retained frame of the scene. A technical continuation reads its motion guide from the preceding part. H3 lip-sync places its end guide immediately after the retained frames so the next scene starts on the cut. Native H3 passes its sampled video and audio latents through **Eclipse KSampler Advanced** with **Decode** off, so each stream reaches its own decoder.
+
+## Transitions between scenes
+
+**Video Transition to Next** in the **Scene transitions** group controls the boundary after an authored scene. **After scene** `0` sets the default. To change only the transition from scene 2 to scene 3, duplicate the node, connect the first node to the copy's **previous** input, set **After scene** to `2`, and connect the copy to the planner. These controls also work with text-only Native H3.
+
+- **Shot** defaults to **Cut**. **Continue shot** gives grouped H3 prompts a timed change of action in the same shot. Across separate renders it uses up to 22 retained motion frames when guidance permits. **Active reference** keeps the incoming picture alongside the motion guide. **First and last** can carry motion from an A→B clip into a B→C clip while keeping B on the incoming first frame and C as its endpoint. A switch to a different **First frame** starts from the newly assigned picture.
+- **Previous prompt influence (%)** defaults to `0`. For example, `25` uses 25% of the previous reviewed prompt and 75% of the incoming reviewed prompt for the first incoming render. Later parts use their own prompt at full strength. At `100`, the previous direction supplies all of the text conditioning. Each blend reads the actual edited text from the prior part. A weighted scene gets its own render even in **Group timed shots**.
+- **Picture transition** and **Picture transition seconds** select a cut, fade, dissolve, wipe or another listed effect. The effect is centered on the cut and shortened to fit the adjacent scenes. When the assigned image changes, **Blend to next** on the outgoing **Load Image Timeline** slot supplies the picture effect. **Inherit** uses the default, and a numbered scene override takes priority over the image slot.
+
+H3 lip-sync follows the cuts and playlist joins of an edited reference video. Across those boundaries it uses the full incoming prompt and its normal visual guides. WAN uses its existing motion and prompt handling. Both paths accept picture effects, with the vocal guide, soundtrack and output duration on their original clocks.
+
+The planner and saved-run reports list the resolved transitions. Preview and export apply picture effects to the assembled frames. Stored parts retain their original pixels for continuation, replacement and resume. Reloading a run or backup restores its resolved settings.
 
 ## Lyric captions
 

@@ -7,12 +7,14 @@ from itertools import pairwise
 import torch
 
 from .image_helpers import flatten_images
+from .minimax_h3_prompt_blend import transition_clip
 from .minimax_h3_segment_plan import (
     aligned_h3_length,
     audio_shape,
     is_h3_frame_count,
     parse_manual_transition_times,
 )
+from .video_scene_transitions import previous_influence
 
 CLIP_PLAN_TYPE = "ECLIPSE_H3_CLIP_PLAN"
 REFERENCE_MODES = ("first_and_last", "first_only", "last_only", "adjacent_pairs",
@@ -31,6 +33,7 @@ class H3Clip:
     image_index: int | None = None
     # Hidden prompt-settling frames; absent in older saved runs.
     crop_start: int = 0
+    motion_frames: int = 0
 
 
 @dataclass(frozen=True)
@@ -189,6 +192,9 @@ def clip_at(plan, index):
         raise ValueError("The planned warmup and retained frames must fit the render window.")
     if item.crop_start and not plan.soundtrack_only:
         raise ValueError("Clip warmup requires a native Clip Planner_v2 or H3 Prompt Plan_v2 plan.")
+    if (type(item.motion_frames) is not int or item.motion_frames not in (0, 1, 5, 22)
+            or (item.motion_frames and (item.motion_frames != item.crop_start or item.start < item.motion_frames))):
+        raise ValueError("The planned motion guide must fit the preceding frames and hidden warmup.")
     return item
 
 
@@ -216,6 +222,31 @@ def reference_pair(images, mode, part):
     return frames[0], frames[-1] if len(frames) > 1 else None
 
 
+def _retained_tail(previous, count):
+    from .video_clip_append import MemoryClipVideo
+
+    chunks = []
+    if isinstance(previous, MemoryClipVideo):
+        for images, _ in reversed(previous.chunks):
+            take = min(count, len(images))
+            chunks.append(images[-take:])
+            count -= take
+            if not count:
+                break
+    else:
+        for video in reversed(previous.videos):
+            length = video.get_frame_count()
+            take = min(count, length)
+            window = video.as_trimmed((length - take) / FPS, take / FPS, strict_duration=False)
+            chunks.append(window.get_components().images[-take:])
+            count -= take
+            if not count:
+                break
+    if count:
+        raise ValueError("The preceding native clips have insufficient motion history.")
+    return chunks[0] if len(chunks) == 1 else torch.cat(chunks[::-1])
+
+
 def clip_conditioning(plan, index, clip, vae, width, height, seed,
                       reference_mode="first_and_last", images=None, audio_vae=None, previous=None):
     # Keep the installed native H3 tokenization, joint latent and guide encoding.
@@ -237,6 +268,8 @@ def clip_conditioning(plan, index, clip, vae, width, height, seed,
     else:
         first, last = reference_pair(images, reference_mode, item.part)
     metadata = plan.source_metadata or {}
+    if index:
+        clip = transition_clip(clip, plan.clips[index - 1].prompt, item.prompt, previous_influence(metadata, item.start))
     guidance = metadata.get("guidance")
     continuation = guidance and index > 0 and plan.clips[index - 1].part == item.part
     endpoint = guidance == "First and last" and (index + 1 == len(plan.clips) or plan.clips[index + 1].part != item.part)
@@ -248,7 +281,7 @@ def clip_conditioning(plan, index, clip, vae, width, height, seed,
                 raise ValueError("The planned end image is missing from the saved inputs.")
             last = frames[ends[item.part]]
     active_reference = first if guidance == "Active reference" else None
-    if continuation or active_reference is not None:
+    if continuation or (item.motion_frames and guidance != "First and last") or active_reference is not None:
         first = None
     if item.keep == 1 and first is not None and ends is None:
         last = None
@@ -272,29 +305,19 @@ def clip_conditioning(plan, index, clip, vae, width, height, seed,
             first_frame=first, last_frame=last,
         ).result
     # A one-frame shot keeps its opening and steers toward the end image in the next, discarded frame.
-    last_index = max(int(first is not None), item.crop_start + item.keep - 1)
-    if last is not None and last_index != item.render - 1:
-        # The native last-image guide otherwise lands in discarded padding.
-        # Copy metadata: a cached native conditioning must remain reusable.
+    first_index = item.motion_frames if first is not None else 0
+    last_index = max(first_index + int(first is not None), item.crop_start + item.keep - 1)
+    if first_index or (last is not None and last_index != item.render - 1):
+        # Keep both supplied endpoints on the visible shot when a motion lead-in is present.
+        indices = {0: first_index, item.render - 1: last_index}
         positive = [[embedding, {**metadata, "minimax_keyframes": [
-            {**guide, "resolved_frame_index": last_index}
-            if guide["resolved_frame_index"] == item.render - 1 else dict(guide)
+            {**guide, "resolved_frame_index": indices.get(guide["resolved_frame_index"], guide["resolved_frame_index"])}
             for guide in metadata.get("minimax_keyframes", [])
         ]}] for embedding, metadata in positive]
-    if continuation and guidance != "Active reference":
+    if item.motion_frames or (continuation and guidance != "Active reference"):
         if previous is None or previous.get_frame_count() != item.start:
             raise ValueError("Native H3 continuation needs the preceding rendered part.")
-        from .video_clip_append import MemoryClipVideo
-
-        if isinstance(previous, MemoryClipVideo):
-            tail = previous.chunks[-1][0][-item.crop_start:]
-        else:
-            # Seek to the motion tail before decoding. A full H3 part can contain
-            # hundreds of full-resolution frames, while the guide uses at most 22.
-            last_clip = previous.videos[-1]
-            first_frame = max(0, last_clip.get_frame_count() - item.crop_start)
-            window = last_clip.as_trimmed(first_frame / FPS, item.crop_start / FPS, strict_duration=False)
-            tail = window.get_components().images
+        tail = _retained_tail(previous, item.crop_start)
         if len(tail) != item.crop_start:
             raise ValueError("The preceding native clip has insufficient motion history.")
         positive = MiniMaxH3AddGuide.execute(positive, latent, 0, vae=vae, image=tail).result[0]

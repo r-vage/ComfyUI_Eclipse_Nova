@@ -4,9 +4,9 @@
  */
 import { app, api } from './comfy/index.js';
 import { batchedRefreshVueWidgetOptions } from './eclipse-widget-utils.js';
+import { NO_RUN, isSavedRun, savedRunOptions } from './eclipse-video-run-selection.js';
 
 const NODE_NAME = 'Load Video Run [Eclipse Nova]';
-const NO_SAVED_RUNS = '(no saved runs found)';
 const CURRENT = 'Current run';
 const controllers = new WeakMap();
 
@@ -33,7 +33,7 @@ export class RunBackups {
         let lastRun = this.savedRun, lastBackup = this.widget('backup').value || CURRENT;
         const selectionChanged = () => {
             const backup = this.widget('backup').value || CURRENT;
-            if (lastRun === this.savedRun && lastBackup === backup && this.savedRun !== NO_SAVED_RUNS) return;
+            if (lastRun === this.savedRun && lastBackup === backup && isSavedRun(this.savedRun)) return;
             lastRun = this.savedRun; lastBackup = backup;
             api.dispatchEvent(new CustomEvent('eclipse-nova.video-run-selection', { detail: { loader: node } }));
         };
@@ -41,7 +41,7 @@ export class RunBackups {
         run.callback = (...args) => {
             const result = callback?.apply(run, args);
             this.closeReport();
-            this.widget('backup').value = CURRENT;
+            this.resetBackup();
             selectionChanged();
             void this.refreshBackups(true); return result;
         };
@@ -54,7 +54,14 @@ export class RunBackups {
     }
     widget(name) { return this.node.widgets.find(w => w.name === name); }
     get savedRun() { return this.widget('saved_run').value; }
-    normalize() { if (this.widget('backup').value == null) this.widget('backup').value = CURRENT; }
+    resetBackup() {
+        const backup = this.widget('backup');
+        const values = backup.options.values;
+        if (backup.value === CURRENT && values.length === 1 && values[0] === CURRENT) return;
+        backup.value = CURRENT;
+        backup.options.values = [CURRENT];
+        batchedRefreshVueWidgetOptions(this.node);
+    }
     error(summary, error) {
         if (!this.disposed) app.extensionManager.toast.add({ severity: 'error', summary, detail: error.message });
     }
@@ -65,7 +72,7 @@ export class RunBackups {
     async previewReport() {
         this.closeReport();
         const saved_run = this.savedRun, backup = this.widget('backup').value || CURRENT;
-        if (!saved_run || saved_run === NO_SAVED_RUNS) {
+        if (!isSavedRun(saved_run)) {
             this.error('Saved run report', Error('Choose a saved run first.')); return;
         }
         const request = this.reportRequest = new AbortController();
@@ -99,9 +106,16 @@ export class RunBackups {
         }
     }
     async refreshBackups(quiet = false) {
-        this.normalize(); this.request?.abort();
+        this.request?.abort();
         const selected = this.savedRun;
-        if (!this.node.graph || !selected || selected === NO_SAVED_RUNS) return null;
+        if (!isSavedRun(selected)) {
+            this.widget('saved_run').value = NO_RUN;
+            this.resetBackup();
+            return null;
+        }
+        const widget = this.widget('backup');
+        if (widget.value == null) widget.value = CURRENT;
+        if (!this.node.graph || this.disposed) return null;
         const request = this.request = new AbortController();
         try {
             const response = await api.fetchApi('/eclipse-nova/video_run/backups', {
@@ -109,14 +123,16 @@ export class RunBackups {
                 body: JSON.stringify({ saved_run: selected }), signal: request.signal,
             });
             const data = await response.json();
-            if (!response.ok) throw Error(data.error || 'Could not read backups.');
             if (request.signal.aborted || this.disposed || this.savedRun !== selected) return null;
-            const widget = this.widget('backup'), values = [CURRENT, ...data.backups.map(b => b.id)];
+            if (!response.ok) throw Error(data.error || 'Could not read backups.');
+            const values = [CURRENT, ...data.backups.map(b => b.id)];
             widget.options.values = values.includes(widget.value) ? values : [...values, widget.value];
             batchedRefreshVueWidgetOptions(this.node); this.node.setDirtyCanvas(true, true);
             return data;
         } catch (error) {
-            if (!quiet && error.name !== 'AbortError') this.error('Read backups failed', error);
+            if (!quiet && !request.signal.aborted && this.savedRun === selected && error.name !== 'AbortError') {
+                this.error('Read backups failed', error);
+            }
             return null;
         } finally { if (this.request === request) this.request = null; }
     }
@@ -173,6 +189,12 @@ app.registerExtension({
         const onNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
             const result = onNodeCreated?.apply(this, arguments);
+            const run = this.widgets.find(w => w.name === 'saved_run');
+            // A running server can still advertise the old first-run default.
+            if (Array.isArray(run.options?.values) && !run.options.values.includes(NO_RUN)) {
+                run.options.values = savedRunOptions(run.options.values);
+                run.value = NO_RUN;
+            }
             // A browser refresh can precede the server restart that adds backup.
             const backups = this.widgets.some(w => w.name === 'backup') ? new RunBackups(this) : null;
             if (backups) controllers.set(this, backups);
@@ -190,16 +212,17 @@ app.registerExtension({
                     const values = Array.isArray(input?.[0]) ? input[0] : input?.[1]?.options;
                     if (!Array.isArray(values)) throw new Error('Run list is unavailable');
                     if (!this.graph) return;
-                    const widget = this.widgets.find(w => w.name === 'saved_run');
-                    const wasEmpty = widget.value === NO_SAVED_RUNS;
-                    // A deleted/moved selection remains explicit, never silently loads another run.
-                    widget.options.values = wasEmpty || values.includes(widget.value) ? values : [...values, widget.value];
-                    if (wasEmpty) {
-                        widget.value = values[0];
-                        widget.callback?.(widget.value);
-                    }
+                    run.options.values = savedRunOptions(values);
                     batchedRefreshVueWidgetOptions(this);
-                    await backups?.refreshBackups();
+                    if (run.options.values.includes(run.value)) {
+                        await backups?.refreshBackups();
+                    } else {
+                        this.graph.beforeChange();
+                        try {
+                            run.value = NO_RUN;
+                            run.callback?.(NO_RUN);
+                        } finally { this.graph.afterChange(); }
+                    }
                 } catch (error) {
                     app.extensionManager.toast.add({
                         severity: 'error', summary: 'Refresh runs failed', detail: error.message,
@@ -222,8 +245,7 @@ app.registerExtension({
             const original = nodeType.prototype[method];
             nodeType.prototype[method] = function (...args) {
                 const result = original?.apply(this, args);
-                const controller = controllers.get(this);
-                if (controller) { controller.normalize(); void controller.refreshBackups(true); }
+                void controllers.get(this)?.refreshBackups(true);
                 return result;
             };
         }

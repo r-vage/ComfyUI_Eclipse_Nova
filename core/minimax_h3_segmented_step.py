@@ -9,7 +9,6 @@ from .frame_timeline import FrameTimeline
 from .image_helpers import flatten_images, unwrap_value
 from .logger import log
 from .minimax_h3_segment_plan import (
-    CONTINUITY_FRAMES,
     audio_shape,
     segment_reference_count,
     validate_segment_plan,
@@ -76,12 +75,10 @@ def resolve_segment(
     has_continuity = task["has_continuity"]
     continuity_clip = None
     if has_continuity:
-        if (len(timeline) if timeline is not None else previous_frames.shape[0]) < CONTINUITY_FRAMES:
-            raise ValueError(
-                "Generated continuation requires 22 accumulated frames."
-            )
-        continuity_clip = (timeline.tail(CONTINUITY_FRAMES) if timeline is not None
-                           else previous_frames[-CONTINUITY_FRAMES:])
+        count = task["crop_start_frames"]
+        if output_start < count:
+            raise ValueError(f"Generated continuation requires {count} accumulated frames.")
+        continuity_clip = timeline.tail(count) if timeline is not None else previous_frames[-count:]
 
     source_image = images[task["source_image_index"]]
     has_last_image = task["has_last_image"]

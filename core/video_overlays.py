@@ -51,7 +51,7 @@ def validate_overlay_row(row, resolve_file):
     return values
 
 
-def overlay_groups(rows):
+def overlay_groups(rows, selected_durations=None):
     active = [row for row in rows if row["enabled"] and row["file"] is not None]
     groups = {row["id"]: [] for row in active if not is_overlay(row)}
     for row in active:
@@ -61,6 +61,10 @@ def overlay_groups(rows):
         target = settings["target"]
         if target not in groups:
             raise ValueError(f"Overlay {row['file']['filename']}: choose an enabled Sequence target with a file.")
+        if selected_durations is not None:
+            duration = selected_durations.get(target)
+            if duration is None or Fraction(str(settings["offset"])) >= duration:
+                continue
         if settings["mode"] == "mask" and settings["mask"] is None:
             raise ValueError(f"Overlay {row['file']['filename']}: choose a mask video.")
         groups[target].append(row)

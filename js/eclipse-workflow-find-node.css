@@ -1,0 +1,38 @@
+.en-find-node {
+    position: fixed;
+    inset: 3.5rem 1rem auto auto;
+    margin: 0;
+    box-sizing: border-box;
+    width: min(23rem, calc(100vw - 2rem));
+    max-height: min(31rem, calc(100dvh - 4.5rem));
+    padding: 0.8rem;
+    border: 1px solid var(--border-color, #555);
+    border-radius: 0.65rem;
+    background: var(--comfy-menu-bg, #242424);
+    color: var(--input-text, #eee);
+    box-shadow: 0 8px 26px #0005;
+    font: 0.875rem/1.4 Inter, sans-serif;
+}
+.en-find-node:popover-open { display: flex; flex-direction: column; gap: 0.5rem; }
+.en-find-node header, .en-find-node li button { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.en-find-node h2 { margin: 0; font: inherit; font-weight: 600; }
+.en-find-node button { font: inherit; color: inherit; background: transparent; cursor: pointer; border: 0; border-radius: 0.3rem; }
+.en-find-node header button { width: 2rem; height: 2rem; font-size: 1.3rem; line-height: 1; }
+.en-find-node input {
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--border-color, #555);
+    border-radius: 0.35rem;
+    background: var(--comfy-input-bg, #181818);
+    color: inherit;
+    font: inherit;
+}
+.en-find-node :is(input, button):focus-visible { outline: 2px solid var(--p-primary-color, #86baff); outline-offset: -2px; }
+.en-find-node ul { margin: 0; padding: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; list-style: none; }
+.en-find-node li + li { border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.en-find-node li button { width: 100%; padding: 0.5rem; text-align: start; }
+.en-find-node button:hover, .en-find-node button:focus-visible { background: color-mix(in srgb, currentColor 10%, transparent); }
+.en-find-node .en-find-labels { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.en-find-node strong { font-weight: 550; }
+.en-find-node small, .en-find-node .en-find-status { color: var(--descrip-text, #aaa); font-size: 0.76rem; }
+.en-find-node .en-find-jump { flex: none; font-size: 0.78rem; }

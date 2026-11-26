@@ -2,12 +2,15 @@
 import re
 
 from .minimax_h3_segment_plan import (
+    H3_FPS,
     task_uses_intentional_camera_cut,
     technical_cut_prompt_for_task,
 )
 
 _VISUAL_LABEL = re.compile(r"^\s*integrated_multimodal_description[ \t]*:", re.IGNORECASE)
 _AUDIO_LABEL = re.compile(r"^[ \t]*(overall_soundscape|non_diegetic_music)[ \t]*:[ \t]*", re.MULTILINE | re.IGNORECASE)
+_SHOT_VISUAL = re.compile(r"^[ \t]*(?:integrated_multimodal_description|detailed_description)[ \t]*:", re.MULTILINE | re.IGNORECASE)
+_SHOT_CUE = re.compile(r"\[shot\s*\d+\](?:\s*At\s+\d+:\d{2}(?:\.\d+)?\s*,?\s*(?:the shot cuts\.\s*)?)?\s*", re.IGNORECASE)
 
 
 def generation_prompt(scene, global_prompt, *, supplied_audio):
@@ -38,6 +41,63 @@ def generation_prompt(scene, global_prompt, *, supplied_audio):
             music = scene[field.end():end].strip() or music
             break
     return f"{visual}\n\noverall_soundscape: N/A\n\nnon_diegetic_music: {music}"
+
+
+def timed_shot_prompt(descriptions, frame_offsets, global_prompt, *, supplied_audio, continuations=()):
+    """Compile scene descriptions on the local 24 FPS render clock."""
+    if len(descriptions) == 1:
+        return generation_prompt(descriptions[0], global_prompt, supplied_audio=supplied_audio)
+    direction = global_prompt.strip()
+    repeated_direction = re.compile(r"(?<!\w)" + re.escape(direction) + r"(?!\w)") if direction else None
+    shots = []
+    audio = {}
+    header = "integrated_multimodal_description:"
+    preamble = ""
+    shot_number = 1
+    for index, (text, frame) in enumerate(zip(descriptions, frame_offsets, strict=True)):
+        fields = list(_AUDIO_LABEL.finditer(text))
+        visual = text[:fields[0].start()] if fields else text
+        label = _SHOT_VISUAL.search(visual)
+        if label:
+            if index == 0:
+                preamble = visual[:label.start()].strip()
+                if repeated_direction:
+                    preamble = repeated_direction.sub("", preamble).strip()
+                header = label[0].strip()
+            visual = visual[label.end():]
+        if repeated_direction:
+            visual = repeated_direction.sub("", visual)
+        visual = _SHOT_CUE.sub("", visual).strip()
+        if index == 0:
+            shared = f"Use this direction throughout all shots. {direction}" if direction else ""
+            shots.append(" ".join(x for x in ("[Shot 1]", visual, shared) if x))
+        else:
+            milliseconds = round(frame * 1000 / H3_FPS)
+            minute, rest = divmod(milliseconds, 60000)
+            second, fraction = divmod(rest, 1000)
+            stamp = f"{minute:02}:{second:02}.{fraction:03}"
+            if continuations and continuations[index]:
+                cue = f"At {stamp}, in the same continuous shot,"
+            else:
+                shot_number += 1
+                cue = f"[Shot {shot_number}] At {stamp}, the shot cuts."
+            shots.append(f"{cue} {visual}".rstrip())
+        for field_index, field in enumerate(fields):
+            end = fields[field_index + 1].start() if field_index + 1 < len(fields) else len(text)
+            value = text[field.end():end].strip()
+            name = field[1].lower()
+            entries = audio.setdefault(name, [])
+            if value and value.upper() != "N/A" and value not in entries:
+                entries.append(value)
+    sections = [preamble] if preamble else []
+    sections.append(header + " " + "\n".join(shots))
+    if supplied_audio:
+        audio["overall_soundscape"] = []
+    for label in ("overall_soundscape", "non_diegetic_music"):
+        if label in audio or supplied_audio:
+            entries = audio.get(label, [])
+            sections.append(f"{label}: {' '.join(entries) or 'N/A'}")
+    return "\n\n".join(sections)
 
 
 def prompt_items(value):

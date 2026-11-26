@@ -1,13 +1,15 @@
 /**
- * ComfyUI Eclipse action-bar command for compacting workflow IDs.
+ * ComfyUI Eclipse action-bar commands for compacting IDs and finding workflow nodes.
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { app } from './comfy/index.js';
 import { normalizeWorkflowIds } from './eclipse-workflow-id-utils.js';
+import { toggleNodeFinder } from './eclipse-workflow-find-node.js';
 
 const COMMAND_ID = 'EclipseNova.Workflow.CompactIds';
 const SUMMARY = 'Eclipse Nova Compact IDs';
+const findNode = { label: 'Find Node', icon: 'pi pi-search', tooltip: 'Find nodes by name, type, ID or variable' };
 
 function showToast(severity, detail, life = 5000) {
     app.extensionManager?.toast?.add?.({
@@ -237,11 +239,11 @@ app.registerExtension({
         icon: 'pi pi-sort-numeric-down',
         tooltip: 'Compact workflow IDs by depth-first saved canvas order and repair stale links',
         function: compactActiveWorkflowIds,
-    }],
+    }, { ...findNode, id: 'EclipseNova.Workflow.FindNode', function: toggleNodeFinder }],
     actionBarButtons: [{
         icon: 'pi pi-sort-numeric-down',
         label: 'Compact IDs',
         tooltip: 'Compact workflow IDs by depth-first saved canvas order and repair duplicate or stale links',
         onClick: compactActiveWorkflowIds,
-    }],
+    }, { ...findNode, onClick: toggleNodeFinder }],
 });

@@ -28,11 +28,18 @@ class VideoFrameSource:
     frames: Callable[[], Iterator]
     audio: Callable[[], dict | None]
     has_audio: bool
+    audio_format: tuple[int, int] = (48000, 2)
 
 
-def video_frame_source(video):
+def video_frame_source(video, *, preserve_audio_format=False):
     from .frame_timeline import FrameTimeline
     from .video_clip_append import MemoryClipVideo
+
+    def audio_format(audio):
+        return (audio["sample_rate"], audio["waveform"].shape[1]) if preserve_audio_format and audio else (48000, 2)
+
+    def component_audio(audio, duration):
+        return audio if preserve_audio_format else _normalize_component_audio(audio, duration)
 
     if isinstance(video, FrameTimeline):
         if video.channels != 3 or not len(video):
@@ -44,16 +51,19 @@ def video_frame_source(video):
     if isinstance(video, MemoryClipVideo):
         width, height = video.get_dimensions()
         timing = VideoTiming.constant(video.get_frame_count(), video.get_frame_rate())
+        recording = video.soundtrack or next((audio for _, audio in video.chunks if audio is not None), None)
         return VideoFrameSource(width, height, timing,
             lambda: (frame for images, _ in video.chunks for frame in images),
-            lambda: _normalize_component_audio(video.get_audio(), timing.duration),
-            video.soundtrack is not None or any(audio is not None for _, audio in video.chunks))
+            lambda: component_audio(video.get_audio(), timing.duration), recording is not None, audio_format(recording))
     if isinstance(video, InputImpl.VideoFromList):
-        parts = [video_frame_source(item) for item in video.videos]
+        parts = [video_frame_source(item, preserve_audio_format=preserve_audio_format) for item in video.videos]
         if len({(item.width, item.height) for item in parts}) != 1:
             raise ValueError("VIDEO clips must have matching dimensions before upscaling")
         timing = join_timing((index, item.timing) for index, item in enumerate(parts))
         has_audio = video.complete_audio is not None or any(item.has_audio for item in parts)
+        formats = {item.audio_format for item in parts if item.has_audio}
+        rate, channels = (next(iter(formats)) if video.complete_audio is None and len(formats) == 1
+                          else audio_format(video.complete_audio))
 
         def frames():
             for item in parts:
@@ -61,11 +71,10 @@ def video_frame_source(video):
 
         def audio():
             if video.complete_audio is not None:
-                return _normalize_component_audio(video.complete_audio, timing.duration)
+                return component_audio(video.complete_audio, timing.duration)
             if not has_audio:
                 return None
-            rate = 48000
-            waveform = torch.zeros((1, 2, round(timing.duration * rate)))
+            waveform = torch.zeros((1, channels, round(timing.duration * rate)))
             position = Fraction()
             for item in parts:
                 start = round(position * rate)
@@ -73,12 +82,14 @@ def video_frame_source(video):
                 end = round(position * rate)
                 part = item.audio()
                 if part is not None:
+                    if item.audio_format != (rate, channels):
+                        part = _normalize_component_audio(part, item.timing.duration)
                     count = min(end - start, part["waveform"].shape[-1])
                     waveform[..., start:start + count] = part["waveform"][..., :count]
                 del part
             return {"waveform": waveform, "sample_rate": rate}
 
-        return VideoFrameSource(parts[0].width, parts[0].height, timing, frames, audio, has_audio)
+        return VideoFrameSource(parts[0].width, parts[0].height, timing, frames, audio, has_audio, (rate, channels))
 
     if isinstance(video, InputImpl.VideoFromFile):
         source = video.get_stream_source()
@@ -103,6 +114,11 @@ def video_frame_source(video):
         crop_dimensions = (scan.width, scan.height)
         with _open(source) as container:
             has_audio = bool(container.streams.audio)
+            rate, channels = 48000, 2
+            if preserve_audio_format and has_audio:
+                codec = container.streams.audio[0].codec_context
+                if codec.channels in (1, 2) and codec.sample_rate:
+                    rate, channels = codec.sample_rate, codec.channels
             if crop is not None:
                 # Native crop coordinates address rotated decoded pixels, before
                 # any display-aspect correction. Match that native view exactly.
@@ -138,9 +154,10 @@ def video_frame_source(video):
                     yield array
 
         def audio():
-            return extract_audio(video.get_stream_source(), scan.times[first], timing.duration) if has_audio else None
+            return extract_audio(video.get_stream_source(), scan.times[first], timing.duration,
+                                 rate=rate, channels=channels) if has_audio else None
 
-        return VideoFrameSource(width, height, timing, frames, audio, has_audio)
+        return VideoFrameSource(width, height, timing, frames, audio, has_audio, (rate, channels))
 
     if isinstance(video, InputImpl.VideoFromComponents):
         components = video.get_components()
@@ -152,7 +169,7 @@ def video_frame_source(video):
         timing = VideoTiming.constant(len(images), components.frame_rate)
         return VideoFrameSource(
             images.shape[2], images.shape[1], timing, lambda: iter(images),
-            lambda: _normalize_component_audio(components.audio, timing.duration),
-            components.audio is not None,
+            lambda: component_audio(components.audio, timing.duration),
+            components.audio is not None, audio_format(components.audio),
         )
     raise ValueError("Unsupported VIDEO implementation; use native file, component or concatenated VIDEO")

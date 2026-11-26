@@ -1,5 +1,60 @@
 # Changelog
 
+## 2026-11-26
+
+### Version: 1.0.50
+
+- **Feat (New)**
+  - Add Video Transition to Next to set H3 shot continuity, previous prompt influence and picture effects per scene. H3 continues from 1, 5 or 22 available frames. Apply Video Timeline Transitions preserves the frame count and soundtrack timing for file and in-memory video.
+- **Feat**
+  - Add Find Node to the toolbar. Search placed nodes by title, type, ID or variable and jump to matches in the workflow or its subgraphs.
+  - Add an H3 shot mode to Video Timeline Planner. Combine short shots into a single editable prompt with timed cuts, or keep separate render parts for frame-exact cuts. Grouping follows image assignments, source joins and render capacity.
+- **Fix**
+  - Keep None at the top of Load Video Run. Refresh runs preserves valid selections and resets the run and backup pickers when the selected run has been moved or deleted.
+  - Apply numeric reference durations before scene detection, sampling and audio extraction. Load Video reads the contributing clips and layers. The planner keeps each visible shot's direction when several cuts round to the same output frame.
+  - Release superseded video preview files when the same node previews a source again. Revisiting previous settings restores the corresponding preview.
+  - Accept −1 for the available reference duration in Smart Folder. The editor retains the last valid duration while a new value is incomplete or out of range.
+- **Changed files**
+  - core/minimax_h3_clips.py
+  - core/minimax_h3_configuration.py
+  - core/minimax_h3_prompt_blend.py
+  - core/minimax_h3_prompts.py
+  - core/minimax_h3_segment_plan.py
+  - core/minimax_h3_segmented_conditioning.py
+  - core/minimax_h3_segmented_step.py
+  - core/minimax_h3_segmented_timeline.py
+  - core/smart_folder.py
+  - core/video_checkpoint.py
+  - core/video_loader.py
+  - core/video_overlays.py
+  - core/video_preview.py
+  - core/video_reference_range.py
+  - core/video_run_report.py
+  - core/video_scene_transitions.py
+  - core/video_stream.py
+  - core/video_timeline.py
+  - core/video_transitions.py
+  - js/eclipse-part-prompts.js
+  - js/eclipse-smart-folder-v2-form.js
+  - js/eclipse-video-run.js
+  - js/eclipse-video-run-selection.js
+  - js/eclipse-workflow-compact-ids.js
+  - js/eclipse-workflow-find-node.css
+  - js/eclipse-workflow-find-node.js
+  - py/RvVideo_Load.py
+  - py/RvVideo_Preview.py
+  - py/RvVideo_RunStorage.py
+  - py/RvVideo_SceneTransitions.py
+  - py/RvVideo_Timeline.py
+  - py/RvVideo_TimelineDuration.py
+  - Readme/Frame_Timeline.md
+  - Readme/Load_Video.md
+  - Readme/Scene_Analysis.md
+  - Readme/Smart_Folder.md
+  - Readme/Video_Timeline.md
+  - README.md
+  - pyproject.toml
+
 ## 2026-11-24
 
 ### Version: 1.0.49

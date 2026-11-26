@@ -43,6 +43,10 @@ def aligned_h3_length(required_frames: int) -> int:
     return required_frames + (5 - required_frames) % 17
 
 
+def history_length(frames: int) -> int:
+    return CONTINUITY_FRAMES if frames >= CONTINUITY_FRAMES else 5 if frames >= 5 else 1
+
+
 def frame_to_sample(frame: int, sample_rate: int) -> int:
     return round(frame / H3_FPS * sample_rate)
 
@@ -192,6 +196,7 @@ def _task_prefix(
 def _task_count_layout(
     retained_frames: int,
     first_prefix: int,
+    second_prefix: int,
     later_prefix: int,
     first_has_start: bool,
     later_has_start: bool,
@@ -201,7 +206,7 @@ def _task_count_layout(
 ) -> tuple[list[int], list[int]]:
     task_count = 1
     while task_count <= retained_frames:
-        prefixes = [first_prefix, *([later_prefix] * (task_count - 1))]
+        prefixes = [first_prefix] if task_count == 1 else [first_prefix, second_prefix, *([later_prefix] * (task_count - 2))]
         tails: list[int] = []
         for index in range(task_count):
             real = has_real_endpoint and index == task_count - 1
@@ -332,6 +337,7 @@ def build_segment_tasks(
     max_render_frames: int,
     opening_warmup_frames: int = 0,
     closing_image_index: int | None = None,
+    motion_regions: dict | None = None,
     activity: torch.Tensor | None = None,
     transition_edge: str = "activity_resume",
     search_window_seconds: float = 5.0,
@@ -380,6 +386,12 @@ def build_segment_tasks(
             technical_seam_style=technical_seam_style,
             warmup_frames=warmup_frames,
         )
+        motion = (motion_regions or {}).get(str(region_start), {})
+        if incoming := motion.get("incoming"):
+            first_prefix, first_has_start = incoming, bool(motion.get("anchor_start"))
+            first_continuity, first_role = True, "transition_continuation"
+        if motion.get("technical") and conditioning_family == "ref2va_active_reference":
+            later_prefix, later_has_start, later_continuity, later_role = CONTINUITY_FRAMES, False, True, "transition_continuation"
         closing = owner == image_count - 1 and closing_image_index is not None
         has_real_endpoint = segment_strategy == "first_last_bridge" and (owner < image_count - 1 or closing)
         same_endpoint = (
@@ -387,9 +399,17 @@ def build_segment_tasks(
             and reset_anchor == "same_first_last_experimental"
             and not has_real_endpoint
         )
+        scene_start = interval_edges[owner]
+        if first_role == "generated_continuation":
+            first_prefix = history_length(region_start - scene_start)
+        second_prefix = later_prefix
+        if later_continuity:
+            first_capacity = max_render_frames - first_prefix - int(same_endpoint and first_has_start)
+            second_prefix = history_length(region_start - scene_start + first_capacity)
         prefixes, tails = _task_count_layout(
             retained_frames,
             first_prefix,
+            second_prefix,
             later_prefix,
             first_has_start,
             later_has_start,
@@ -429,6 +449,8 @@ def build_segment_tasks(
                 has_start = later_has_start
                 has_continuity = later_continuity
                 role = later_role
+                if has_continuity:
+                    prefix = history_length(output_start - scene_start)
             real_endpoint = has_real_endpoint and is_region_last
             endpoint_image = None
             endpoint_role = None
@@ -464,7 +486,7 @@ def build_segment_tasks(
                 "ref_image_size": ref_image_size,
                 "has_continuity": has_continuity,
                 "has_start_guide": has_start,
-                "start_guide_frame_index": 0 if has_start else None,
+                "start_guide_frame_index": (prefix if has_continuity else 0) if has_start else None,
                 "has_last_image": has_last,
                 "last_image_index": endpoint_image,
                 "endpoint_frame_index": endpoint_index,
@@ -840,16 +862,30 @@ def validate_segment_plan(plan: Any) -> tuple[dict[str, Any], list[dict[str, Any
             or output_end > owner_end
         ):
             raise ValueError(f"Plan task {index} has invalid source/prompt ownership.")
-        continuation_role = task.get("task_role") == "generated_continuation"
+        explicit = task.get("task_role") == "transition_continuation"
+        owner_start = transitions[owner - 1] if owner else 0
+        # Older saved tasks can use 22 accumulated frames across a scene boundary.
+        expected_prefix = CONTINUITY_FRAMES if crop_start == CONTINUITY_FRAMES else history_length(output_start - owner_start)
+        anchored_transition = False
+        if explicit:
+            motion = plan.get("motion_regions", {}).get(str(owner_start), {})
+            if output_start == owner_start:
+                expected_prefix = motion.get("incoming", 0)
+                anchored_transition = motion.get("anchor_start") is True and plan["segment_strategy"] == "first_last_bridge"
+            elif not motion.get("technical"):
+                raise ValueError(f"Plan task {index} has no planned motion continuation.")
+        if has_continuity and (expected_prefix not in (1, 5, CONTINUITY_FRAMES) or output_start < expected_prefix):
+            raise ValueError(f"Plan task {index} has insufficient planned motion history.")
+        continuation_role = explicit or task.get("task_role") == "generated_continuation"
         if has_continuity != continuation_role or (
             has_continuity
-            and (crop_start != CONTINUITY_FRAMES or has_start)
+            and (crop_start != expected_prefix or has_start != anchored_transition)
         ):
             raise ValueError(f"Plan task {index} has invalid continuity metadata.")
         if has_start != (start_index is not None):
             raise ValueError(f"Plan task {index} has incomplete start-guide metadata.")
-        if start_index is not None and start_index != 0:
-            raise ValueError(f"Plan task {index} start guide must be local frame 0.")
+        if start_index is not None and start_index != (crop_start if anchored_transition else 0):
+            raise ValueError(f"Plan task {index} start guide must be on its planned opening frame.")
         if has_last != (last_index is not None and endpoint_index is not None):
             raise ValueError(f"Plan task {index} has incomplete endpoint metadata.")
         if last_index is not None and not 0 <= last_index < segment_reference_count(plan):
@@ -956,13 +992,13 @@ def validate_segment_plan(plan: Any) -> tuple[dict[str, Any], list[dict[str, Any
         if (
             following["output_start_frame"] != frame
             or following["source_image_index"] != destination
-            or following["has_continuity"]
+            or (following["has_continuity"] and not following["has_start_guide"])
         ):
             raise ValueError("A bridge endpoint is not paired with its destination task.")
     if plan["conditioning_family"] == "ref2va_active_reference" and any(
         task["has_start_guide"]
         or task["has_last_image"]
-        or task["has_continuity"]
+        or (task["has_continuity"] and task["task_role"] != "transition_continuation")
         for task in tasks
     ):
         raise ValueError("Ref2VA plans cannot contain positional image guides.")

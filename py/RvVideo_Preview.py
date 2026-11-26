@@ -2,11 +2,13 @@
 
 import json
 
-from comfy_api.latest import io
+from comfy_api.latest import Input, io
 
 from ..core import CATEGORY
-from ..core.frame_timeline import TIMELINE_TYPE
+from ..core.cache_artifacts import artifact_fingerprint
+from ..core.frame_timeline import TIMELINE_TYPE, FrameTimeline
 from ..core.image_helpers import unwrap_value
+from ..core.loop import missing_input
 from ..core.resolution_sizing import require_number
 from ..core.video_panel_configuration import (
     PREVIEW_FPS,
@@ -32,9 +34,10 @@ class RvVideo_Preview(io.ComfyNode):
                                tooltip="Override local FPS for IMAGE frames. VIDEO and timelines retain their source timing."),
                 io.String.Input("configuration", socketless=True, default=json.dumps(default_preview()),
                                 extra_dict={"widgetType": PREVIEW_WIDGET, "editorSpec": {"kind": "preview"}}),
+                io.AnyType.Input("transition_plan", optional=True, lazy=True, tooltip="Preview picture transitions from a resolved video plan. The loop receives the original frames."),
             ],
             outputs=[io.MatchType.Output(source, id="images", display_name="images / video", is_output_list=True)],
-            hidden=[io.Hidden.prompt, io.Hidden.extra_pnginfo], is_output_node=True, is_input_list=True,
+            hidden=[io.Hidden.prompt, io.Hidden.extra_pnginfo, io.Hidden.unique_id], is_output_node=True, is_input_list=True,
         )
 
     @classmethod
@@ -52,15 +55,22 @@ class RvVideo_Preview(io.ComfyNode):
         return True
 
     @classmethod
+    def check_lazy_status(cls, images=None, **inputs):
+        if (isinstance(unwrap_value(images), (Input.Video, FrameTimeline)) and "transition_plan" in inputs
+                and missing_input(inputs["transition_plan"])):
+            return ["transition_plan"]
+        return []
+
+    @classmethod
     def fingerprint_inputs(cls, configuration, **_inputs):
         validate_preview(unwrap_value(configuration))
         # ComfyUI already tracks connected media and settings. An unconditional
         # change here also invalidates downstream samplers and completed loops.
-        return False
+        return artifact_fingerprint()
 
     @classmethod
-    def execute(cls, images, configuration, audio=None, fps=None):
+    def execute(cls, images, configuration, audio=None, fps=None, transition_plan=None):
         config = validate_preview(unwrap_value(configuration))
         rate = unwrap_value(fps)
         rate = config["fps"] if rate is None else require_number(rate, PREVIEW_FPS)
-        return VideoPreview(cls.hidden).execute(images, rate, audio, config["stop"])
+        return VideoPreview(cls.hidden).execute(images, rate, audio, config["stop"], transition_plan=unwrap_value(transition_plan))

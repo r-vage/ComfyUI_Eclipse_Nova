@@ -61,6 +61,8 @@ during strong surrounding motion can be missed. Review detected boundaries befor
 describing or rendering a new source. The report counts added blended transitions
 separately.
 
+To analyze a timed excerpt, connect **Video Timeline Duration → reference_range** to **Load Video**, then connect its VIDEO to **Scene Detector**. A 15-second total limit makes the detector, per-second cut limit and description windows all use the first 15 seconds. Setting the cut rate to `-1` keeps all detected cuts within that excerpt.
+
 Detection happens **before** Scene Analysis Plan and the description loop. Each
 side of a detected transition receives its own sampled window and description;
 motion within one unchanged appearance does not automatically require a new

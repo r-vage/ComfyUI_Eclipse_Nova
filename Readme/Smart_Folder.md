@@ -48,7 +48,7 @@ Video always includes frame rate. Additional Include buttons enable:
 | **VHS** | Frame load cap, Skip first frames and Select every nth. A cap of 0 means no limit. |
 | **Context** | Context length; initially enabled in Video mode. With VHS enabled, adds Skip contexts and its After queue control. |
 | **Loop** | Loop count and overlap. Enables Context and prevents disabling it while Loop is active. |
-| **Duration** | Duration metadata in seconds, from 0 to 180, shown beside frame rate. It does not calculate frame counts. |
+| **Duration** | Duration metadata in seconds, from 0 to 180, or `-1` to request the available reference duration in Video Timeline Duration. |
 
 Duration defaults to **15 seconds** and supports **0**. Zero is passed unchanged
 through the PIPE and **Pipe Out Smart Folder**; the consuming node decides what

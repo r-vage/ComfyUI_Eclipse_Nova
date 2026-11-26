@@ -243,6 +243,8 @@ change options or previews, and the saved size is restored with the workflow.
 
 ## Global size and timing
 
+Connect **Video Timeline Duration → reference_range** to select footage before joining. **Seconds per clip** takes a prefix of each enabled sequence slot after its Start frame and Load cap. **Total seconds** takes a prefix of the joined sequence, stopping partway through a slot when needed. A short clip contributes its available frames. The embedded audio follows the same selection. The execution report lists the selected frame ranges and durations.
+
 `width` and `height` apply to every clip. Both `0` use the first included Sequence clip's
 displayed size. With one dimension `0`, it follows that clip's aspect ratio.
 `pad` fits inside the size with black borders; `crop` fills and center-crops;

@@ -17,6 +17,11 @@ legacy aliases or workflow migration tools.
 
 ## Explore the nodes
 
+Use **Find Node** beside **Compact IDs** to search the open workflow and its
+subgraphs by node title, type, ID or variable. Click **Jump** to center the canvas
+on a result and select it. For example, `getter "DURATION_H3"` finds getters for
+that exact variable, even after its setter has been removed.
+
 Start with the **[visual tour](Readme/Visual_Tour.md)** for annotated screenshots,
 or use the **[documentation index](Readme/README.md)** to find a specific node.
 The screenshots show the Amber theme; Neutral is the default.

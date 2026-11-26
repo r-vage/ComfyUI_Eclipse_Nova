@@ -17,7 +17,6 @@ from .image_helpers import flatten_images, unwrap_value
 from .logger import log
 from .minimax_h3_segment_plan import (
     CONDITIONING_FAMILIES,
-    CONTINUITY_FRAMES,
     DEFAULT_TECHNICAL_CUT_INSTRUCTION,
     H3_FPS,
     MANUAL_CAMERA_CUT_SOURCE,
@@ -247,7 +246,7 @@ def plan_segments(
     if keep_opening_direction:
         notes.append("No later scene directions: capacity splits retain the opening prompt.")
         if conditioning_family == "fl2va_keyframes":
-            notes.append("No planned cuts: capacity splits continue from the preceding 22 generated frames.")
+            notes.append("Capacity splits continue from up to 22 preceding generated frames.")
     manual_times: list[float] = []
     target_frames: list[int] = []
     continuation_frames: list[int] = []
@@ -379,11 +378,6 @@ def plan_segments(
         resume_hold_duration=resume_hold_duration,
     )
     notes.extend(technical_notes)
-    if any(task["has_continuity"] and task["output_start_frame"] < CONTINUITY_FRAMES for task in tasks):
-        raise ValueError(
-            "Opening warmup leaves fewer than 22 retained frames for generated continuation. "
-            "Reduce opening_warmup_seconds or increase max_render_frames."
-        )
     if image_count > 1 and activity is not None:
         continuation_frames = [
             task["output_start_frame"] for task in tasks if task["is_technical_seam"]

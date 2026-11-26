@@ -6,11 +6,13 @@ from ..core.image_helpers import flatten_images, unwrap_value
 from ..core.loop import missing_input
 from ..core.minimax_h3_clips import CLIP_PLAN_TYPE, clip_at, clip_conditioning
 from ..core.minimax_h3_prompts import segment_prompt
+from ..core.video_scene_transitions import TRANSITIONS_TYPE
 from ..core.video_timeline import (
     DURATIONS,
     GUIDES,
     IMAGE_ASSIGNMENTS,
     MODELS,
+    SHOT_MODES,
     TIMELINE_TYPE,
     model_path,
     plan_timeline,
@@ -56,7 +58,8 @@ class RvVideo_TimelinePlanner(io.ComfyNode):
         return io.Schema(node_id="Video Timeline Planner [Eclipse Nova]", display_name="Video Timeline Planner",
             category=_CATEGORY, is_input_list=True,
             inputs=[io.Combo.Input("model", options=list(MODELS)), io.Combo.Input("duration_source", options=list(DURATIONS)),
-                    io.Float.Input("seconds", default=5, min=0.001, max=86400, step=0.1),
+                    io.Float.Input("seconds", default=5, min=-1, max=86400, step=0.1,
+                                   tooltip="With reference video, keep up to this many seconds per clip or in total. Use −1 for the available footage."),
                     io.Combo.Input("guidance", options=list(GUIDES),
                                    tooltip="H3 uses the scene image as its first frame, first and last keyframes, or an active reference. WAN uses one reference per scene."),
                     io.Int.Input("h3_capacity", default=362, min=124, max=362, step=17),
@@ -76,9 +79,13 @@ class RvVideo_TimelinePlanner(io.ComfyNode):
                     io.String.Input("analysis_opening", optional=True, force_input=True,
                                     tooltip="Separate first direction from Scene Analysis to H3. A Wildcard Processor list already begins at scene 1."),
                     io.Combo.Input("image_assignment", optional=True, options=list(IMAGE_ASSIGNMENTS), default=IMAGE_ASSIGNMENTS[0],
-                                   tooltip="Keep one image per source clip, advance once per cut and hold the last, cycle, or distribute images over time using the nearest existing cuts. H3 First and last pairs consecutive scene images.")],
-            outputs=[io.Custom(TIMELINE_TYPE).Output("timeline"), io.String.Output("scene_prompts", is_output_list=True),
-                     io.Image.Output("scene_images", is_output_list=True), io.String.Output("report"),
+                                   tooltip="Keep one image per source clip, advance once per cut and hold the last, cycle, or distribute images over time using the nearest existing cuts. H3 First and last pairs consecutive scene images."),
+                    io.Combo.Input("shot_mode", display_name="H3 shot mode", optional=True, options=list(SHOT_MODES), default=SHOT_MODES[0],
+                                   tooltip="Separate at cuts starts a render at each cut. Group timed shots fits up to 15 visible seconds into one H3 prompt, within the selected render capacity. Image changes and playlist joins start a new group. H3 interprets internal cut times. WAN uses its own transitions."),
+                    io.Custom(TRANSITIONS_TYPE).Input("transitions", optional=True, tooltip="Optional outgoing shot, prompt and picture settings from Video Transition to Next.")],
+            outputs=[io.Custom(TIMELINE_TYPE).Output("timeline"), io.String.Output("scene_prompts", is_output_list=True,
+                         tooltip="Initial generation text per scene or H3 shot group, in review order."),
+                     io.Image.Output("scene_images", is_output_list=True, tooltip="One assigned image per original shot, paired with description_prompts."), io.String.Output("report"),
                      io.Int.Output("total_frames"), io.Float.Output("fps"), io.Float.Output("duration"),
                      io.String.Output("model_family", tooltip="Selected render family for shared model settings."),
                      io.String.Output("description_prompts", is_output_list=True,
@@ -109,9 +116,10 @@ class RvVideo_TimelinePlanner(io.ComfyNode):
         # A blank request activates SmartLLM's original-story mode. When the user
         # supplied only global direction, ask for composition without exposing it.
         composition = "Describe only the starting composition supported by the available reference."
-        descriptions = [s.direction or (composition if timeline.global_prompt.strip() else "") for s in timeline.scenes]
+        shots = timeline.description_scenes
+        descriptions = [s.direction or (composition if timeline.global_prompt.strip() else "") for s in shots]
         return io.NodeOutput(timeline, [s.prompt for s in timeline.scenes],
-                             [frames[s.image] for s in timeline.scenes if s.image is not None],
+                             [frames[s.image] for s in shots if s.image is not None],
                              timeline.report, total, float(fps), total / fps, family, descriptions)
 
 
@@ -123,7 +131,7 @@ class RvVideo_TimelineGenerationPrompts(io.ComfyNode):
             inputs=[io.Custom(TIMELINE_TYPE).Input("timeline"), io.String.Input("descriptions", optional=True, force_input=True,
                     tooltip="Optional scene descriptions from the prompt writer. Without this input the timeline uses its original scene directions.")],
             outputs=[io.String.Output("prompts", is_output_list=True)],
-            description="Apply the exact global direction to every scene before review. H3 lip-sync uses the supplied audio and starts each soundscape at N/A.")
+            description="Apply global direction after scene description. In grouped H3 mode, combine shot descriptions and timed cuts into one editable prompt per group. H3 lip-sync uses the supplied audio and starts each soundscape at N/A.")
 
     @classmethod
     def execute(cls, timeline, descriptions=None):

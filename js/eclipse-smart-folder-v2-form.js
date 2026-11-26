@@ -100,7 +100,26 @@ export class FolderForm {
     }
     number(parent, key, owner) {
         const field = this.state.spec.fields[key];
-        return this.input(parent, field.label, key, owner[key], value => { owner[key] = value; }, { ...field, type: 'number' });
+        const input = this.input(parent, field.label, key, owner[key], value => { owner[key] = value; }, { ...field, type: 'number' });
+        if (key === 'duration') {
+            input.step = 'any';
+            input.title = 'Enter −1 for the available reference duration, zero, or a positive number of seconds.';
+            const validate = () => {
+                const seconds = input.valueAsNumber;
+                input.setCustomValidity(seconds > -1 && seconds < 0 ? input.title : '');
+                return input.validity.valid;
+            };
+            const commit = input.oninput;
+            validate();
+            input.oninput = () => { if (validate()) commit(); };
+            input.onblur = () => {
+                if (!validate()) {
+                    input.value = owner[key];
+                    validate();
+                }
+            };
+        }
+        return input;
     }
     choice(parent, label, key, value, choices, setter) {
         const control = this.menu.field(parent, label, value, choices, value => this.edit(() => setter(value)));

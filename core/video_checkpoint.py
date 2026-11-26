@@ -34,6 +34,7 @@ from .video_run import (
     manifest_path,
     run_revision,
 )
+from .video_scene_transitions import picture_context
 
 CHECKPOINT = "checkpoint.json"
 
@@ -129,8 +130,14 @@ def render_inputs(plan, width, height, **kwargs):
     return data
 
 
+def _delivery_context(audio, trim_start, metadata):
+    return {"audio": audio, "trim_start": trim_start, **picture_context(metadata)}
+
+
 def caption_context(data):
-    return {"audio": data.caption_audio, "trim_start": data.caption_start}
+    plan = data.plan
+    metadata = plan.get("source_metadata") if isinstance(plan, dict) else getattr(plan, "source_metadata", None)
+    return _delivery_context(data.caption_audio, data.caption_start, metadata)
 
 
 def load_run_context(run_path, audio=None, *, include_report=False):
@@ -138,11 +145,11 @@ def load_run_context(run_path, audio=None, *, include_report=False):
 
     root = manifest_path(run_path).parent
     manifest = read_json_object(root / "run.json")
-    captions = {"audio": audio, "trim_start": 0.0}
     value = read_json_object(_contained_file(root, manifest["checkpoint"])) if manifest.get("checkpoint") else {}
     item = value.get("caption_audio")
-    if item is not None:
-        captions = {"audio": _load_audio(root, item), "trim_start": value.get("caption_start", 0.0)}
+    captions = _delivery_context(_load_audio(root, item) if item is not None else audio,
+                                 value.get("caption_start", 0.0) if item is not None else 0.0,
+                                 value.get("plan", {}).get("source_metadata"))
     result = captions, checkpoint_family(value)
     return (*result, settings_text(root, manifest, value)) if include_report else result
 
