@@ -41,6 +41,8 @@ CYCLE = "Cycle at scene cuts"
 EQUAL_TIME = "Equal time at scene cuts"
 IMAGE_ASSIGNMENTS = (PER_SOURCE, IN_ORDER, CYCLE, EQUAL_TIME)
 SHOT_MODES = ("Separate at cuts", "Group timed shots")
+MIN_GROUP_SECONDS = 0.05  # Smallest hundredth of a second that can contain one 24 FPS frame.
+MAX_GROUP_SECONDS = 15.0
 
 
 @dataclass(frozen=True)
@@ -316,7 +318,7 @@ def scene_image_report(metadata):
     return f"Scene images ({metadata.get('image_assignment', PER_SOURCE)}) · " + ", ".join(slots)
 
 
-def _group_shots(shots, model, guidance, cap, opening, later, closing, keep_source_joins, boundaries, motion):
+def _group_shots(shots, model, guidance, cap, max_visible_frames, opening, later, closing, keep_source_joins, boundaries, motion):
     """Pack whole shots. A shot longer than one render keeps its normal continuations."""
     segmented = model == MODELS[1]
     prefix = later if segmented and guidance == GUIDES[2] else opening
@@ -325,7 +327,7 @@ def _group_shots(shots, model, guidance, cap, opening, later, closing, keep_sour
     for i, shot in enumerate(shots[1:], 1):
         start = shots[first]
         endpoint = segmented and guidance == GUIDES[1] and (i + 1 < len(shots) or closing is not None)
-        visible_limit = min(15 * H3_FPS, cap - prefix - int(endpoint))
+        visible_limit = min(max_visible_frames, cap - prefix - int(endpoint))
         row = boundaries.get(shot.start, {})
         if (row.get("previous_prompt") or boundaries.get(start.start, {}).get("previous_prompt")
                 or (row.get("picture", "cut") != "cut" and row.get("seconds"))
@@ -341,7 +343,11 @@ def shot_group_report(metadata):
     groups = metadata.get("shot_start_frames")
     if not isinstance(groups, list) or not groups or any(not isinstance(group, list) or not group for group in groups):
         return ""
-    return f"{SHOT_MODES[1]} · Shots per prompt · " + ", ".join(str(len(group)) for group in groups)
+    seconds = metadata.get("max_group_seconds")
+    limit = ""
+    if type(seconds) in (int, float) and MIN_GROUP_SECONDS <= seconds <= MAX_GROUP_SECONDS:
+        limit = f" · Max {seconds:g} s"
+    return f"{SHOT_MODES[1]}{limit} · Shots per prompt · " + ", ".join(str(len(group)) for group in groups)
 
 
 def _fit_guide(audio, total, fps):
@@ -355,7 +361,7 @@ def _fit_guide(audio, total, fps):
     return {**audio, "waveform": F.pad(wave, (0, count - wave.shape[-1])) if wave.shape[-1] < count else wave}
 
 
-def _native_parts(scenes, cap, opening, warmup, guidance, motion):
+def _native_parts(scenes, cap, max_visible_frames, opening, warmup, guidance, motion):
     parts = []
     for i, scene in enumerate(scenes):
         pos = scene.start
@@ -369,14 +375,14 @@ def _native_parts(scenes, cap, opening, warmup, guidance, motion):
                     explicit = prefix
             if explicit:
                 prefix = explicit
-            keep = min(scene.end - pos, cap - prefix)
+            keep = min(scene.end - pos, cap - prefix, max_visible_frames)
             parts.append(H3Clip(pos, keep, aligned_h3_length(prefix + keep), i, scene.prompt,
                                 source_index=scene.source, crop_start=prefix, motion_frames=explicit))
             pos += keep
     return parts
 
 
-def _segmented(scenes, guide, soundtrack, cap, opening, warmup, guidance, closing_image_index, motion):
+def _segmented(scenes, guide, soundtrack, cap, max_visible_frames, opening, warmup, guidance, closing_image_index, motion):
     total = scenes[-1].end
     wave, rate = audio_shape(soundtrack if soundtrack is not None else guide)
     vocals, vocal_rate = audio_shape(guide)
@@ -395,25 +401,24 @@ def _segmented(scenes, guide, soundtrack, cap, opening, warmup, guidance, closin
         settings["closing_image_index"] = closing_image_index
     if motion:
         settings["motion_regions"] = {str(s.start): motion[str(s.start)] for s in scenes if str(s.start) in motion}
-    tasks, _ = build_segment_tasks(**settings)
+    tasks, _ = build_segment_tasks(**settings, max_visible_frames=max_visible_frames)
     return {"kind": PLAN_KIND, "version": PLAN_VERSION, "fps": 24, **settings, "tasks": tasks}
 
 
-def _h3_layout(model, scenes, guide, sound, cap, opening, later, guidance, closing_image_index, skip_tail, motion=None):
-    motion = motion or {}
+def _h3_layout(model, scenes, guide, sound, cap, max_visible_frames, opening, later, guidance, closing_image_index, skip_tail, motion):
     total = scenes[-1].end
     if model == MODELS[0]:
-        parts = _native_parts(scenes, cap, opening, later, guidance, motion)
+        parts = _native_parts(scenes, cap, max_visible_frames, opening, later, guidance, motion)
         if len(parts) > 1 and parts[-1].part == parts[-2].part and parts[-1].keep <= skip_tail:
             total = parts.pop().start
         return parts, total
-    plan = _segmented(scenes, guide, sound, cap, opening, later, guidance, closing_image_index, motion)
+    plan = _segmented(scenes, guide, sound, cap, max_visible_frames, opening, later, guidance, closing_image_index, motion)
     tasks = plan["tasks"]
     if tasks[-1]["is_technical_seam"] and tasks[-1]["keep_frames"] <= skip_tail:
         total = tasks[-1]["output_start_frame"]
         if closing_image_index is not None:
             trimmed = (*scenes[:-1], replace(scenes[-1], end=total))
-            plan = _segmented(trimmed, guide, sound, cap, opening, later, guidance, closing_image_index, motion)
+            plan = _segmented(trimmed, guide, sound, cap, max_visible_frames, opening, later, guidance, closing_image_index, motion)
         else:
             tasks.pop()
             tasks[-1]["is_final"] = True
@@ -422,22 +427,23 @@ def _h3_layout(model, scenes, guide, sound, cap, opening, later, guidance, closi
     return plan, total
 
 
-def _h3_scene_layout(shots, transitions, protected, group_shots, keep_source_joins, closing_index,
+def _h3_scene_layout(shots, transitions, protected, group_limit, keep_source_joins, closing_index,
                      model, guide, sound, capacity, opening, later, guidance, skip_tail):
     boundaries = resolve_transitions(shots, transitions, h3=True, protect_source_edits=protected)
     continuous_splits = bool(transitions and transitions["rules"].get(0, ("Cut",))[0] == "Continue shot" and not protected)
     motion = motion_regions(shots, boundaries, guidance, continuous_splits,
                             paired_endpoints=model == MODELS[1] or closing_index is not None)
     groups, scenes, closing_slot = (), shots, None
-    if group_shots:
+    if group_limit is not None:
         if closing_index is not None:
             closing_slot = shots[closing_index].image if closing_index < len(shots) else closing_index
-        groups = _group_shots(shots, model, guidance, capacity, opening, later, closing_slot,
+        groups = _group_shots(shots, model, guidance, capacity, group_limit, opening, later, closing_slot,
                               keep_source_joins, boundaries, motion)
         scenes = tuple(replace(group.shots[0], end=group.shots[-1].end) for group in groups)
         if closing_slot is not None:
             closing_index = next((i for i, s in enumerate(scenes) if s.image == closing_slot), len(scenes))
-    plan, total = _h3_layout(model, scenes, guide, sound, capacity, opening, later, guidance, closing_index, skip_tail, motion)
+    plan, total = _h3_layout(model, scenes, guide, sound, capacity, group_limit or capacity,
+                             opening, later, guidance, closing_index, skip_tail, motion)
     if boundaries:
         motion_by_start = ({c.start: c.motion_frames for c in plan} if model == MODELS[0] else
                            {t["output_start_frame"]: t["crop_start_frames"] if t["has_continuity"] else 0 for t in plan["tasks"]})
@@ -451,14 +457,14 @@ def plan_timeline(model, duration_source, seconds, global_prompt="", scene_promp
                   images=None, reference_video=None, timing_audio=None, conditioning_audio=None, soundtrack=None,
                   guidance="First frame", h3_capacity=362, wan_context=81, wan_overlap=9,
                   opening_warmup=0., warmup=0., skip_tail_frames=0, image_assignment=PER_SOURCE,
-                  shot_mode=SHOT_MODES[0], transitions=None):
+                  shot_mode=SHOT_MODES[0], transitions=None, max_group_seconds=MAX_GROUP_SECONDS):
     if model not in MODELS or guidance not in GUIDES:
         raise ValueError("Unknown video model or guidance mode.")
     if image_assignment not in IMAGE_ASSIGNMENTS:
         raise ValueError("Unknown timeline image assignment.")
     if shot_mode not in SHOT_MODES:
         raise ValueError("Choose a timeline shot mode.")
-    fps = 25 if model == MODELS[2] else 24
+    fps = 25 if model == MODELS[2] else int(H3_FPS)
     frames = flatten_images(images)
     if model != MODELS[0] and not frames:
         raise ValueError("Lip-sync generation requires a reference image.")
@@ -506,11 +512,16 @@ def plan_timeline(model, duration_source, seconds, global_prompt="", scene_promp
     else:
         if not is_h3_frame_count(h3_capacity) or not 0 <= max(opening, later) < h3_capacity or min(opening, later) < 0:
             raise ValueError("Use an H3 render capacity from 124 to 362 on the 17k+5 grid with room for visible frames.")
+        group_limit = None
+        if shot_mode == SHOT_MODES[1]:
+            if type(max_group_seconds) not in (int, float) or not MIN_GROUP_SECONDS <= max_group_seconds <= MAX_GROUP_SECONDS:
+                raise ValueError(f"Max group duration must be between {MIN_GROUP_SECONDS:g} and {MAX_GROUP_SECONDS:g} seconds.")
+            group_limit = math.floor(Fraction(str(max_group_seconds)) * fps)
         full_duration = total
         shots = _assign_images(scenes, len(frames), image_assignment, total)
         seen = set()
         while True:
-            layout = _h3_scene_layout(shots, transitions, protected, shot_mode == SHOT_MODES[1], reference_video is not None,
+            layout = _h3_scene_layout(shots, transitions, protected, group_limit, reference_video is not None,
                                       closing_image_index, model, guide, sound, h3_capacity, opening, later, guidance, skip_tail_frames)
             plan, total, render_scenes, shot_groups, boundaries, resolved_closing, closing_slot = layout
             if (total == full_duration and not seen) or not skip_tail_frames or image_assignment != EQUAL_TIME or len(frames) < 2:
@@ -540,6 +551,7 @@ def plan_timeline(model, duration_source, seconds, global_prompt="", scene_promp
         metadata["scene_boundaries"] = [s.start for s in shots[1:] if s.start < total]
     if shot_groups:
         metadata["shot_start_frames"] = [[s.start for s in group.shots] for group in shot_groups]
+        metadata["max_group_seconds"] = max_group_seconds
     # Frame-based renderers address references by scene. Native H3 uses the input slots directly.
     selected = frames if model == MODELS[0] else [frames[i] for i in starts]
     if closing_image_index is not None:

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-27
+
+### Version: 1.0.52
+
+- **Feat**
+  - Video Timeline Planner accepts a fractional maximum duration for grouped Native H3 and H3 lip-sync shots. Groups end at existing cuts when possible. A longer shot keeps its direction across shorter renders. The planner and saved run reports show the selected limit.
+- **Changed files**
+  - Readme/Video_Timeline.md
+  - core/minimax_h3_segment_plan.py
+  - core/video_timeline.py
+  - py/RvVideo_Timeline.py
+  - pyproject.toml
+
 ## 2026-11-26
 
 ### Version: 1.0.51

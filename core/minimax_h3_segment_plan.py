@@ -203,8 +203,9 @@ def _task_count_layout(
     has_real_endpoint: bool,
     same_endpoint: bool,
     max_render_frames: int,
-) -> tuple[list[int], list[int]]:
-    task_count = 1
+    max_visible_frames: int,
+) -> tuple[list[int], list[int], list[int]]:
+    task_count = max(1, (retained_frames + max_visible_frames - 1) // max_visible_frames)
     while task_count <= retained_frames:
         prefixes = [first_prefix] if task_count == 1 else [first_prefix, second_prefix, *([later_prefix] * (task_count - 2))]
         tails: list[int] = []
@@ -213,11 +214,11 @@ def _task_count_layout(
             has_start = first_has_start if index == 0 else later_has_start
             tails.append(1 if real or (same_endpoint and has_start) else 0)
         capacities = [
-            max_render_frames - prefix - tail
+            min(max_visible_frames, max_render_frames - prefix - tail)
             for prefix, tail in zip(prefixes, tails)
         ]
         if min(capacities) >= 1 and sum(capacities) >= retained_frames:
-            return prefixes, tails
+            return prefixes, tails, capacities
         task_count += 1
     raise ValueError(
         "The selected warmup/endpoints leave no visible capacity. Increase "
@@ -228,9 +229,10 @@ def _task_count_layout(
 def _balanced_keeps(retained_frames: int, capacities: list[int]) -> list[int]:
     keeps: list[int] = []
     remaining = retained_frames
+    later_capacity = sum(capacities)
     for index, capacity in enumerate(capacities):
         remaining_tasks = len(capacities) - index
-        later_capacity = sum(capacities[index + 1 :])
+        later_capacity -= capacity
         minimum = max(1, remaining - later_capacity)
         maximum = min(capacity, remaining - (remaining_tasks - 1))
         desired = round(remaining / remaining_tasks)
@@ -335,6 +337,7 @@ def build_segment_tasks(
     technical_seam_style: str,
     ref_image_size: str,
     max_render_frames: int,
+    max_visible_frames: int | None = None,
     opening_warmup_frames: int = 0,
     closing_image_index: int | None = None,
     motion_regions: dict | None = None,
@@ -344,6 +347,11 @@ def build_segment_tasks(
     min_gap_duration: float = 0.25,
     resume_hold_duration: float = 0.15,
 ) -> tuple[list[dict[str, Any]], list[str]]:
+    if max_visible_frames is None:
+        max_visible_frames = max_render_frames
+    if type(max_visible_frames) is not int or max_visible_frames < 1:
+        raise ValueError("A render must retain at least one visible frame.")
+    max_visible_frames = min(max_visible_frames, max_render_frames)
     interval_edges = [0, *transition_frames, total_frames]
     regions: list[tuple[int, int, int, bool, bool]] = []
     if image_count == 1 and continuation_frames:
@@ -405,8 +413,8 @@ def build_segment_tasks(
         second_prefix = later_prefix
         if later_continuity:
             first_capacity = max_render_frames - first_prefix - int(same_endpoint and first_has_start)
-            second_prefix = history_length(region_start - scene_start + first_capacity)
-        prefixes, tails = _task_count_layout(
+            second_prefix = history_length(region_start - scene_start + min(max_visible_frames, first_capacity))
+        prefixes, tails, capacities = _task_count_layout(
             retained_frames,
             first_prefix,
             second_prefix,
@@ -416,11 +424,8 @@ def build_segment_tasks(
             has_real_endpoint,
             same_endpoint,
             max_render_frames,
+            max_visible_frames,
         )
-        capacities = [
-            max_render_frames - prefix - tail
-            for prefix, tail in zip(prefixes, tails)
-        ]
         keeps = _balanced_keeps(retained_frames, capacities)
         if activity is not None and image_count > 1:
             keeps, notes = _align_technical_keeps(
